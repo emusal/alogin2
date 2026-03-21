@@ -83,7 +83,7 @@ func (m Model) renderWelcome() string {
 
 	logoLine := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212")).Render("alogin") +
 		lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("  ·  SSH Connection Manager")
-	versionLine := lipgloss.NewStyle().Foreground(lipgloss.Color("99")).Render("v2.0.0")
+	versionLine := lipgloss.NewStyle().Foreground(lipgloss.Color("99")).Render("v" + m.version)
 
 	sb.WriteString("\n")
 	sb.WriteString(headerStyle.Render(logoLine + "\n" + versionLine))

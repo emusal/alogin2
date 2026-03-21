@@ -39,7 +39,7 @@ func runTUIAtWithOpts(ctx context.Context, start tui.StartAt, opts *model.Connec
 		return err
 	}
 
-	m := tui.NewModelAt(servers, database, start)
+	m := tui.NewModelAt(servers, database, start, Version)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	finalModel, err := p.Run()
 	if err != nil {

@@ -92,6 +92,7 @@ type Model struct {
 
 	// Startup configuration
 	startAt StartAt
+	version string
 
 	// Terminal dimensions
 	termWidth  int
@@ -179,12 +180,12 @@ type Model struct {
 }
 
 // NewModel creates a TUI model starting at the welcome screen.
-func NewModel(servers []*model.Server, database *db.DB) Model {
-	return NewModelAt(servers, database, StartAtWelcome)
+func NewModel(servers []*model.Server, database *db.DB, version string) Model {
+	return NewModelAt(servers, database, StartAtWelcome, version)
 }
 
 // NewModelAt creates a TUI model starting at the given section.
-func NewModelAt(servers []*model.Server, database *db.DB, start StartAt) Model {
+func NewModelAt(servers []*model.Server, database *db.DB, start StartAt, version string) Model {
 	initialState := stateWelcome
 	switch start {
 	case StartAtList:
@@ -203,6 +204,7 @@ func NewModelAt(servers []*model.Server, database *db.DB, start StartAt) Model {
 		db:       database,
 		startAt:  start,
 		state:    initialState,
+		version:  version,
 	}
 
 	m.titleStyle = lipgloss.NewStyle().
