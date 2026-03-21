@@ -7,22 +7,22 @@ class Alogin < Formula
   on_macos do
     on_arm do
       url "https://github.com/emusal/alogin2/releases/download/v2.0.1/alogin-web-darwin-arm64"
-      sha256 "79713bbabdbf34d9d9c4ec17c1c9cb48eee048b9b705d9ca242f17ec4dab8725"
+      sha256 "a2175d9e9035cbc5eb9db2465c45204c0653f0aceff3d69fd71eed6d676cdf8d"
     end
     on_intel do
       url "https://github.com/emusal/alogin2/releases/download/v2.0.1/alogin-web-darwin-amd64"
-      sha256 "de8ee21286c8196a459a7fb074fce8568b00a34874d2d2c74c7cd3e70014ff91"
+      sha256 "8ca51d3c93c1c76b2143b990ca4025b5837a6cb8fa0792ce89eb219c8a3af4b3"
     end
   end
 
   on_linux do
     on_arm do
       url "https://github.com/emusal/alogin2/releases/download/v2.0.1/alogin-web-linux-arm64"
-      sha256 "fd93f19f5023ee44a8c967a21e019f2cd1c759801fa48a426f10107f7bb5e45c"
+      sha256 "f74bb4934cbcc572e3934bcb58442396d793c513d8528bccc55abce7ee4f35b7"
     end
     on_intel do
       url "https://github.com/emusal/alogin2/releases/download/v2.0.1/alogin-web-linux-amd64"
-      sha256 "4c8a76c09a8f49c6c77509e3370d7f303491920603a08b152253a2ea64e0f864"
+      sha256 "7af9b895ad876ee0405e572d0c0bf447d3139f39a9a4e18a9d3d000f6950faee"
     end
   end
 
