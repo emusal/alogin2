@@ -26,7 +26,7 @@
 ### Homebrew (권장)
 
 ```bash
-brew tap emusal/alogin
+brew tap emusal/alogin --custom-remote git@github.com:emusal/alogin2.git
 brew install alogin
 ```
 
@@ -206,8 +206,8 @@ alogin web [--port 8484] [--no-browser]
 ### 셸 자동완성
 
 ```bash
-alogin completion zsh  > ~/.zsh/completions/_alogin
-alogin completion bash > /etc/bash_completion.d/alogin
+alogin completion install              # zsh (기본값)
+alogin completion install --shell bash # bash
 ```
 
 ---

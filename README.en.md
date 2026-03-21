@@ -26,7 +26,7 @@
 ### Homebrew (recommended)
 
 ```bash
-brew tap emusal/alogin
+brew tap emusal/alogin --custom-remote git@github.com:emusal/alogin2.git
 brew install alogin
 ```
 
@@ -205,8 +205,8 @@ Opens `http://localhost:8484` automatically.
 ### Shell Completion
 
 ```bash
-alogin completion zsh  > ~/.zsh/completions/_alogin
-alogin completion bash > /etc/bash_completion.d/alogin
+alogin completion install              # zsh (default)
+alogin completion install --shell bash # bash
 ```
 
 ---
