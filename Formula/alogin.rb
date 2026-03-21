@@ -41,8 +41,14 @@ class Alogin < Formula
 
   def install
     bin.install Dir["alogin-*"].first => "alogin"
-    (bash_completion/"alogin").write Utils.safe_popen_read(bin/"alogin", "completion", "bash")
-    (zsh_completion/"_alogin").write Utils.safe_popen_read(bin/"alogin", "completion", "zsh")
+  end
+
+  def caveats
+    <<~EOS
+      To set up shell completions, run:
+        alogin completion install            # zsh (default)
+        alogin completion install --shell bash
+    EOS
   end
 
   test do
