@@ -1,18 +1,3 @@
-# Homebrew Formula for alogin
-#
-# This file is the reference copy. The authoritative version lives in the
-# tap repository: github.com/emusal/homebrew-alogin
-#
-# It is auto-updated by the GitHub Actions release workflow.
-# Do NOT edit checksums here manually — they are overwritten on each release.
-#
-# Users install with:
-#   brew tap emusal/alogin
-#   brew install alogin
-#
-# Upgrade:
-#   brew upgrade alogin
-
 class Alogin < Formula
   desc "Modern SSH connection manager with encrypted credential vault"
   homepage "https://github.com/emusal/alogin2"
@@ -21,23 +6,23 @@ class Alogin < Formula
 
   on_macos do
     on_arm do
-      url "https://github.com/emusal/alogin2/releases/download/v#{version}/alogin-web-darwin-arm64"
-      sha256 "PLACEHOLDER_DARWIN_ARM64"
+      url "https://github.com/emusal/alogin2/releases/download/v2.0.1/alogin-web-darwin-arm64"
+      sha256 "79713bbabdbf34d9d9c4ec17c1c9cb48eee048b9b705d9ca242f17ec4dab8725"
     end
     on_intel do
-      url "https://github.com/emusal/alogin2/releases/download/v#{version}/alogin-web-darwin-amd64"
-      sha256 "PLACEHOLDER_DARWIN_AMD64"
+      url "https://github.com/emusal/alogin2/releases/download/v2.0.1/alogin-web-darwin-amd64"
+      sha256 "de8ee21286c8196a459a7fb074fce8568b00a34874d2d2c74c7cd3e70014ff91"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/emusal/alogin2/releases/download/v#{version}/alogin-web-linux-arm64"
-      sha256 "PLACEHOLDER_LINUX_ARM64"
+      url "https://github.com/emusal/alogin2/releases/download/v2.0.1/alogin-web-linux-arm64"
+      sha256 "fd93f19f5023ee44a8c967a21e019f2cd1c759801fa48a426f10107f7bb5e45c"
     end
     on_intel do
-      url "https://github.com/emusal/alogin2/releases/download/v#{version}/alogin-web-linux-amd64"
-      sha256 "PLACEHOLDER_LINUX_AMD64"
+      url "https://github.com/emusal/alogin2/releases/download/v2.0.1/alogin-web-linux-amd64"
+      sha256 "4c8a76c09a8f49c6c77509e3370d7f303491920603a08b152253a2ea64e0f864"
     end
   end
 

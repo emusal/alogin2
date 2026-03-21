@@ -109,27 +109,25 @@ jobs:
             checksums.txt
           generate_release_notes: true
 
-  # ── Job 4: Update Homebrew tap ────────────────────────────────────────────
-  # Requires a repo secret HOMEBREW_TAP_TOKEN:
-  #   GitHub → Settings → Secrets → Actions → New repository secret
-  #   Value: a PAT (classic) with repo scope on emusal/homebrew-alogin
+  # ── Job 4: Update Formula/alogin.rb in this repo ─────────────────────────
+  # Uses GITHUB_TOKEN (no extra secret needed).
+  # brew tap: brew tap emusal/alogin2 https://github.com/emusal/alogin2
   update-homebrew:
     needs: release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/download-artifact@v4
         with:
           pattern: binary-*
           merge-multiple: true
       - name: Generate checksums
         run: shasum -a 256 alogin-* > checksums.txt
-      - name: Checkout homebrew tap
-        uses: actions/checkout@v4
-        with:
-          repository: emusal/homebrew-alogin
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          path: homebrew-alogin
-      - name: Update formula
+      - name: Update Formula/alogin.rb
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           SHA_DARWIN_ARM64=$(grep 'alogin-web-darwin-arm64' checksums.txt | awk '{print $1}')
@@ -137,8 +135,7 @@ jobs:
           SHA_LINUX_ARM64=$(grep  'alogin-web-linux-arm64'  checksums.txt | awk '{print $1}')
           SHA_LINUX_AMD64=$(grep  'alogin-web-linux-amd64'  checksums.txt | awk '{print $1}')
 
-          mkdir -p homebrew-alogin/Formula
-          cat > homebrew-alogin/Formula/alogin.rb << FORMULA
+          cat > Formula/alogin.rb << FORMULA
           class Alogin < Formula
             desc "Modern SSH connection manager with encrypted credential vault"
             homepage "https://github.com/emusal/alogin2"
@@ -187,9 +184,8 @@ jobs:
       - name: Commit and push formula
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          cd homebrew-alogin
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Formula/alogin.rb
-          git commit -m "alogin v${VERSION}"
+          git commit -m "brew: update formula to v${VERSION}" || echo "No changes"
           git push
