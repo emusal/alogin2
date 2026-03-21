@@ -1,0 +1,102 @@
+-- ALOGIN v2 SQLite schema
+-- Replaces: server_list, gateway_list, alias_hosts, clusters, term_themes, special_hosts
+PRAGMA journal_mode = WAL;
+PRAGMA foreign_keys = ON;
+
+-- ----------------------------------------------------------------
+-- servers: replaces server_list TSV
+-- password column stores "_HIDDEN_" when vault is active, or the
+-- literal password in plaintext/legacy mode.
+-- port = 0 means "use protocol default".
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS servers (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    protocol   TEXT    NOT NULL DEFAULT 'ssh'
+                       CHECK(protocol IN ('ssh','sftp','ftp','sshfs',
+                                          'telnet','rlogin','vagrant','docker')),
+    host       TEXT    NOT NULL,
+    user       TEXT    NOT NULL,
+    password   TEXT    NOT NULL DEFAULT '_HIDDEN_',
+    port       INTEGER NOT NULL DEFAULT 0,
+    gateway_id INTEGER REFERENCES gateway_routes(id) ON DELETE SET NULL,
+    locale     TEXT    NOT NULL DEFAULT '-',
+    created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    updated_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    UNIQUE(host, user)
+);
+
+CREATE INDEX IF NOT EXISTS idx_servers_host ON servers(host);
+CREATE INDEX IF NOT EXISTS idx_servers_user ON servers(user);
+
+-- ----------------------------------------------------------------
+-- gateway_routes: named routes (replaces gateway_list)
+-- Hops are in gateway_hops, ordered by hop_order.
+-- The destination server is the servers row with gateway_id pointing here.
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS gateway_routes (
+    id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT    NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS gateway_hops (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    route_id  INTEGER NOT NULL REFERENCES gateway_routes(id) ON DELETE CASCADE,
+    server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    hop_order INTEGER NOT NULL,
+    UNIQUE(route_id, hop_order)
+);
+
+CREATE INDEX IF NOT EXISTS idx_gateway_hops_route ON gateway_hops(route_id);
+
+-- ----------------------------------------------------------------
+-- aliases: replaces alias_hosts
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS aliases (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    alias_name TEXT    NOT NULL UNIQUE,
+    server_id  INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    user       TEXT    NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_aliases_name ON aliases(alias_name);
+
+-- ----------------------------------------------------------------
+-- clusters: replaces clusters file
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS clusters (
+    id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT    NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS cluster_members (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    cluster_id   INTEGER NOT NULL REFERENCES clusters(id) ON DELETE CASCADE,
+    server_id    INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    user         TEXT    NOT NULL DEFAULT '',
+    member_order INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(cluster_id, server_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cluster_members_cluster ON cluster_members(cluster_id);
+
+-- ----------------------------------------------------------------
+-- term_themes: replaces term_themes + special_hosts
+-- host_pattern (regexp) takes priority over locale_pattern.
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS term_themes (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    locale_pattern TEXT    NOT NULL DEFAULT '',
+    host_pattern   TEXT    NOT NULL DEFAULT '',
+    theme_name     TEXT    NOT NULL,
+    priority       INTEGER NOT NULL DEFAULT 0
+);
+
+-- ----------------------------------------------------------------
+-- schema_migrations: version tracking
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    version    INTEGER PRIMARY KEY,
+    applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+INSERT OR IGNORE INTO schema_migrations(version) VALUES (1);

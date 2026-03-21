@@ -1,0 +1,200 @@
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.5rem 2rem;
+  min-width: 420px;
+  max-width: 560px;
+  width: 100%;
+}
+
+.modal-title {
+  font-size: 1.05rem;
+  font-weight: bold;
+  color: var(--accent);
+  margin-bottom: 1.2rem;
+}
+
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.85rem;
+}
+
+.form-row label {
+  font-size: 0.78rem;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.form-row input,
+.form-row select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.45rem 0.75rem;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  outline: none;
+}
+
+.form-row input:focus,
+.form-row select:focus {
+  border-color: var(--accent);
+}
+
+.form-row input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.form-hint {
+  font-size: 0.75rem;
+  color: var(--dim);
+  margin-top: 0.1rem;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: flex-end;
+  margin-top: 1.3rem;
+}
+
+.modal-actions button {
+  padding: 0.4rem 1.1rem;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  transition: border-color 0.15s;
+}
+
+.modal-actions button:hover {
+  border-color: var(--accent);
+}
+
+.modal-actions .btn-primary {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.modal-actions .btn-primary:hover {
+  opacity: 0.85;
+}
+
+.modal-error {
+  font-size: 0.82rem;
+  color: var(--red);
+  margin-top: 0.5rem;
+}
+
+/* Hop list (gateway form) */
+.hop-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.hop-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.88rem;
+}
+
+.hop-item .hop-label {
+  flex: 1;
+  color: var(--text);
+}
+
+.hop-item button {
+  background: none;
+  border: none;
+  color: var(--dim);
+  cursor: pointer;
+  padding: 0 0.2rem;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.hop-item button:hover {
+  color: var(--accent);
+}
+
+.hop-add-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.hop-add-row select {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.38rem 0.6rem;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.88rem;
+  outline: none;
+}
+
+.hop-add-row select:focus {
+  border-color: var(--accent);
+}
+
+.hop-add-btn {
+  padding: 0.38rem 0.8rem;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.hop-add-btn:hover {
+  border-color: var(--accent);
+}
+
+.member-user-input {
+  width: 110px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.8rem;
+  outline: none;
+}
+
+.member-user-input:focus {
+  border-color: var(--accent);
+}

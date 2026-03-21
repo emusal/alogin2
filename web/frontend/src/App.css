@@ -1,0 +1,59 @@
+:root {
+  --bg: #1a1a2e;
+  --surface: #16213e;
+  --border: #2a2a4a;
+  --accent: #c792ea;
+  --accent2: #82aaff;
+  --text: #e0e0e0;
+  --dim: #888;
+  --green: #c3e88d;
+  --red: #f07178;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.logo {
+  font-size: 1.4rem;
+  font-weight: bold;
+  color: var(--accent);
+  letter-spacing: 2px;
+}
+
+.nav { display: flex; gap: 0.5rem; }
+
+.nav-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--dim);
+  padding: 0.35rem 0.9rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+  transition: all 0.15s;
+}
+
+.nav-btn:hover { color: var(--text); border-color: var(--accent2); }
+.nav-btn.active { color: var(--accent); border-color: var(--accent); }
+
+.main {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}

@@ -1,0 +1,417 @@
+# alogin
+
+**SSH connection manager for macOS and Linux** — interactive TUI host picker, encrypted credential vault, multi-hop gateway routing, cluster sessions, and a browser-based web terminal.
+
+> A full Go rewrite of the original [alogin v1](https://github.com/emusal/alogin2) (~2000s era Bash + Expect scripts).
+
+**Language** : [한국어](README.md) | English
+
+---
+
+## Features
+
+- **Interactive TUI** — fuzzy-search host picker with arrow navigation (no more typing full hostnames)
+- **Pure Go SSH client** — no `expect`, no prompt-pattern hacking
+- **Multi-hop gateway routing** — transparent ProxyJump chaining through bastion hosts
+- **Encrypted credential vault** — macOS Keychain, Linux Secret Service, or `age`-encrypted file fallback
+- **Cluster sessions** — connect to multiple hosts simultaneously via tmux (cross-platform) or iTerm2 / Terminal.app (macOS)
+- **Web UI** — browser-based SSH terminal + server management dashboard (`alogin web`)
+- **v1 compatibility** — drop-in `t`, `r`, `s`, `f`, `m`, `ct`, `cr` shell functions via a thin shim
+- **Migration tool** — one command to import existing `server_list`, `gateway_list`, `clusters`, etc.
+
+---
+
+## Installation
+
+### Homebrew (recommended)
+
+```bash
+brew tap emusal/alogin
+brew install alogin
+```
+
+### Download binary
+
+Grab the latest release from the [Releases](https://github.com/emusal/alogin2/releases) page:
+
+```bash
+# macOS (Apple Silicon)
+curl -L https://github.com/emusal/alogin2/releases/latest/download/alogin-darwin-arm64 -o /usr/local/bin/alogin
+chmod +x /usr/local/bin/alogin
+
+# macOS (Intel)
+curl -L https://github.com/emusal/alogin2/releases/latest/download/alogin-darwin-amd64 -o /usr/local/bin/alogin
+chmod +x /usr/local/bin/alogin
+
+# Linux (amd64)
+curl -L https://github.com/emusal/alogin2/releases/latest/download/alogin-linux-amd64 -o /usr/local/bin/alogin
+chmod +x /usr/local/bin/alogin
+```
+
+### Build from source
+
+Requires Go 1.23+.
+
+```bash
+git clone https://github.com/emusal/alogin2.git
+cd alogin2
+go build -o alogin ./cmd/alogin
+sudo mv alogin /usr/local/bin/
+```
+
+---
+
+## Quick Start
+
+### 1. Verify installation
+
+```bash
+alogin version
+```
+
+The database is created automatically at `~/.local/share/alogin/alogin.db` on first run.
+
+### 2. Migrate from alogin v1
+
+If you have an existing v1 installation:
+
+```bash
+alogin migrate --from /path/to/old/alogin
+```
+
+This imports `server_list`, `gateway_list`, `alias_hosts`, `clusters`, and `term_themes` into SQLite and moves passwords into the system keychain.
+
+### 3. Add a server
+
+```bash
+alogin server add
+```
+
+Prompts for protocol, host, user, port, gateway, and locale. Password is stored in the system keychain (macOS Keychain / Linux Secret Service) — never in the database.
+
+### 4. Connect
+
+```bash
+alogin connect              # opens interactive TUI selector
+alogin connect web-01       # connect directly by hostname
+alogin connect admin@web-01 # specify user
+```
+
+### 5. Shell compatibility (v1 users)
+
+Add to your `~/.zshrc` or `~/.bashrc`:
+
+```bash
+source <(alogin shell-init)
+```
+
+Then use the same v1 commands as before:
+
+```bash
+t web-01          # SSH connect (direct)
+r admin@bastion   # SSH connect (auto gateway detection)
+s web-01          # SFTP
+f ftp-server      # FTP
+m web-01          # SSHFS mount
+ct prod-cluster   # cluster connect (tiled windows)
+cr prod-cluster   # cluster connect via gateways
+```
+
+---
+
+## Commands
+
+### Connection
+
+```
+alogin connect [user@]host... [flags]
+
+  --auto-gw              Auto-detect gateway route (legacy 'r' behavior)
+  --dry-run              Print connection route without connecting
+  -c, --cmd string       Run command after login
+  -L, --local-forward    Local port forward  (local:host:port)
+  -R, --remote-forward   Remote port forward (remote:host:port)
+```
+
+```bash
+alogin connect                     # TUI selector
+alogin connect web-01              # direct connect
+alogin connect gw-01 web-01        # explicit 2-hop
+alogin connect gw-01 gw-02 web-01  # explicit 3-hop
+alogin connect web-01 --auto-gw    # via registered gateway
+```
+
+### File Transfer
+
+```bash
+alogin sftp [user@]host [-p local_file] [-g remote_file]
+alogin ftp  [user@]host
+alogin mount [user@]host [remote_path]   # SSHFS mount
+```
+
+### Cluster
+
+```bash
+alogin cluster [name] [flags]
+
+  --gateway          Route through gateways (legacy 'cr')
+  --mode string      Session mode: tmux (default), iterm, terminal
+  -x, --tile-x int   Number of tile columns (0=auto)
+```
+
+### Server Management
+
+```bash
+alogin server list
+alogin server add [--proto ssh] [--host host] [--user user] [--gateway name] [--locale loc]
+alogin server show [user@]host
+alogin server delete [user@]host
+alogin server passwd [user@]host
+alogin server getpwd [user@]host    # show stored password
+```
+
+### Gateway Management
+
+```bash
+alogin gateway list
+alogin gateway add
+alogin gateway show name
+alogin gateway delete name
+```
+
+### Alias Management
+
+```bash
+alogin alias list
+alogin alias add
+alogin alias show name
+alogin alias delete name
+```
+
+### Migration
+
+```bash
+alogin migrate --from /path/to/alogin_root [--dry-run]
+```
+
+### Web UI
+
+```bash
+alogin web [--port 8484] [--no-browser]
+```
+
+Opens `http://localhost:8484` automatically.
+
+### Shell Completion
+
+```bash
+alogin completion zsh  > ~/.zsh/completions/_alogin
+alogin completion bash > /etc/bash_completion.d/alogin
+```
+
+---
+
+## Configuration
+
+Default paths (XDG-compliant):
+
+| Path | Description |
+|------|-------------|
+| `~/.local/share/alogin/alogin.db` | SQLite database |
+| `~/.local/share/alogin/vault.age` | age-encrypted vault (fallback) |
+| `~/.config/alogin/config.toml` | Configuration file |
+| `~/.local/share/alogin/alogin.log` | Log file |
+
+Override with environment variables:
+
+```bash
+ALOGIN_DB            # Path to SQLite database file
+ALOGIN_CONFIG        # Path to config.toml
+ALOGIN_LOG_LEVEL     # 0=errors, 1=info, 2=debug (default: 0)
+ALOGIN_LANG          # Default locale (default: system)
+ALOGIN_SSHOPT        # Extra SSH options
+ALOGIN_SSHCMD        # Custom SSH binary path
+ALOGIN_KEYCHAIN_USE  # If set, force Keychain backend
+ALOGIN_ROOT          # Legacy: sets DB/config parent directory
+```
+
+`config.toml` example:
+
+```toml
+[ssh]
+default_options = "-o StrictHostKeyChecking=no -o ServerAliveInterval=30"
+connect_timeout = 10
+
+[vault]
+backend = "keychain"   # keychain | libsecret | age | plaintext
+
+[web]
+port = 8484
+```
+
+---
+
+## Security
+
+### Credential storage
+
+Passwords are **never stored in the database**. The `password` column holds `_HIDDEN_` as a sentinel. Actual credentials are stored in:
+
+1. **macOS Keychain** (default on macOS) — uses `Security.framework`
+2. **Linux Secret Service** (default on Linux) — GNOME Keyring / KWallet via D-Bus
+3. **age-encrypted file** — cross-platform fallback; unlocked with a master passphrase
+4. **Plaintext** — only for reading legacy `server_list` during migration
+
+### SSH key authentication
+
+alogin respects `~/.ssh/config` and the SSH agent. For hosts where you've deployed an SSH key, alogin uses it automatically — no password entry needed.
+
+---
+
+## Multi-hop Gateway Routing
+
+Define a gateway route:
+
+```bash
+alogin gateway add
+# name: prod-route
+# hops: bastion-01 → internal-gw → (destination)
+```
+
+Assign it to a server:
+
+```bash
+alogin server add
+# ...
+# gateway: prod-route
+```
+
+alogin dials each hop in order using Go's native SSH library — no ProxyCommand shell escaping, no expect patterns:
+
+```
+local → bastion-01:22 → internal-gw:22 → web-01:22
+```
+
+If an intermediate hop has `AllowTcpForwarding` disabled, alogin automatically falls back to the **shell-chain method** (runs `ssh -tt` inside the shell of each hop — identical to v1's `conn.exp` behavior).
+
+---
+
+## Cluster Sessions
+
+Connect to all members of a cluster simultaneously:
+
+```bash
+alogin cluster prod-web --mode tmux      # tmux panes (macOS + Linux)
+alogin cluster prod-web --mode iterm     # iTerm2 split panes (macOS)
+alogin cluster prod-web --mode terminal  # Terminal.app tiles (macOS)
+```
+
+Manage clusters:
+
+```bash
+alogin cluster add prod-web web-01 web-02 web-03
+alogin cluster list
+alogin cluster show prod-web
+alogin cluster delete prod-web
+```
+
+---
+
+## Web UI
+
+```bash
+alogin web
+```
+
+Opens `http://localhost:8484` with:
+
+- **Server list** — browse, search, connect
+- **Web terminal** — full xterm.js SSH session in the browser
+- **Cluster management** — create and edit clusters
+
+The web server is local-only by default. Do not expose it to the network without adding authentication.
+
+---
+
+## Migration from v1
+
+alogin v2 is fully backward-compatible with v1 data files. Run once:
+
+```bash
+alogin migrate --from $ALOGIN_ROOT
+```
+
+This:
+- Parses `server_list`, `gateway_list`, `alias_hosts`, `clusters`, `term_themes`
+- Converts `<space>` / `<tab>` literals to real characters
+- Imports all data into SQLite
+- Moves passwords to the system keychain (removes from database)
+- Leaves the original files untouched
+
+After migration, source the compatibility shim to keep using `t`, `r`, `s`, etc.:
+
+```bash
+source <(alogin shell-init)
+```
+
+---
+
+## Development
+
+### Prerequisites
+
+- Go 1.23+
+- Node.js 20+ (for Web UI frontend only)
+
+### Build
+
+```bash
+# CLI only
+go build ./cmd/alogin
+
+# Web UI frontend (required before embedding)
+cd web/frontend && npm install && npm run build
+
+# Full build with embedded Web UI
+go build -tags web ./cmd/alogin
+```
+
+### Test
+
+```bash
+go test ./...
+go vet ./...
+```
+
+### Cross-compile
+
+```bash
+make dist       # darwin/arm64, darwin/amd64, linux/amd64, linux/arm64
+make dist-web   # macOS builds with embedded Web UI
+```
+
+### Project structure
+
+```
+cmd/alogin/          Entry point
+internal/
+  cli/               Cobra command definitions
+  config/            Config loading (XDG + env vars)
+  model/             Data types (Server, Gateway, Cluster ...)
+  db/                SQLite repositories (schema: internal/db/schema.sql)
+  vault/             Secret backends (Keychain / libsecret / age / plaintext)
+  ssh/               Native SSH client (multi-hop, PTY, tunnel, SFTP, SSHFS)
+  migrate/           v1 TSV → SQLite migration parsers
+  cluster/           Cluster session orchestration (tmux / iTerm2 / Terminal.app)
+  tui/               Bubbletea interactive host picker
+  web/               HTTP server + WebSocket terminal + REST API
+web/frontend/        React + xterm.js (Vite)
+completions/         Shell shim + zsh/bash completion scripts
+docs/                Detailed documentation
+```
+
+---
+
+## License
+
+MIT

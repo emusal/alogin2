@@ -1,0 +1,33 @@
+.terminal-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #1a1a2e;
+}
+
+.terminal-header {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.terminal-title {
+  color: var(--green);
+  font-size: 0.9rem;
+}
+
+.terminal-body {
+  flex: 1;
+  overflow: hidden;
+  padding: 4px;
+}
+
+/* Override xterm.js defaults for full-height fill */
+.terminal-body .xterm {
+  height: 100%;
+}
+.terminal-body .xterm-viewport {
+  overflow-y: hidden !important;
+}

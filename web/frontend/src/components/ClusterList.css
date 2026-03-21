@@ -1,0 +1,3 @@
+.cluster-list-container { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+
+.cl-title { font-weight: 600; font-size: 0.95rem; color: var(--text); }
