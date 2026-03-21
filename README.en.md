@@ -121,6 +121,14 @@ cr prod-cluster   # cluster connect via gateways
 
 ## Commands
 
+### TUI
+
+```bash
+alogin tui
+```
+
+Launches the interactive terminal UI. Navigate with arrow keys, filter hosts with fuzzy search, and press `Enter` to connect. Same as `alogin connect` (no args) but starts at the welcome screen.
+
 ### Connection
 
 ```
