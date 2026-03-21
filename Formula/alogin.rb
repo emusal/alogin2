@@ -40,11 +40,9 @@ class Alogin < Formula
   end
 
   def install
-    # Install the downloaded binary as 'alogin'
     bin.install Dir["alogin-*"].first => "alogin"
-
-    # Generate and install shell completions
-    generate_completions_from_executable(bin/"alogin", "completion")
+    (bash_completion/"alogin").write Utils.safe_popen_read(bin/"alogin", "completion", "bash")
+    (zsh_completion/"_alogin").write Utils.safe_popen_read(bin/"alogin", "completion", "zsh")
   end
 
   test do
