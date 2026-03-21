@@ -1,8 +1,8 @@
-# alogin
+# alogin 2
 
 **SSH connection manager for macOS and Linux** — interactive TUI host picker, encrypted credential vault, multi-hop gateway routing, cluster sessions, and a browser-based web terminal.
 
-> A full Go rewrite of the original [alogin v1](https://github.com/emusal/alogin2) (~2000s era Bash + Expect scripts).
+> A full Go rewrite of the original [alogin v1](https://github.com/emusal/alogin) (~2000s era Bash + Expect scripts).
 
 **Language** : [한국어](README.md) | English
 

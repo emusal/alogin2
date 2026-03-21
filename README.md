@@ -1,8 +1,8 @@
-# alogin
+# alogin 2
 
 **macOS · Linux용 SSH 접속 관리 도구** — 대화형 TUI 호스트 선택기, 암호화 자격증명 저장소, 멀티홉 게이트웨이 라우팅, 클러스터 세션, 브라우저 기반 웹 터미널.
 
-> 2000년대 초 Bash + Expect 스크립트로 만들어진 [alogin v1](https://github.com/emusal/alogin2)을 Go로 완전히 재작성한 버전입니다.
+> 2000년대 초 Bash + Expect 스크립트로 만들어진 [alogin v1](https://github.com/emusal/alogin)을 Go로 완전히 재작성한 버전입니다.
 
 **언어** : 한국어 | [English](README.en.md)
 
