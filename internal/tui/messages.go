@@ -3,7 +3,7 @@ package tui
 import "github.com/emusal/alogin2/internal/model"
 
 type formDoneMsg struct{ servers []*model.Server }
-type formErrMsg  struct{ err error }
+type formErrMsg struct{ err error }
 
 type gwDoneMsg struct {
 	gateways []*model.GatewayRoute

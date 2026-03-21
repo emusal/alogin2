@@ -7,11 +7,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/emusal/alogin2/internal/db"
-	"github.com/emusal/alogin2/internal/model"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/emusal/alogin2/internal/db"
+	"github.com/emusal/alogin2/internal/model"
 )
 
 // SelectedServer is the result returned when the user picks a server.
@@ -51,7 +51,7 @@ const (
 type formMode int
 
 const (
-	fmAdd  formMode = iota
+	fmAdd formMode = iota
 	fmEdit
 )
 
@@ -62,10 +62,10 @@ type tuiCommand struct {
 }
 
 var globalCommands = []tuiCommand{
-	{"/server",  "Manage servers"},
+	{"/server", "Manage servers"},
 	{"/gateway", "Manage gateways"},
 	{"/cluster", "Manage clusters"},
-	{"/hosts",   "Manage local hostname mappings"},
+	{"/hosts", "Manage local hostname mappings"},
 }
 
 // memberEntry tracks one cluster member in the form.
@@ -154,8 +154,8 @@ type Model struct {
 	clFormTarget       *model.Cluster
 
 	// Local hosts list
-	localHosts       []*model.LocalHost
-	hostCursor       int
+	localHosts []*model.LocalHost
+	hostCursor int
 
 	// Local host form
 	hostFormMode   formMode

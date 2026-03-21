@@ -46,7 +46,7 @@ func newAliasAddCmd() *cobra.Command {
 
 func newAliasListCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:  "list",
+		Use: "list",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			aliases, err := database.Aliases.ListAll(ctx)

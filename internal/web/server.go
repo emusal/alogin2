@@ -10,11 +10,11 @@ import (
 	"os"
 	"time"
 
-	webpkg "github.com/emusal/alogin2/web"
 	"github.com/emusal/alogin2/internal/db"
 	"github.com/emusal/alogin2/internal/vault"
 	"github.com/emusal/alogin2/internal/web/api"
 	"github.com/emusal/alogin2/internal/web/terminal"
+	webpkg "github.com/emusal/alogin2/web"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )

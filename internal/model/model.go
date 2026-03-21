@@ -33,17 +33,17 @@ func (p Protocol) DefaultPort() int {
 
 // Server represents one entry in the server registry (replaces a row in server_list).
 type Server struct {
-	ID        int64     `json:"id"`
-	Protocol  Protocol  `json:"protocol"`
-	Host      string    `json:"host"`
-	User      string    `json:"user"`
+	ID       int64    `json:"id"`
+	Protocol Protocol `json:"protocol"`
+	Host     string   `json:"host"`
+	User     string   `json:"user"`
 	// Password is never stored here at runtime; it is fetched from Vault on demand.
-	Port            int    `json:"port"`              // 0 = use protocol default
-	GatewayID       *int64 `json:"gateway_id"`        // named route from gateway_routes (mirrors gateway_list)
-	GatewayServerID *int64 `json:"gateway_server_id"` // direct server reference (mirrors server_list.gateway)
-	Locale          string `json:"locale"`            // e.g. "ko_KR.eucKR"; "-" or "" = system default
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	Port            int       `json:"port"`              // 0 = use protocol default
+	GatewayID       *int64    `json:"gateway_id"`        // named route from gateway_routes (mirrors gateway_list)
+	GatewayServerID *int64    `json:"gateway_server_id"` // direct server reference (mirrors server_list.gateway)
+	Locale          string    `json:"locale"`            // e.g. "ko_KR.eucKR"; "-" or "" = system default
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 // EffectivePort returns the actual TCP port to connect to.
@@ -85,7 +85,7 @@ type Cluster struct {
 // ClusterMember is one server inside a cluster.
 type ClusterMember struct {
 	ServerID    int64  `json:"server_id"`
-	User        string `json:"user"`  // empty = use server's default
+	User        string `json:"user"` // empty = use server's default
 	MemberOrder int    `json:"member_order"`
 }
 

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/emusal/alogin2/internal/model"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/emusal/alogin2/internal/model"
 	"github.com/sahilm/fuzzy"
 )
 

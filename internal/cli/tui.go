@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/charmbracelet/bubbletea"
 	"github.com/emusal/alogin2/internal/model"
 	"github.com/emusal/alogin2/internal/tui"
-	"github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
 

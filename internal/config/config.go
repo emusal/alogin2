@@ -10,20 +10,20 @@ import (
 // Config holds all runtime configuration for alogin.
 type Config struct {
 	// Paths
-	DataDir    string // ~/.local/share/alogin  (XDG_DATA_HOME)
-	ConfigDir  string // ~/.config/alogin        (XDG_CONFIG_HOME)
-	DBPath     string // DataDir/alogin.db
-	VaultPath  string // DataDir/vault.age
-	LogFile    string // DataDir/alogin.log
+	DataDir   string // ~/.local/share/alogin  (XDG_DATA_HOME)
+	ConfigDir string // ~/.config/alogin        (XDG_CONFIG_HOME)
+	DBPath    string // DataDir/alogin.db
+	VaultPath string // DataDir/vault.age
+	LogFile   string // DataDir/alogin.log
 
 	// Behaviour
-	LogLevel        int    // 0=errors, 1=info, 2=debug
-	Lang            string // Default locale (ALOGIN_LANG)
-	SSHOpt          string // Extra SSH options (ALOGIN_SSHOPT)
-	SSHCmd          string // Custom SSH binary (ALOGIN_SSHCMD)
-	KeychainUse     bool   // Use OS keychain (ALOGIN_KEYCHAIN_USE)
-	PreferredHost   string // Default host for connect with no args
-	DefaultGW       string // Default gateway
+	LogLevel         int    // 0=errors, 1=info, 2=debug
+	Lang             string // Default locale (ALOGIN_LANG)
+	SSHOpt           string // Extra SSH options (ALOGIN_SSHOPT)
+	SSHCmd           string // Custom SSH binary (ALOGIN_SSHCMD)
+	KeychainUse      bool   // Use OS keychain (ALOGIN_KEYCHAIN_USE)
+	PreferredHost    string // Default host for connect with no args
+	DefaultGW        string // Default gateway
 	DefaultTermTheme string // Fallback terminal theme
 
 	// Legacy compatibility: original ALOGIN_ROOT layout
@@ -57,17 +57,17 @@ func Load() (*Config, error) {
 	_ = v.ReadInConfig() // ignore missing file
 
 	cfg := &Config{
-		DataDir:         v.GetString("data_dir"),
-		ConfigDir:       v.GetString("config_dir"),
-		LogLevel:        v.GetInt("log_level"),
-		Lang:            v.GetString("lang"),
-		SSHOpt:          v.GetString("sshopt"),
-		SSHCmd:          v.GetString("sshcmd"),
-		KeychainUse:     v.GetBool("keychain_use"),
-		PreferredHost:   v.GetString("preferred_host"),
-		DefaultGW:       v.GetString("default_gw"),
+		DataDir:          v.GetString("data_dir"),
+		ConfigDir:        v.GetString("config_dir"),
+		LogLevel:         v.GetInt("log_level"),
+		Lang:             v.GetString("lang"),
+		SSHOpt:           v.GetString("sshopt"),
+		SSHCmd:           v.GetString("sshcmd"),
+		KeychainUse:      v.GetBool("keychain_use"),
+		PreferredHost:    v.GetString("preferred_host"),
+		DefaultGW:        v.GetString("default_gw"),
 		DefaultTermTheme: v.GetString("default_term_theme"),
-		LegacyRoot:      os.Getenv("ALOGIN_ROOT"),
+		LegacyRoot:       os.Getenv("ALOGIN_ROOT"),
 	}
 
 	// ALOGIN_DB / ALOGIN_CONFIG overrides

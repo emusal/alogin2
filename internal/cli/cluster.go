@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-
 func newClusterCmd() *cobra.Command {
 	var mode string
 	var tileX int
