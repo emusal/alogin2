@@ -20,22 +20,22 @@ class Alogin < Formula
   on_macos do
     on_arm do
       url "https://github.com/emusal/alogin2/releases/download/v#{version}/alogin-darwin-arm64"
-      sha256 "REPLACE_WITH_CHECKSUM_DARWIN_ARM64"
+      sha256 "4dc8c7aca920f3e6da57572af2d86f46df692f271213a671d18aee29cd96b0be"
     end
     on_intel do
       url "https://github.com/emusal/alogin2/releases/download/v#{version}/alogin-darwin-amd64"
-      sha256 "REPLACE_WITH_CHECKSUM_DARWIN_AMD64"
+      sha256 "25b314f9663cecdd3ba253bfb9bd6420137f5b5bf8e46709eb96e8e2de015489"
     end
   end
 
   on_linux do
     on_arm do
       url "https://github.com/emusal/alogin2/releases/download/v#{version}/alogin-linux-arm64"
-      sha256 "REPLACE_WITH_CHECKSUM_LINUX_ARM64"
+      sha256 "6a305a046d54eaac8d9dac6f8c5ab360546f7d388e3a710c4b4a077d8f662e25"
     end
     on_intel do
       url "https://github.com/emusal/alogin2/releases/download/v#{version}/alogin-linux-amd64"
-      sha256 "REPLACE_WITH_CHECKSUM_LINUX_AMD64"
+      sha256 "59dfbde0cef098672dd0249af2c6486c2b0c887608b4a9bb62160540c8e38ad6"
     end
   end
 

@@ -1,3 +1,5 @@
+//go:build web
+
 // Package web holds the embedded frontend build output.
 // Run `npm run build` in web/frontend/ to populate frontend/dist.
 package web
