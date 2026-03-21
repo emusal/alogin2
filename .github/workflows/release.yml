@@ -108,3 +108,88 @@ jobs:
             alogin-*
             checksums.txt
           generate_release_notes: true
+
+  # ── Job 4: Update Homebrew tap ────────────────────────────────────────────
+  # Requires a repo secret HOMEBREW_TAP_TOKEN:
+  #   GitHub → Settings → Secrets → Actions → New repository secret
+  #   Value: a PAT (classic) with repo scope on emusal/homebrew-alogin
+  update-homebrew:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: binary-*
+          merge-multiple: true
+      - name: Generate checksums
+        run: shasum -a 256 alogin-* > checksums.txt
+      - name: Checkout homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: emusal/homebrew-alogin
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-alogin
+      - name: Update formula
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          SHA_DARWIN_ARM64=$(grep 'alogin-web-darwin-arm64' checksums.txt | awk '{print $1}')
+          SHA_DARWIN_AMD64=$(grep 'alogin-web-darwin-amd64' checksums.txt | awk '{print $1}')
+          SHA_LINUX_ARM64=$(grep  'alogin-web-linux-arm64'  checksums.txt | awk '{print $1}')
+          SHA_LINUX_AMD64=$(grep  'alogin-web-linux-amd64'  checksums.txt | awk '{print $1}')
+
+          mkdir -p homebrew-alogin/Formula
+          cat > homebrew-alogin/Formula/alogin.rb << FORMULA
+          class Alogin < Formula
+            desc "Modern SSH connection manager with encrypted credential vault"
+            homepage "https://github.com/emusal/alogin2"
+            version "${VERSION}"
+            license "MIT"
+
+            on_macos do
+              on_arm do
+                url "https://github.com/emusal/alogin2/releases/download/v${VERSION}/alogin-web-darwin-arm64"
+                sha256 "${SHA_DARWIN_ARM64}"
+              end
+              on_intel do
+                url "https://github.com/emusal/alogin2/releases/download/v${VERSION}/alogin-web-darwin-amd64"
+                sha256 "${SHA_DARWIN_AMD64}"
+              end
+            end
+
+            on_linux do
+              on_arm do
+                url "https://github.com/emusal/alogin2/releases/download/v${VERSION}/alogin-web-linux-arm64"
+                sha256 "${SHA_LINUX_ARM64}"
+              end
+              on_intel do
+                url "https://github.com/emusal/alogin2/releases/download/v${VERSION}/alogin-web-linux-amd64"
+                sha256 "${SHA_LINUX_AMD64}"
+              end
+            end
+
+            def install
+              bin.install Dir["alogin-web-*"].first => "alogin"
+            end
+
+            def caveats
+              <<~EOS
+                To set up shell completions, run:
+                  alogin completion install            # zsh (default)
+                  alogin completion install --shell bash
+              EOS
+            end
+
+            test do
+              assert_match "alogin v${VERSION}", shell_output("#{bin}/alogin version")
+            end
+          end
+          FORMULA
+      - name: Commit and push formula
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          cd homebrew-alogin
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/alogin.rb
+          git commit -m "alogin v${VERSION}"
+          git push

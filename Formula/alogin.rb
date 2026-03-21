@@ -1,46 +1,48 @@
 # Homebrew Formula for alogin
 #
-# This file belongs in a separate tap repository: github.com/<you>/homebrew-alogin
-#   homebrew-alogin/
-#     Formula/
-#       alogin.rb   ← place this file here
+# This file is the reference copy. The authoritative version lives in the
+# tap repository: github.com/emusal/homebrew-alogin
 #
-# After each release, update `version` and the sha256 values from checksums.txt.
+# It is auto-updated by the GitHub Actions release workflow.
+# Do NOT edit checksums here manually — they are overwritten on each release.
 #
 # Users install with:
-#   brew tap <you>/alogin
+#   brew tap emusal/alogin
 #   brew install alogin
+#
+# Upgrade:
+#   brew upgrade alogin
 
 class Alogin < Formula
   desc "Modern SSH connection manager with encrypted credential vault"
   homepage "https://github.com/emusal/alogin2"
-  version "2.0.0"
+  version "2.0.1"
   license "MIT"
 
   on_macos do
     on_arm do
-      url "https://github.com/emusal/alogin2/releases/download/v#{version}/alogin-darwin-arm64"
-      sha256 "4dc8c7aca920f3e6da57572af2d86f46df692f271213a671d18aee29cd96b0be"
+      url "https://github.com/emusal/alogin2/releases/download/v#{version}/alogin-web-darwin-arm64"
+      sha256 "PLACEHOLDER_DARWIN_ARM64"
     end
     on_intel do
-      url "https://github.com/emusal/alogin2/releases/download/v#{version}/alogin-darwin-amd64"
-      sha256 "25b314f9663cecdd3ba253bfb9bd6420137f5b5bf8e46709eb96e8e2de015489"
+      url "https://github.com/emusal/alogin2/releases/download/v#{version}/alogin-web-darwin-amd64"
+      sha256 "PLACEHOLDER_DARWIN_AMD64"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/emusal/alogin2/releases/download/v#{version}/alogin-linux-arm64"
-      sha256 "6a305a046d54eaac8d9dac6f8c5ab360546f7d388e3a710c4b4a077d8f662e25"
+      url "https://github.com/emusal/alogin2/releases/download/v#{version}/alogin-web-linux-arm64"
+      sha256 "PLACEHOLDER_LINUX_ARM64"
     end
     on_intel do
-      url "https://github.com/emusal/alogin2/releases/download/v#{version}/alogin-linux-amd64"
-      sha256 "59dfbde0cef098672dd0249af2c6486c2b0c887608b4a9bb62160540c8e38ad6"
+      url "https://github.com/emusal/alogin2/releases/download/v#{version}/alogin-web-linux-amd64"
+      sha256 "PLACEHOLDER_LINUX_AMD64"
     end
   end
 
   def install
-    bin.install Dir["alogin-*"].first => "alogin"
+    bin.install Dir["alogin-web-*"].first => "alogin"
   end
 
   def caveats
