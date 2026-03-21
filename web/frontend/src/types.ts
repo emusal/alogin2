@@ -18,6 +18,7 @@ export interface ServerFormData {
   password: string
   port: number
   gateway_id: number | null
+  gateway_server_id: number | null
   locale: string
 }
 

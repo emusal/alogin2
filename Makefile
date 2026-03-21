@@ -27,12 +27,12 @@ build-race:                     ## Build with race detector
 # ── install ───────────────────────────────────────────────────────────────────
 
 .PHONY: install
-install:                        ## Install CLI to GOPATH/bin
-	go install $(CMD)
+install: frontend               ## Install CLI with embedded Web UI to /usr/local/bin
+	go install $(LDFLAGS) -tags web $(CMD)
 
-.PHONY: install-web
-install-web: frontend           ## Install CLI with embedded Web UI to GOPATH/bin
-	go install -tags web $(CMD)
+.PHONY: install-no-web
+install-no-web:                 ## Install CLI without Web UI to /usr/local/bin
+	go install $(LDFLAGS) $(CMD)
 
 # ── frontend ──────────────────────────────────────────────────────────────────
 
@@ -86,9 +86,11 @@ dist:                           ## Cross-compile for all release targets
 	GOOS=linux   GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN)-linux-arm64   $(CMD)
 
 .PHONY: dist-web
-dist-web: frontend              ## Cross-compile macOS variants with embedded Web UI
+dist-web: frontend              ## Cross-compile all platforms with embedded Web UI
 	GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -tags web -o $(BIN)-web-darwin-arm64 $(CMD)
 	GOOS=darwin  GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -tags web -o $(BIN)-web-darwin-amd64 $(CMD)
+	GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -tags web -o $(BIN)-web-linux-amd64  $(CMD)
+	GOOS=linux   GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -tags web -o $(BIN)-web-linux-arm64  $(CMD)
 
 .PHONY: checksums
 checksums:                      ## Generate SHA256 checksums for release binaries
@@ -98,7 +100,7 @@ checksums:                      ## Generate SHA256 checksums for release binarie
 
 .PHONY: clean
 clean:                          ## Remove built binaries
-	rm -f $(BIN) $(BIN)-darwin-arm64 $(BIN)-darwin-amd64 $(BIN)-linux-amd64 $(BIN)-linux-arm64 $(BIN)-web-darwin-arm64 $(BIN)-web-darwin-amd64 checksums.txt
+	rm -f $(BIN) $(BIN)-darwin-arm64 $(BIN)-darwin-amd64 $(BIN)-linux-amd64 $(BIN)-linux-arm64 $(BIN)-web-darwin-arm64 $(BIN)-web-darwin-amd64 $(BIN)-web-linux-amd64 $(BIN)-web-linux-arm64 checksums.txt
 
 .PHONY: clean-all
 clean-all: clean                ## Remove binaries + frontend build artifacts

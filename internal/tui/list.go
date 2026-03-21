@@ -257,19 +257,88 @@ func (m Model) renderServerForm() string {
 	sb.WriteString(m.titleStyle.Render("alogin — " + title))
 	sb.WriteString("\n\n")
 
-	labels := []string{"Protocol", "Host", "User", "Password", "Port", "Gateway", "Locale"}
-	for i, field := range m.formFields {
-		label := labels[i]
+	// formFields: Protocol(0) Host(1) User(2) Password(3) Port(4) Locale(5)
+	// formFocusIdx==5 is the virtual Gateway row (picker), ==6 is Locale
+	textLabels := []string{"Protocol", "Host", "User", "Password", "Port"}
+	for i, field := range m.formFields[:5] {
+		label := textLabels[i]
 		if m.formMode == fmEdit && i == 1 {
 			label += " (locked)"
 		}
 		sb.WriteString(fmt.Sprintf("  %-12s  %s\n", label, field.View()))
 	}
+
+	// Gateway row (virtual index 5)
+	gwLabel := m.srvFormGwLabel()
+	if m.formFocusIdx == 5 && !m.srvFormGwPickerOpen {
+		focused := lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true)
+		sb.WriteString(fmt.Sprintf("  %-12s  %s%s\n", "Gateway",
+			focused.Render(gwLabel),
+			m.dimStyle.Render("  [Enter] open picker")))
+	} else {
+		sb.WriteString(fmt.Sprintf("  %-12s  %s\n", "Gateway", m.dimStyle.Render(gwLabel)))
+	}
+	if m.srvFormGwPickerOpen {
+		sb.WriteString(m.renderGwPicker())
+	}
+
+	// Locale (formFields[5], Tab-index 6)
+	sb.WriteString(fmt.Sprintf("  %-12s  %s\n", "Locale", m.formFields[5].View()))
+
 	sb.WriteString("\n")
-	sb.WriteString(m.dimStyle.Render("  [Tab] next  [Shift+Tab] prev  [Enter] save  [Esc] cancel"))
+	if m.srvFormGwPickerOpen {
+		sb.WriteString(m.dimStyle.Render("  [↑↓] navigate  [type] search  [Enter] select  [Esc] close picker"))
+	} else {
+		sb.WriteString(m.dimStyle.Render("  [Tab] next  [Shift+Tab] prev  [Enter] save  [Esc] cancel"))
+	}
 	if m.statusMsg != "" {
 		sb.WriteString("\n")
 		sb.WriteString(m.dimStyle.Render("  " + m.statusMsg))
+	}
+	return sb.String()
+}
+
+func (m Model) srvFormGwLabel() string {
+	if m.srvFormSelectedGwID != nil {
+		for _, gw := range m.gateways {
+			if gw.ID == *m.srvFormSelectedGwID {
+				return "[gw] " + gw.Name
+			}
+		}
+	}
+	if m.srvFormSelectedSrvGwID != nil {
+		for _, s := range m.servers {
+			if s.ID == *m.srvFormSelectedSrvGwID {
+				return fmt.Sprintf("[srv] %s@%s", s.User, s.Host)
+			}
+		}
+	}
+	return "(none)"
+}
+
+func (m Model) renderGwPicker() string {
+	var sb strings.Builder
+	sb.WriteString("\n")
+	sb.WriteString(fmt.Sprintf("  Search: %s\n", m.srvFormGwSearch.View()))
+	sb.WriteString("\n")
+
+	entries := m.gwPickerEntries()
+	viewport := 8
+	total := len(entries)
+	viewStart, viewEnd := m.viewWindow(m.srvFormGwPickerCursor, total, viewport)
+
+	for i := viewStart; i < viewEnd; i++ {
+		e := entries[i]
+		if i == m.srvFormGwPickerCursor {
+			sb.WriteString(m.selectedStyle.Render("  > " + e.label))
+		} else {
+			sb.WriteString(m.normalStyle.Render("    " + e.label))
+		}
+		sb.WriteString("\n")
+	}
+	if total > viewport {
+		sb.WriteString(m.dimStyle.Render(fmt.Sprintf("    %d/%d", m.srvFormGwPickerCursor+1, total)))
+		sb.WriteString("\n")
 	}
 	return sb.String()
 }

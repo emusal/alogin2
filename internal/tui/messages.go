@@ -28,3 +28,7 @@ type statsMsg struct {
 	gateways []*model.GatewayRoute
 	clusters []*model.Cluster
 }
+
+// gwLoadedMsg silently refreshes m.gateways without changing TUI state.
+// Used when opening the server form gateway picker.
+type gwLoadedMsg struct{ gateways []*model.GatewayRoute }

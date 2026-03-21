@@ -74,6 +74,13 @@ type memberEntry struct {
 	user     string // empty = use server default
 }
 
+// gwPickerEntry is one selectable item in the server-form gateway picker.
+type gwPickerEntry struct {
+	label   string
+	gwID    *int64 // non-nil → GatewayRoute
+	srvGwID *int64 // non-nil → server used directly as gateway
+}
+
 // Model is the Bubbletea model for the host selector.
 type Model struct {
 	// Data
@@ -109,6 +116,13 @@ type Model struct {
 	formFields   []textinput.Model
 	formFocusIdx int
 	formTarget   *model.Server
+
+	// Server form gateway picker
+	srvFormGwPickerOpen    bool
+	srvFormGwPickerCursor  int
+	srvFormGwSearch        textinput.Model
+	srvFormSelectedGwID    *int64 // GatewayRoute ID
+	srvFormSelectedSrvGwID *int64 // direct Server-as-gateway ID
 
 	// Delete confirm
 	deleteTarget *model.Server
@@ -295,8 +309,10 @@ func (m Model) filteredCommands() []tuiCommand {
 
 // ── server form ──────────────────────────────────────────────────────────────
 
-func (m *Model) initServerForm(srv *model.Server) {
-	fields := make([]textinput.Model, 7)
+func (m *Model) initServerForm(srv *model.Server) tea.Cmd {
+	// 6 text fields: Protocol(0) Host(1) User(2) Password(3) Port(4) Locale(5)
+	// Gateway is handled by the picker (index 5 is the virtual gateway row in Tab order)
+	fields := make([]textinput.Model, 6)
 	for i := range fields {
 		fields[i] = textinput.New()
 		fields[i].CharLimit = 256
@@ -308,8 +324,15 @@ func (m *Model) initServerForm(srv *model.Server) {
 	fields[3].Placeholder = "(leave empty = keep current)"
 	fields[4].Placeholder = "0"
 	fields[4].CharLimit = 5
-	fields[5].Placeholder = "gateway name (optional)"
-	fields[6].Placeholder = "e.g. ko_KR.eucKR"
+	fields[5].Placeholder = "e.g. ko_KR.eucKR"
+
+	// Gateway picker state
+	gwSearch := textinput.New()
+	gwSearch.Placeholder = "search..."
+	gwSearch.CharLimit = 128
+	m.srvFormGwSearch = gwSearch
+	m.srvFormGwPickerOpen = false
+	m.srvFormGwPickerCursor = 0
 
 	if srv != nil {
 		fields[0].SetValue(string(srv.Protocol))
@@ -318,20 +341,16 @@ func (m *Model) initServerForm(srv *model.Server) {
 		if srv.Port > 0 {
 			fields[4].SetValue(strconv.Itoa(srv.Port))
 		}
-		if srv.GatewayID != nil {
-			for _, gw := range m.gateways {
-				if gw.ID == *srv.GatewayID {
-					fields[5].SetValue(gw.Name)
-					break
-				}
-			}
-		}
-		fields[6].SetValue(srv.Locale)
+		fields[5].SetValue(srv.Locale)
+		m.srvFormSelectedGwID = srv.GatewayID
+		m.srvFormSelectedSrvGwID = srv.GatewayServerID
 		m.formTarget = srv
 		m.formMode = fmEdit
 	} else {
 		m.formMode = fmAdd
 		m.formTarget = nil
+		m.srvFormSelectedGwID = nil
+		m.srvFormSelectedSrvGwID = nil
 		fields[0].SetValue("ssh")
 	}
 
@@ -340,6 +359,7 @@ func (m *Model) initServerForm(srv *model.Server) {
 	m.formFocusIdx = 0
 	m.state = stateServerForm
 	m.statusMsg = ""
+	return m.loadGatewaysForPickerCmd()
 }
 
 func (m Model) submitServerForm() tea.Cmd {
@@ -352,24 +372,18 @@ func (m Model) submitServerForm() tea.Cmd {
 		user := m.formFields[2].Value()
 		password := m.formFields[3].Value()
 		portStr := m.formFields[4].Value()
-		gwName := m.formFields[5].Value()
-		locale := m.formFields[6].Value()
+		locale := m.formFields[5].Value()
 
 		port, _ := strconv.Atoi(portStr)
 
 		srv := &model.Server{
-			Protocol: proto,
-			Host:     host,
-			User:     user,
-			Port:     port,
-			Locale:   locale,
-		}
-
-		if gwName != "" {
-			gw, err := m.db.Gateways.GetByName(context.Background(), gwName)
-			if err == nil && gw != nil {
-				srv.GatewayID = &gw.ID
-			}
+			Protocol:        proto,
+			Host:            host,
+			User:            user,
+			Port:            port,
+			Locale:          locale,
+			GatewayID:       m.srvFormSelectedGwID,
+			GatewayServerID: m.srvFormSelectedSrvGwID,
 		}
 
 		var opErr error
@@ -387,6 +401,38 @@ func (m Model) submitServerForm() tea.Cmd {
 		servers, _ := m.db.Servers.ListAll(context.Background())
 		return formDoneMsg{servers}
 	}
+}
+
+// loadGatewaysForPickerCmd loads gateways silently (no state transition).
+func (m Model) loadGatewaysForPickerCmd() tea.Cmd {
+	return func() tea.Msg {
+		gateways, _ := m.db.Gateways.ListAll(context.Background())
+		return gwLoadedMsg{gateways}
+	}
+}
+
+// gwPickerEntries returns the filtered list for the gateway picker.
+// "(none)" is always first; gateways and servers are filtered by search query.
+func (m Model) gwPickerEntries() []gwPickerEntry {
+	q := strings.ToLower(m.srvFormGwSearch.Value())
+	entries := []gwPickerEntry{{label: "(none)"}}
+	for _, gw := range m.gateways {
+		if q == "" || strings.Contains(strings.ToLower(gw.Name), q) {
+			id := gw.ID
+			entries = append(entries, gwPickerEntry{label: "[gw] " + gw.Name, gwID: &id})
+		}
+	}
+	for _, s := range m.servers {
+		searchStr := strings.ToLower(s.User + "@" + s.Host)
+		if q == "" || strings.Contains(searchStr, q) {
+			id := s.ID
+			entries = append(entries, gwPickerEntry{
+				label:   fmt.Sprintf("[srv] %s@%s", s.User, s.Host),
+				srvGwID: &id,
+			})
+		}
+	}
+	return entries
 }
 
 func (m Model) deleteServerCmd() tea.Cmd {

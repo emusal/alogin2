@@ -42,9 +42,16 @@ export function ServerList({ onConnect }: Props) {
     s.protocol.toLowerCase().includes(query.toLowerCase())
   )
 
-  const gwName = (id: number | null) => {
-    if (!id) return null
-    return gateways.find(g => g.id === id)?.name ?? null
+  const gwLabel = (server: Server) => {
+    if (server.gateway_id) {
+      const gw = gateways.find(g => g.id === server.gateway_id)
+      return gw ? `[gw] ${gw.name}` : null
+    }
+    if (server.gateway_server_id) {
+      const s = servers.find(x => x.id === server.gateway_server_id)
+      return s ? `[srv] ${s.user}@${s.host}` : null
+    }
+    return null
   }
 
   const handleDelete = async (server: Server) => {
@@ -107,7 +114,7 @@ export function ServerList({ onConnect }: Props) {
                 <td><span className="user">{server.user}</span></td>
                 <td><span className="badge">{server.protocol}</span></td>
                 <td><span className="dim">{server.port > 0 ? server.port : '—'}</span></td>
-                <td><span className="dim">{gwName(server.gateway_id) ?? '—'}</span></td>
+                <td><span className="dim">{gwLabel(server) ?? '—'}</span></td>
                 <td><span className="dim">{server.locale || '—'}</span></td>
                 <td className="actions-cell">
                   <button className="connect-btn" onClick={() => onConnect(server)}>Connect</button>
@@ -124,6 +131,7 @@ export function ServerList({ onConnect }: Props) {
         <ServerFormModal
           initial={editingServer}
           gateways={gateways}
+          servers={servers}
           onSave={handleSave}
           onClose={() => { setModalMode(null); setEditingServer(null) }}
         />

@@ -7,8 +7,17 @@ const PROTOCOLS = ['ssh', 'sftp', 'ftp', 'sshfs', 'telnet', 'rlogin', 'vagrant',
 interface Props {
   initial: Server | null  // null = add mode
   gateways: Gateway[]
+  servers: Server[]
   onSave: (saved: Server) => void
   onClose: () => void
+}
+
+// Encode gateway selection as a single string for <select> value.
+// "" = none, "gw:ID" = GatewayRoute, "srv:ID" = direct server-as-gateway
+const encodeGwValue = (gwId: number | null, srvGwId: number | null): string => {
+  if (gwId != null) return `gw:${gwId}`
+  if (srvGwId != null) return `srv:${srvGwId}`
+  return ''
 }
 
 const emptyForm = (): ServerFormData => ({
@@ -18,10 +27,11 @@ const emptyForm = (): ServerFormData => ({
   password: '',
   port: 0,
   gateway_id: null,
+  gateway_server_id: null,
   locale: '',
 })
 
-export function ServerFormModal({ initial, gateways, onSave, onClose }: Props) {
+export function ServerFormModal({ initial, gateways, servers, onSave, onClose }: Props) {
   const isEdit = initial !== null
   const [form, setForm] = useState<ServerFormData>(() =>
     isEdit
@@ -32,6 +42,7 @@ export function ServerFormModal({ initial, gateways, onSave, onClose }: Props) {
           password: '',
           port: initial.port,
           gateway_id: initial.gateway_id,
+          gateway_server_id: initial.gateway_server_id,
           locale: initial.locale,
         }
       : emptyForm()
@@ -56,6 +67,7 @@ export function ServerFormModal({ initial, gateways, onSave, onClose }: Props) {
             password: form.password,
             port: form.port,
             gateway_id: form.gateway_id,
+            gateway_server_id: form.gateway_server_id,
             locale: form.locale,
           }
         : form
@@ -134,13 +146,38 @@ export function ServerFormModal({ initial, gateways, onSave, onClose }: Props) {
           <div className="form-row">
             <label>Gateway</label>
             <select
-              value={form.gateway_id ?? ''}
-              onChange={e => set('gateway_id', e.target.value ? Number(e.target.value) : null)}
+              value={encodeGwValue(form.gateway_id, form.gateway_server_id)}
+              onChange={e => {
+                const val = e.target.value
+                if (!val) {
+                  set('gateway_id', null)
+                  set('gateway_server_id', null)
+                } else if (val.startsWith('gw:')) {
+                  set('gateway_id', Number(val.slice(3)))
+                  set('gateway_server_id', null)
+                } else if (val.startsWith('srv:')) {
+                  set('gateway_id', null)
+                  set('gateway_server_id', Number(val.slice(4)))
+                }
+              }}
             >
               <option value="">— none —</option>
-              {gateways.map(gw => (
-                <option key={gw.id} value={gw.id}>{gw.name}</option>
-              ))}
+              {gateways.length > 0 && (
+                <optgroup label="Gateways">
+                  {gateways.map(gw => (
+                    <option key={`gw:${gw.id}`} value={`gw:${gw.id}`}>{gw.name}</option>
+                  ))}
+                </optgroup>
+              )}
+              {servers.filter(s => !isEdit || s.id !== initial?.id).length > 0 && (
+                <optgroup label="Servers">
+                  {servers
+                    .filter(s => !isEdit || s.id !== initial?.id)
+                    .map(s => (
+                      <option key={`srv:${s.id}`} value={`srv:${s.id}`}>{s.user}@{s.host}</option>
+                    ))}
+                </optgroup>
+              )}
             </select>
           </div>
           <div className="form-row">

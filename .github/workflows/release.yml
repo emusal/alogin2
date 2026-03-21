@@ -52,6 +52,14 @@ jobs:
             goarch: arm64
             suffix: linux-arm64
             web: false
+          - goos: linux
+            goarch: amd64
+            suffix: web-linux-amd64
+            web: true
+          - goos: linux
+            goarch: arm64
+            suffix: web-linux-arm64
+            web: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

@@ -89,24 +89,27 @@ func (h *Handler) getServer(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) createServer(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Protocol string `json:"protocol"`
-		Host     string `json:"host"`
-		User     string `json:"user"`
-		Password string `json:"password"`
-		Port     int    `json:"port"`
-		Gateway  string `json:"gateway"`
-		Locale   string `json:"locale"`
+		Protocol        string `json:"protocol"`
+		Host            string `json:"host"`
+		User            string `json:"user"`
+		Password        string `json:"password"`
+		Port            int    `json:"port"`
+		GatewayID       *int64 `json:"gateway_id"`
+		GatewayServerID *int64 `json:"gateway_server_id"`
+		Locale          string `json:"locale"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	srv := &model.Server{
-		Protocol: model.Protocol(req.Protocol),
-		Host:     req.Host,
-		User:     req.User,
-		Port:     req.Port,
-		Locale:   req.Locale,
+		Protocol:        model.Protocol(req.Protocol),
+		Host:            req.Host,
+		User:            req.User,
+		Port:            req.Port,
+		GatewayID:       req.GatewayID,
+		GatewayServerID: req.GatewayServerID,
+		Locale:          req.Locale,
 	}
 	if err := h.db.Servers.Create(r.Context(), srv, req.Password); err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
@@ -137,25 +140,27 @@ func (h *Handler) updateServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Protocol  string `json:"protocol"`
-		User      string `json:"user"`
-		Password  string `json:"password"`
-		Port      int    `json:"port"`
-		GatewayID *int64 `json:"gateway_id"`
-		Locale    string `json:"locale"`
+		Protocol        string `json:"protocol"`
+		User            string `json:"user"`
+		Password        string `json:"password"`
+		Port            int    `json:"port"`
+		GatewayID       *int64 `json:"gateway_id"`
+		GatewayServerID *int64 `json:"gateway_server_id"`
+		Locale          string `json:"locale"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	srv := &model.Server{
-		ID:        id,
-		Protocol:  model.Protocol(req.Protocol),
-		Host:      existing.Host,
-		User:      req.User,
-		Port:      req.Port,
-		GatewayID: req.GatewayID,
-		Locale:    req.Locale,
+		ID:              id,
+		Protocol:        model.Protocol(req.Protocol),
+		Host:            existing.Host,
+		User:            req.User,
+		Port:            req.Port,
+		GatewayID:       req.GatewayID,
+		GatewayServerID: req.GatewayServerID,
+		Locale:          req.Locale,
 	}
 	if err := h.db.Servers.Update(r.Context(), srv, req.Password); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)

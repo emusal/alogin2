@@ -20,6 +20,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.gwCount = len(msg.gateways)
 		m.clCount = len(msg.clusters)
 		return m, nil
+	case gwLoadedMsg:
+		m.gateways = msg.gateways
+		return m, nil
 	case formDoneMsg:
 		m.servers = msg.servers
 		m.applyFilter()
@@ -183,11 +186,10 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.query == "" {
 				switch ch {
 				case 'a':
-					m.initServerForm(nil)
-					return m, nil
+					return m, m.initServerForm(nil)
 				case 'e':
 					if len(m.filtered) > 0 {
-						m.initServerForm(m.filtered[m.cursor])
+						return m, m.initServerForm(m.filtered[m.cursor])
 					}
 					return m, nil
 				case 'd':
@@ -295,7 +297,7 @@ func (m Model) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "e":
 		if len(m.filtered) > 0 {
-			m.initServerForm(m.filtered[m.cursor])
+			return m, m.initServerForm(m.filtered[m.cursor])
 		}
 	case "d":
 		if len(m.filtered) > 0 {
@@ -308,7 +310,78 @@ func (m Model) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // ── server form / delete confirm ──────────────────────────────────────────────
 
+// tabCount is the total number of Tab stops in the server form:
+// 0..4 = text fields, 5 = gateway picker row, 6 = locale field.
+const srvFormTabCount = 7
+
 func (m Model) updateServerForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Gateway picker is open — handle search + navigation
+	if m.srvFormGwPickerOpen {
+		switch msg.String() {
+		case "ctrl+c":
+			m.quitting = true
+			return m, tea.Quit
+		case "esc":
+			m.srvFormGwPickerOpen = false
+			m.srvFormGwSearch.Blur()
+			return m, nil
+		case "up":
+			if m.srvFormGwPickerCursor > 0 {
+				m.srvFormGwPickerCursor--
+			}
+		case "down":
+			entries := m.gwPickerEntries()
+			if m.srvFormGwPickerCursor < len(entries)-1 {
+				m.srvFormGwPickerCursor++
+			}
+		case "enter":
+			entries := m.gwPickerEntries()
+			if len(entries) > 0 {
+				e := entries[m.srvFormGwPickerCursor]
+				m.srvFormSelectedGwID = e.gwID
+				m.srvFormSelectedSrvGwID = e.srvGwID
+			}
+			m.srvFormGwPickerOpen = false
+			m.srvFormGwSearch.SetValue("")
+			m.srvFormGwSearch.Blur()
+		default:
+			// Forward all other keys to the search input
+			var cmd tea.Cmd
+			m.srvFormGwSearch, cmd = m.srvFormGwSearch.Update(msg)
+			// Clamp cursor after filter change
+			entries := m.gwPickerEntries()
+			if m.srvFormGwPickerCursor >= len(entries) {
+				m.srvFormGwPickerCursor = len(entries) - 1
+			}
+			if m.srvFormGwPickerCursor < 0 {
+				m.srvFormGwPickerCursor = 0
+			}
+			return m, cmd
+		}
+		return m, nil
+	}
+
+	// Normal form navigation
+	// formFocusIdx: 0-4 = text fields, 5 = gateway row, 6 = locale text field
+	blurCurrent := func() {
+		if m.formFocusIdx != 5 {
+			idx := m.formFocusIdx
+			if idx > 5 {
+				idx-- // formFields[5] is Locale (Tab-index 6)
+			}
+			m.formFields[idx].Blur()
+		}
+	}
+	focusCurrent := func() {
+		if m.formFocusIdx != 5 {
+			idx := m.formFocusIdx
+			if idx > 5 {
+				idx--
+			}
+			m.formFields[idx].Focus()
+		}
+	}
+
 	switch msg.String() {
 	case "ctrl+c":
 		m.quitting = true
@@ -317,28 +390,43 @@ func (m Model) updateServerForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.state = stateList
 		return m, nil
 	case "enter":
+		if m.formFocusIdx == 5 {
+			// Open gateway picker
+			m.srvFormGwPickerOpen = true
+			m.srvFormGwPickerCursor = 0
+			m.srvFormGwSearch.SetValue("")
+			m.srvFormGwSearch.Focus()
+			return m, nil
+		}
 		return m, m.submitServerForm()
 	case "tab":
-		m.formFields[m.formFocusIdx].Blur()
-		next := (m.formFocusIdx + 1) % len(m.formFields)
+		blurCurrent()
+		next := (m.formFocusIdx + 1) % srvFormTabCount
 		if m.formMode == fmEdit && next == 1 {
 			next = 2
 		}
 		m.formFocusIdx = next
-		m.formFields[m.formFocusIdx].Focus()
+		focusCurrent()
 		return m, nil
 	case "shift+tab":
-		m.formFields[m.formFocusIdx].Blur()
-		prev := (m.formFocusIdx - 1 + len(m.formFields)) % len(m.formFields)
+		blurCurrent()
+		prev := (m.formFocusIdx - 1 + srvFormTabCount) % srvFormTabCount
 		if m.formMode == fmEdit && prev == 1 {
 			prev = 0
 		}
 		m.formFocusIdx = prev
-		m.formFields[m.formFocusIdx].Focus()
+		focusCurrent()
 		return m, nil
 	default:
+		if m.formFocusIdx == 5 {
+			return m, nil
+		}
+		idx := m.formFocusIdx
+		if idx > 5 {
+			idx--
+		}
 		var cmd tea.Cmd
-		m.formFields[m.formFocusIdx], cmd = m.formFields[m.formFocusIdx].Update(msg)
+		m.formFields[idx], cmd = m.formFields[idx].Update(msg)
 		return m, cmd
 	}
 }
