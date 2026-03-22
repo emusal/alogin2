@@ -444,6 +444,7 @@ alogin web [--port 8484] [--no-browser]
      브라우저 안에 xterm.js 기반 터미널이 표시되고, 서버 프롬프트가 보이는 상태.
      `ls -la` 또는 `top` 같은 명령어가 실행 중인 모습이면 더 좋음.
 -->
+![Web 브라우저 실행](docs/screenshots/web-launch.gif)
 ![Web 브라우저 SSH 터미널](docs/screenshots/web-terminal.gif)
 
 웹 서버는 기본적으로 로컬 전용입니다. 인증 없이 네트워크에 노출하지 마세요.
