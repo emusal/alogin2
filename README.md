@@ -8,6 +8,15 @@
 
 ---
 
+<!-- 📸 스크린샷 #1: TUI 호스트 선택기
+     장면: `alogin connect` 또는 `alogin tui` 실행 직후 전체 TUI 화면.
+     퍼지 검색창에 일부 호스트명이 입력된 상태, 매칭된 여러 호스트가 하이라이트된 목록.
+     터미널 배경은 어두운 색으로, 화살표 커서가 한 항목에 위치한 모습.
+-->
+![TUI 호스트 선택기](docs/screenshots/tui-picker.gif)
+
+---
+
 ## 기능
 
 - **대화형 TUI** — 화살표 키 + 퍼지 검색으로 호스트 선택 (호스트명 전체 입력 불필요)
@@ -401,6 +410,13 @@ alogin cluster show prod-web
 alogin cluster delete prod-web
 ```
 
+<!-- 📸 스크린샷 #2: 클러스터 tmux 세션
+     장면: `alogin cluster prod-web --mode tmux` 실행 후의 터미널 전체 화면.
+     tmux가 화면을 3~4개의 창으로 분할하고, 각 창에 서로 다른 서버(web-01, web-02, web-03 등)로의
+     SSH 세션이 열려 있는 모습. 각 창의 상단에 서버명이 표시되면 이상적.
+-->
+![클러스터 tmux 세션](docs/screenshots/cluster-tmux.gif)
+
 ---
 
 ## Web UI
@@ -422,6 +438,13 @@ alogin web [--port 8484] [--no-browser]
 - **웹 터미널** — 브라우저의 xterm.js 기반 완전한 SSH 세션
 - **클러스터 관리** — 클러스터 생성 및 편집
 - **터널 관리** — 터널 추가/편집/삭제, 시작/정지/상태 확인
+
+<!-- 📸 스크린샷 #4: Web 브라우저 SSH 터미널
+     장면: Web UI에서 특정 서버를 클릭해 SSH 세션이 열린 화면.
+     브라우저 안에 xterm.js 기반 터미널이 표시되고, 서버 프롬프트가 보이는 상태.
+     `ls -la` 또는 `top` 같은 명령어가 실행 중인 모습이면 더 좋음.
+-->
+![Web 브라우저 SSH 터미널](docs/screenshots/web-terminal.gif)
 
 웹 서버는 기본적으로 로컬 전용입니다. 인증 없이 네트워크에 노출하지 마세요.
 

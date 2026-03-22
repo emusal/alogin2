@@ -8,6 +8,16 @@
 
 ---
 
+<!-- 📸 Screenshot #1: TUI host picker
+     Scene: Full TUI screen right after running `alogin connect` or `alogin tui`.
+     A fuzzy search query is partially typed in the search bar, with several matching
+     hosts highlighted in the list below. Arrow cursor is on one of the entries.
+     Dark terminal background preferred.
+-->
+![TUI host picker](docs/screenshots/tui-picker.gif)
+
+---
+
 ## Features
 
 - **Interactive TUI** — fuzzy-search host picker with arrow navigation (no more typing full hostnames)
@@ -400,6 +410,14 @@ alogin cluster show prod-web
 alogin cluster delete prod-web
 ```
 
+<!-- 📸 Screenshot #2: Cluster tmux session
+     Scene: Full terminal screen after running `alogin cluster prod-web --mode tmux`.
+     tmux splits the screen into 3–4 panes, each showing a live SSH session to a
+     different server (web-01, web-02, web-03, etc.). Server names visible in each pane
+     title bar or prompt.
+-->
+![Cluster tmux session](docs/screenshots/cluster-tmux.gif)
+
 ---
 
 ## Web UI
@@ -414,6 +432,13 @@ Opens `http://localhost:8484` with:
 - **Web terminal** — full xterm.js SSH session in the browser
 - **Cluster management** — create and edit clusters
 - **Tunnel management** — add/edit/delete tunnels, start/stop/check status
+
+<!-- 📸 Screenshot #3: Web browser SSH terminal
+     Scene: An SSH session open in the browser via Web UI.
+     The xterm.js terminal fills the right panel with a server prompt visible.
+     Ideally a command like `ls -la` or `htop` is running to make it look lively.
+-->
+![Web browser SSH terminal](docs/screenshots/web-terminal.gif)
 
 The web server is local-only by default. Do not expose it to the network without adding authentication.
 
