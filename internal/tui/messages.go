@@ -32,3 +32,11 @@ type statsMsg struct {
 // gwLoadedMsg silently refreshes m.gateways without changing TUI state.
 // Used when opening the server form gateway picker.
 type gwLoadedMsg struct{ gateways []*model.GatewayRoute }
+
+type tnDoneMsg struct {
+	tunnels []*model.Tunnel
+	msg     string
+}
+type tnErrMsg struct{ err error }
+
+type tnStatusMsg struct{ statuses map[int64]bool }

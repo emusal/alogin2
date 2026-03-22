@@ -40,9 +40,14 @@ Explicit multi-hop (each host is an SSH jump, resolved from the registry):
   alogin connect gw-01 web-01
   alogin connect gw-01 gw-02 web-01
 
+Port forwarding (-L local, -R remote):
+  alogin connect web-01 -L 8080:localhost:80       # full spec
+  alogin connect web-01 -L 2222:22                 # shorthand: local:2222 → dest:22
+  alogin connect web-01 --auto-gw -L 2222:22       # works through gateway too
+  alogin connect web-01 -R 2222:127.0.0.1:22       # remote→local reverse tunnel
+
 Other options:
-  alogin connect web-01 --cmd "tail -f /var/log/app.log"
-  alogin connect web-01 -L 8080:localhost:80`,
+  alogin connect web-01 --cmd "tail -f /var/log/app.log"`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
@@ -74,8 +79,8 @@ Other options:
 	cmd.Flags().BoolVar(&autoGW, "auto-gw", false, "auto-detect gateway route (like legacy 'r' command)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print connection route without connecting")
 	cmd.Flags().StringVarP(&command, "cmd", "c", "", "command to run after login")
-	cmd.Flags().StringArrayVarP(&tunnelL, "local-forward", "L", nil, "local port forward (local:host:port)")
-	cmd.Flags().StringArrayVarP(&tunnelR, "remote-forward", "R", nil, "remote port forward (remote:host:port)")
+	cmd.Flags().StringArrayVarP(&tunnelL, "local-forward", "L", nil, "local port forward: PORT | LPORT:RPORT | LPORT:host:RPORT | lhost:LPORT:host:RPORT")
+	cmd.Flags().StringArrayVarP(&tunnelR, "remote-forward", "R", nil, "remote port forward (SSH -R): RPORT:lhost:LPORT | rhost:RPORT:lhost:LPORT")
 
 	return cmd
 }
@@ -136,36 +141,33 @@ func doConnect(ctx context.Context, user, host string, opts *model.ConnectOption
 	// If an intermediate hop refuses TCP forwarding, fall back to the v1
 	// shell-chain method (runs "ssh" inside the shell of each hop — no
 	// AllowTcpForwarding required on proxy servers).
-	if len(hops) > 1 {
-		chain, err := internalssh.DialChain(hops)
-		if err != nil {
-			var eofErr *internalssh.ErrDialViaEOF
-			if errors.As(err, &eofErr) {
-				fmt.Fprintf(os.Stderr, "Note: direct-tcpip unavailable (%s), retrying via shell-chain\n", eofErr.ProxyAddr)
-				return internalssh.ShellChain(hops, shellOpts)
-			}
-			return err
-		}
-		defer chain.CloseAll()
-		return chain.Terminal().Shell(shellOpts)
-	}
-
-	// Single hop: DialChain + tunnel setup
 	chain, err := internalssh.DialChain(hops)
 	if err != nil {
+		var eofErr *internalssh.ErrDialViaEOF
+		if errors.As(err, &eofErr) {
+			if len(opts.TunnelL)+len(opts.TunnelR) > 0 {
+				fmt.Fprintf(os.Stderr, "Warning: shell-chain fallback does not support port forwarding; tunnels will not be set up\n")
+			}
+			fmt.Fprintf(os.Stderr, "Note: direct-tcpip unavailable (%s), retrying via shell-chain\n", eofErr.ProxyAddr)
+			return internalssh.ShellChain(hops, shellOpts)
+		}
 		return err
 	}
 	defer chain.CloseAll()
 
 	client := chain.Terminal()
+	targetHost := hops[len(hops)-1].Host
 
-	// Set up port tunnels (non-blocking)
-	for _, spec := range parseTunnelSpecs(opts.TunnelL) {
+	// Set up port tunnels (non-blocking).
+	// Works for both single-hop and multi-hop (gateway) chains — the tunnel
+	// is established on the terminal client, which already carries the full
+	// ProxyJump chain internally.
+	for _, spec := range parseTunnelSpecs(opts.TunnelL, targetHost) {
 		if err := client.ForwardLocal(ctx, spec); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: tunnel -L failed: %v\n", err)
 		}
 	}
-	for _, spec := range parseTunnelSpecs(opts.TunnelR) {
+	for _, spec := range parseTunnelSpecs(opts.TunnelR, targetHost) {
 		if err := client.ForwardRemote(ctx, spec); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: tunnel -R failed: %v\n", err)
 		}
@@ -376,13 +378,29 @@ func parseUserHost(arg string) (user, host string) {
 	return "", arg
 }
 
-// parseTunnelSpecs parses "localHost:localPort:remoteHost:remotePort" or "localPort:remoteHost:remotePort"
-func parseTunnelSpecs(specs []string) []internalssh.TunnelSpec {
+// parseTunnelSpecs parses port-forward specs with defaultRemoteHost used when
+// the remote host is not explicit. Supported formats:
+//
+//	PORT                          → 127.0.0.1:PORT → defaultRemoteHost:PORT
+//	localPort:remotePort          → 127.0.0.1:LPORT → defaultRemoteHost:RPORT
+//	localPort:remoteHost:remotePort
+//	localHost:localPort:remoteHost:remotePort
+func parseTunnelSpecs(specs []string, defaultRemoteHost string) []internalssh.TunnelSpec {
 	var result []internalssh.TunnelSpec
 	for _, spec := range specs {
 		parts := strings.Split(spec, ":")
 		var ts internalssh.TunnelSpec
 		switch len(parts) {
+		case 1: // PORT — same port on both sides, remote host = destination
+			fmt.Sscan(parts[0], &ts.LocalPort)
+			ts.LocalHost = "127.0.0.1"
+			ts.RemoteHost = defaultRemoteHost
+			ts.RemotePort = ts.LocalPort
+		case 2: // localPort:remotePort — remote host = destination
+			fmt.Sscan(parts[0], &ts.LocalPort)
+			ts.LocalHost = "127.0.0.1"
+			ts.RemoteHost = defaultRemoteHost
+			fmt.Sscan(parts[1], &ts.RemotePort)
 		case 3: // localPort:remoteHost:remotePort
 			fmt.Sscan(parts[0], &ts.LocalPort)
 			ts.LocalHost = "127.0.0.1"

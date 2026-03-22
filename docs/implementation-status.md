@@ -13,3 +13,5 @@
 | Linux libsecret vault | Done (Phase 2) |
 | Cluster (tmux + iTerm2 + Terminal.app) | Done (Phase 3) |
 | Web UI (React + xterm.js + Go server) | Done (Phase 4) |
+| Persistent SSH tunnels (tmux + CLI + TUI + Web UI) | Done (Phase 5) |
+| Port-forward flag improvements (`-L`/`-R` flexible spec) | Done (Phase 5) |

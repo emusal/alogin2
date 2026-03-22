@@ -59,6 +59,10 @@ func (m Model) View() string {
 		return m.renderHostList()
 	case stateHostForm:
 		return m.renderHostForm()
+	case stateTunnelList:
+		return m.renderTunnelList()
+	case stateTunnelForm:
+		return m.renderTunnelForm()
 	}
 	return m.renderMainList()
 }
@@ -643,6 +647,101 @@ func (m Model) renderHostForm() string {
 	}
 	sb.WriteString("\n")
 	sb.WriteString(m.dimStyle.Render("  [Tab] next  [Shift+Tab] prev  [Ctrl+S] save  [Enter] next/save  [Esc] cancel"))
+	if m.statusMsg != "" {
+		sb.WriteString("\n")
+		sb.WriteString(m.dimStyle.Render("  " + m.statusMsg))
+	}
+	return sb.String()
+}
+
+// ── tunnel list/form ──────────────────────────────────────────────────────────
+
+func (m Model) renderTunnelList() string {
+	var sb strings.Builder
+	sb.WriteString(m.titleStyle.Render("alogin — /tunnel"))
+	sb.WriteString("\n")
+	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	l1, l2 := pageDesc("tunnel")
+	sb.WriteString(descStyle.Render("  " + l1))
+	sb.WriteString("\n")
+	sb.WriteString(descStyle.Render("  " + l2))
+	sb.WriteString("\n\n")
+
+	viewport := m.visibleRows(7)
+	total := len(m.tunnels)
+	viewStart, viewEnd := m.viewWindow(m.tunnelCursor, total, viewport)
+
+	if total == 0 {
+		sb.WriteString(m.dimStyle.Render("  (no tunnels configured)"))
+	}
+	for i := viewStart; i < viewEnd; i++ {
+		t := m.tunnels[i]
+		srv := serverByID(m.servers, t.ServerID)
+		srvLabel := fmt.Sprintf("id=%d", t.ServerID)
+		if srv != nil {
+			srvLabel = srv.Host
+		}
+		running := m.tnStatuses[t.ID]
+		statusTag := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("[stopped]")
+		if running {
+			statusTag = lipgloss.NewStyle().Foreground(lipgloss.Color("82")).Render("[running]")
+		}
+		autoGWTag := ""
+		if t.AutoGW {
+			autoGWTag = " gw"
+		}
+		line := fmt.Sprintf("%-18s  %-16s  %s  %s:%d → %s:%d%s",
+			t.Name, srvLabel, string(t.Direction),
+			t.LocalHost, t.LocalPort, t.RemoteHost, t.RemotePort,
+			autoGWTag,
+		)
+		if i == m.tunnelCursor {
+			sb.WriteString(m.selectedStyle.Render("> "+line) + "  " + statusTag)
+		} else {
+			sb.WriteString(m.normalStyle.Render("  "+line) + "  " + statusTag)
+		}
+		sb.WriteString("\n")
+	}
+	if total > viewport {
+		sb.WriteString(m.dimStyle.Render(fmt.Sprintf("  %d/%d", m.tunnelCursor+1, total)))
+		sb.WriteString("\n")
+	}
+	sb.WriteString("\n")
+	sb.WriteString(m.dimStyle.Render("[↑↓] navigate  [s] start  [x] stop  [a] add  [e] edit  [d] delete  [Esc] back"))
+	if m.statusMsg != "" {
+		sb.WriteString("\n")
+		sb.WriteString(m.dimStyle.Render("  " + m.statusMsg))
+	}
+	return sb.String()
+}
+
+func (m Model) renderTunnelForm() string {
+	var sb strings.Builder
+	title := "Add Tunnel"
+	if m.tnFormMode == fmEdit && m.tnFormTarget != nil {
+		title = fmt.Sprintf("Edit Tunnel: %s", m.tnFormTarget.Name)
+	}
+	sb.WriteString(m.titleStyle.Render("alogin — " + title))
+	sb.WriteString("\n\n")
+
+	labels := []string{"Name", "Server", "Direction (L/R)", "Local Host", "Local Port", "Remote Host", "Remote Port"}
+	for i, field := range m.tnFormFields {
+		label := labels[i]
+		sb.WriteString(fmt.Sprintf("  %-16s  %s\n", label, field.View()))
+	}
+
+	// AutoGW toggle (tab stop index 7)
+	autoGWDisplay := "[ ] Auto-GW"
+	if m.tnFormAutoGW {
+		autoGWDisplay = "[x] Auto-GW"
+	}
+	if m.tnFormFocus == tnFormTabCount-1 {
+		sb.WriteString(m.selectedStyle.Render("> " + autoGWDisplay))
+	} else {
+		sb.WriteString(m.dimStyle.Render("  " + autoGWDisplay))
+	}
+	sb.WriteString("\n\n")
+	sb.WriteString(m.dimStyle.Render("  [Tab] next  [Shift+Tab] prev  [Space] toggle AutoGW  [Ctrl+S] save  [Esc] cancel"))
 	if m.statusMsg != "" {
 		sb.WriteString("\n")
 		sb.WriteString(m.dimStyle.Render("  " + m.statusMsg))

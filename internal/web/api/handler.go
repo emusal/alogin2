@@ -9,19 +9,26 @@ import (
 
 	"github.com/emusal/alogin2/internal/db"
 	"github.com/emusal/alogin2/internal/model"
+	tunnelpkg "github.com/emusal/alogin2/internal/tunnel"
 	"github.com/emusal/alogin2/internal/vault"
 	"github.com/go-chi/chi/v5"
 )
 
 // Handler holds dependencies for all API routes.
 type Handler struct {
-	db  *db.DB
-	vlt vault.Vault
+	db      *db.DB
+	vlt     vault.Vault
+	binPath string // path to the running alogin binary (for tunnel start)
 }
 
 // NewHandler creates an API handler.
 func NewHandler(database *db.DB, vlt vault.Vault) *Handler {
 	return &Handler{db: database, vlt: vlt}
+}
+
+// NewHandlerWithBin creates an API handler with the binary path for tunnel management.
+func NewHandlerWithBin(database *db.DB, vlt vault.Vault, binPath string) *Handler {
+	return &Handler{db: database, vlt: vlt, binPath: binPath}
 }
 
 // Router returns a chi router with all API routes mounted.
@@ -59,7 +66,222 @@ func (h *Handler) Router() http.Handler {
 	r.Put("/hosts/{id}", h.updateHost)
 	r.Delete("/hosts/{id}", h.deleteHost)
 
+	// Tunnels
+	r.Get("/tunnels", h.listTunnels)
+	r.Post("/tunnels", h.createTunnel)
+	r.Get("/tunnels/{id}", h.getTunnel)
+	r.Put("/tunnels/{id}", h.updateTunnel)
+	r.Delete("/tunnels/{id}", h.deleteTunnel)
+	r.Post("/tunnels/{id}/start", h.startTunnel)
+	r.Post("/tunnels/{id}/stop", h.stopTunnel)
+	r.Get("/tunnels/{id}/status", h.tunnelStatus)
+
 	return r
+}
+
+// --- Tunnels ---
+
+func (h *Handler) listTunnels(w http.ResponseWriter, r *http.Request) {
+	tunnels, err := h.db.Tunnels.ListAll(r.Context())
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if tunnels == nil {
+		tunnels = []*model.Tunnel{}
+	}
+	jsonOK(w, tunnels)
+}
+
+func (h *Handler) getTunnel(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		jsonError(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	t, err := h.db.Tunnels.GetByID(r.Context(), id)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if t == nil {
+		jsonError(w, "not found", http.StatusNotFound)
+		return
+	}
+	jsonOK(w, t)
+}
+
+func (h *Handler) createTunnel(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name       string `json:"name"`
+		ServerID   int64  `json:"server_id"`
+		Direction  string `json:"direction"`
+		LocalHost  string `json:"local_host"`
+		LocalPort  int    `json:"local_port"`
+		RemoteHost string `json:"remote_host"`
+		RemotePort int    `json:"remote_port"`
+		AutoGW     bool   `json:"auto_gw"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if req.Name == "" {
+		jsonError(w, "name is required", http.StatusBadRequest)
+		return
+	}
+	if req.Direction != "L" && req.Direction != "R" {
+		jsonError(w, "direction must be L or R", http.StatusBadRequest)
+		return
+	}
+	if req.LocalPort <= 0 || req.RemotePort <= 0 {
+		jsonError(w, "local_port and remote_port must be positive", http.StatusBadRequest)
+		return
+	}
+	if req.LocalHost == "" {
+		req.LocalHost = "127.0.0.1"
+	}
+	t := &model.Tunnel{
+		Name:       req.Name,
+		ServerID:   req.ServerID,
+		Direction:  model.TunnelDirection(req.Direction),
+		LocalHost:  req.LocalHost,
+		LocalPort:  req.LocalPort,
+		RemoteHost: req.RemoteHost,
+		RemotePort: req.RemotePort,
+		AutoGW:     req.AutoGW,
+	}
+	if err := h.db.Tunnels.Create(r.Context(), t); err != nil {
+		if strings.Contains(err.Error(), "UNIQUE") {
+			jsonError(w, "tunnel name already exists", http.StatusConflict)
+			return
+		}
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	jsonOK(w, t)
+}
+
+func (h *Handler) updateTunnel(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		jsonError(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	existing, err := h.db.Tunnels.GetByID(r.Context(), id)
+	if err != nil || existing == nil {
+		jsonError(w, "not found", http.StatusNotFound)
+		return
+	}
+	var req struct {
+		Name       string `json:"name"`
+		ServerID   int64  `json:"server_id"`
+		Direction  string `json:"direction"`
+		LocalHost  string `json:"local_host"`
+		LocalPort  int    `json:"local_port"`
+		RemoteHost string `json:"remote_host"`
+		RemotePort int    `json:"remote_port"`
+		AutoGW     bool   `json:"auto_gw"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if req.Name != "" {
+		existing.Name = req.Name
+	}
+	if req.ServerID > 0 {
+		existing.ServerID = req.ServerID
+	}
+	if req.Direction == "L" || req.Direction == "R" {
+		existing.Direction = model.TunnelDirection(req.Direction)
+	}
+	if req.LocalHost != "" {
+		existing.LocalHost = req.LocalHost
+	}
+	if req.LocalPort > 0 {
+		existing.LocalPort = req.LocalPort
+	}
+	if req.RemoteHost != "" {
+		existing.RemoteHost = req.RemoteHost
+	}
+	if req.RemotePort > 0 {
+		existing.RemotePort = req.RemotePort
+	}
+	existing.AutoGW = req.AutoGW
+	if err := h.db.Tunnels.Update(r.Context(), existing); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonOK(w, existing)
+}
+
+func (h *Handler) deleteTunnel(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		jsonError(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	if err := h.db.Tunnels.Delete(r.Context(), id); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) startTunnel(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		jsonError(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	t, err := h.db.Tunnels.GetByID(r.Context(), id)
+	if err != nil || t == nil {
+		jsonError(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err := tunnelpkg.Start(t.Name, h.binPath); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonOK(w, map[string]string{"status": "started", "session": tunnelpkg.SessionName(t.Name)})
+}
+
+func (h *Handler) stopTunnel(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		jsonError(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	t, err := h.db.Tunnels.GetByID(r.Context(), id)
+	if err != nil || t == nil {
+		jsonError(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err := tunnelpkg.Stop(t.Name); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonOK(w, map[string]string{"status": "stopped"})
+}
+
+func (h *Handler) tunnelStatus(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		jsonError(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	t, err := h.db.Tunnels.GetByID(r.Context(), id)
+	if err != nil || t == nil {
+		jsonError(w, "not found", http.StatusNotFound)
+		return
+	}
+	running := tunnelpkg.IsRunning(t.Name)
+	jsonOK(w, map[string]any{
+		"running": running,
+		"session": tunnelpkg.SessionName(t.Name),
+	})
 }
 
 // --- Servers ---

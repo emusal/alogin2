@@ -9,7 +9,7 @@ export interface PageInfo {
   lines: string[]
 }
 
-type PageKey = 'servers' | 'gateways' | 'clusters' | 'hosts' | 'terminal'
+type PageKey = 'servers' | 'gateways' | 'clusters' | 'hosts' | 'tunnels' | 'terminal'
 
 const translations: Record<PageKey, { ko: PageInfo; en: PageInfo }> = {
   servers: {
@@ -81,6 +81,24 @@ const translations: Record<PageKey, { ko: PageInfo; en: PageInfo }> = {
         'Manage hostname → IP mappings used instead of DNS for SSH connections.',
         'alogin looks up this list first when connecting by server name, enabling internal hostnames.',
         'Works like /etc/hosts but scoped to alogin — changes apply instantly without an OS restart.',
+      ],
+    },
+  },
+  tunnels: {
+    ko: {
+      title: '터널',
+      lines: [
+        'SSH 포트 포워드 터널을 저장하고 tmux 세션으로 백그라운드에서 유지합니다.',
+        'Start 버튼으로 터널을 시작하면 detached tmux 세션이 생성되어 연결이 유지됩니다.',
+        '-L (로컬 포워드)와 -R (리모트 포워드) 두 방향을 모두 지원합니다.',
+      ],
+    },
+    en: {
+      title: 'Tunnels',
+      lines: [
+        'Save SSH port-forward configurations and maintain them as detached tmux sessions.',
+        'Click Start to launch a tunnel — it runs in a named tmux session until you Stop it.',
+        'Supports both -L (local forward) and -R (remote forward) directions.',
       ],
     },
   },

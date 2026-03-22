@@ -41,7 +41,8 @@ func (s *Server) Run(ctx context.Context) error {
 	r.Use(middleware.Recoverer)
 
 	// REST API
-	apiHandler := api.NewHandler(s.database, s.vlt)
+	binPath, _ := os.Executable()
+	apiHandler := api.NewHandlerWithBin(s.database, s.vlt, binPath)
 	r.Mount("/api", apiHandler.Router())
 
 	// WebSocket terminal

@@ -3,12 +3,13 @@ import { ServerList } from './components/ServerList'
 import { GatewayList } from './components/GatewayList'
 import { ClusterList } from './components/ClusterList'
 import { HostList } from './components/HostList'
+import { TunnelList } from './components/TunnelList'
 import { Terminal } from './components/Terminal'
 import { PageBanner } from './components/PageBanner'
 import type { Server } from './types'
 import './App.css'
 
-type View = 'servers' | 'gateways' | 'clusters' | 'hosts' | string // string for terminal tab IDs
+type View = 'servers' | 'gateways' | 'clusters' | 'hosts' | 'tunnels' | string // string for terminal tab IDs
 
 interface TerminalTab {
   id: string      // unique tab key
@@ -71,6 +72,12 @@ export default function App() {
           >
             Local Hosts
           </button>
+          <button
+            className={`nav-btn ${view === 'tunnels' ? 'active' : ''}`}
+            onClick={() => setView('tunnels')}
+          >
+            Tunnels
+          </button>
           {terminals.map(tab => (
             <span key={tab.id} className={`nav-tab ${view === tab.id ? 'active' : ''}`}>
               <button
@@ -96,12 +103,14 @@ export default function App() {
         {view === 'gateways'  && <PageBanner page="gateways" />}
         {view === 'clusters'  && <PageBanner page="clusters" />}
         {view === 'hosts'     && <PageBanner page="hosts" />}
+        {view === 'tunnels'   && <PageBanner page="tunnels" />}
         {terminals.some(t => t.id === view) && <PageBanner page="terminal" />}
 
         {view === 'servers' && <ServerList onConnect={connect} />}
         {view === 'gateways' && <GatewayList servers={servers} />}
         {view === 'clusters' && <ClusterList servers={servers} />}
         {view === 'hosts' && <HostList />}
+        {view === 'tunnels' && <TunnelList servers={servers} />}
         {terminals.map(tab => (
           <div key={tab.id} style={{ display: view === tab.id ? 'flex' : 'none', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
             <Terminal server={tab.server} autoGW={tab.autoGW} />

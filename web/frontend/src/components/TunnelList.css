@@ -1,0 +1,24 @@
+.tunnel-list-container { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+
+.tunnel-title { font-weight: 600; font-size: 0.95rem; color: var(--text); }
+
+.tunnel-status {
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.tunnel-status-running {
+  color: #4caf50;
+}
+
+.tunnel-status-stopped {
+  color: var(--dim);
+}
+
+.action-btn.success {
+  border-color: #4caf50;
+  color: #4caf50;
+}
+.action-btn.success:hover {
+  background: rgba(76, 175, 80, 0.1);
+}

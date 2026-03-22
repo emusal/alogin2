@@ -1,9 +1,12 @@
 package tui
 
 import (
+	"context"
+	"os"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	tunnelpkg "github.com/emusal/alogin2/internal/tunnel"
 )
 
 // Update implements tea.Model — handles all key events.
@@ -63,6 +66,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case hostErrMsg:
 		m.statusMsg = "Error: " + msg.err.Error()
 		return m, nil
+	case tnDoneMsg:
+		m.tunnels = msg.tunnels
+		m.state = stateTunnelList
+		if msg.msg != "" {
+			m.statusMsg = msg.msg
+		}
+		return m, m.loadTunnelStatusCmd()
+	case tnErrMsg:
+		m.statusMsg = "Error: " + msg.err.Error()
+		return m, nil
+	case tnStatusMsg:
+		m.tnStatuses = msg.statuses
+		return m, nil
 	}
 
 	keyMsg, ok := msg.(tea.KeyMsg)
@@ -91,6 +107,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateHostList(keyMsg)
 	case stateHostForm:
 		return m.updateHostForm(keyMsg)
+	case stateTunnelList:
+		return m.updateTunnelList(keyMsg)
+	case stateTunnelForm:
+		return m.updateTunnelForm(keyMsg)
 	}
 	return m, nil
 }
@@ -289,6 +309,8 @@ func (m Model) executeCommand(trigger string) (tea.Model, tea.Cmd) {
 		return m, m.loadClustersCmd()
 	case "/hosts":
 		return m, m.loadHostsCmd()
+	case "/tunnel":
+		return m, m.loadTunnelsCmd()
 	}
 	return m, nil
 }
@@ -804,6 +826,136 @@ func (m Model) updateHostForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.hostFormFields[m.hostFormFocus], cmd = m.hostFormFields[m.hostFormFocus].Update(msg)
 		return m, cmd
 	}
+}
+
+// ── tunnel list / form ────────────────────────────────────────────────────────
+
+func (m Model) updateTunnelList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c", "q":
+		m.quitting = true
+		return m, tea.Quit
+	case "esc":
+		m.state = stateWelcome
+	case "up", "k":
+		if m.tunnelCursor > 0 {
+			m.tunnelCursor--
+		}
+	case "down", "j":
+		if m.tunnelCursor < len(m.tunnels)-1 {
+			m.tunnelCursor++
+		}
+	case "a":
+		m.initTunnelForm(nil)
+	case "e":
+		if len(m.tunnels) > 0 {
+			m.initTunnelForm(m.tunnels[m.tunnelCursor])
+		}
+	case "d":
+		if len(m.tunnels) > 0 {
+			t := m.tunnels[m.tunnelCursor]
+			if m.tunnelCursor >= len(m.tunnels)-1 && m.tunnelCursor > 0 {
+				m.tunnelCursor--
+			}
+			return m, m.deleteTunnelCmd(t.ID)
+		}
+	case "s":
+		// Start selected tunnel
+		if len(m.tunnels) > 0 {
+			t := m.tunnels[m.tunnelCursor]
+			return m, m.tunnelStartCmd(t.Name)
+		}
+	case "x":
+		// Stop selected tunnel
+		if len(m.tunnels) > 0 {
+			t := m.tunnels[m.tunnelCursor]
+			return m, m.tunnelStopCmd(t.Name)
+		}
+	}
+	return m, nil
+}
+
+func (m Model) tunnelStartCmd(name string) tea.Cmd {
+	return func() tea.Msg {
+		binPath, err := os.Executable()
+		if err != nil {
+			return tnErrMsg{err}
+		}
+		if err := tunnelpkg.Start(name, binPath); err != nil {
+			return tnErrMsg{err}
+		}
+		tunnels, _ := m.db.Tunnels.ListAll(context.Background())
+		return tnDoneMsg{tunnels, "Started."}
+	}
+}
+
+func (m Model) tunnelStopCmd(name string) tea.Cmd {
+	return func() tea.Msg {
+		if err := tunnelpkg.Stop(name); err != nil {
+			return tnErrMsg{err}
+		}
+		tunnels, _ := m.db.Tunnels.ListAll(context.Background())
+		return tnDoneMsg{tunnels, "Stopped."}
+	}
+}
+
+// tabCount for tunnel form: 7 text fields + 1 auto_gw toggle = 8 stops
+const tnFormTabCount = 8
+
+func (m Model) updateTunnelForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		m.quitting = true
+		return m, tea.Quit
+	case "esc":
+		m.state = stateTunnelList
+		return m, nil
+	case "ctrl+s":
+		return m, m.submitTunnelForm()
+	case "space":
+		// Toggle AutoGW when focused on last tab stop (index 7)
+		if m.tnFormFocus == tnFormTabCount-1 {
+			m.tnFormAutoGW = !m.tnFormAutoGW
+			return m, nil
+		}
+	case "enter":
+		// Submit from last field
+		if m.tnFormFocus == tnFormTabCount-1 {
+			return m, m.submitTunnelForm()
+		}
+		// Otherwise move to next field
+		m.tnFormFields[m.tnFormFocus].Blur()
+		m.tnFormFocus = (m.tnFormFocus + 1) % tnFormTabCount
+		if m.tnFormFocus < len(m.tnFormFields) {
+			m.tnFormFields[m.tnFormFocus].Focus()
+		}
+		return m, nil
+	case "tab":
+		if m.tnFormFocus < len(m.tnFormFields) {
+			m.tnFormFields[m.tnFormFocus].Blur()
+		}
+		m.tnFormFocus = (m.tnFormFocus + 1) % tnFormTabCount
+		if m.tnFormFocus < len(m.tnFormFields) {
+			m.tnFormFields[m.tnFormFocus].Focus()
+		}
+		return m, nil
+	case "shift+tab":
+		if m.tnFormFocus < len(m.tnFormFields) {
+			m.tnFormFields[m.tnFormFocus].Blur()
+		}
+		m.tnFormFocus = (m.tnFormFocus - 1 + tnFormTabCount) % tnFormTabCount
+		if m.tnFormFocus < len(m.tnFormFields) {
+			m.tnFormFields[m.tnFormFocus].Focus()
+		}
+		return m, nil
+	}
+	// Forward key to active text field
+	if m.tnFormFocus < len(m.tnFormFields) {
+		var cmd tea.Cmd
+		m.tnFormFields[m.tnFormFocus], cmd = m.tnFormFields[m.tnFormFocus].Update(msg)
+		return m, cmd
+	}
+	return m, nil
 }
 
 // clFormPickerCursor clamp helper (used in render)

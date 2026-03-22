@@ -59,6 +59,16 @@ var pageDescs = map[string]descPair{
 			"alogin resolves names from this list first. Similar to /etc/hosts but scoped to alogin.",
 		},
 	},
+	"tunnel": {
+		ko: [2]string{
+			"영구 SSH 포트 포워드 터널을 관리합니다. tmux 세션으로 백그라운드에서 유지됩니다.",
+			"s 시작  ·  x 중지  ·  a 추가  ·  e 편집  ·  d 삭제  ·  Esc 뒤로",
+		},
+		en: [2]string{
+			"Manage persistent SSH port-forward tunnels backed by tmux sessions.",
+			"s start  ·  x stop  ·  a add  ·  e edit  ·  d delete  ·  Esc back",
+		},
+	},
 }
 
 // pageDesc returns the two description lines for the given page key.

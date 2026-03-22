@@ -53,3 +53,33 @@ export interface LocalHostFormData {
   ip: string
   description: string
 }
+
+export interface Tunnel {
+  id: number
+  name: string
+  server_id: number
+  direction: 'L' | 'R'
+  local_host: string
+  local_port: number
+  remote_host: string
+  remote_port: number
+  auto_gw: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface TunnelStatus {
+  running: boolean
+  session: string
+}
+
+export interface TunnelFormData {
+  name: string
+  server_id: number
+  direction: 'L' | 'R'
+  local_host: string
+  local_port: number
+  remote_host: string
+  remote_port: number
+  auto_gw: boolean
+}

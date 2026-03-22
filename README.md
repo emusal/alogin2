@@ -16,6 +16,7 @@
 - **암호화 자격증명 저장소** — macOS Keychain, Linux Secret Service, 또는 `age` 암호화 파일
 - **클러스터 세션** — tmux(크로스플랫폼) 또는 iTerm2 / Terminal.app(macOS)으로 다중 호스트 동시 접속
 - **Web UI** — 브라우저 기반 SSH 터미널 + 서버 관리 대시보드 (`alogin web`)
+- **영구 SSH 터널** — tmux 백그라운드 세션으로 포트포워딩을 유지하는 명명된 터널 (`alogin tunnel`)
 - **v1 호환** — 얇은 셸 심(shim)으로 `t`, `r`, `s`, `f`, `m`, `ct`, `cr` 명령어 그대로 사용
 - **마이그레이션 도구** — `server_list`, `gateway_list`, `clusters` 등 v1 파일을 한 번에 가져오기
 
@@ -138,16 +139,18 @@ alogin connect [user@]host... [flags]
   --auto-gw              게이트웨이 자동 감지 (v1 'r' 동작)
   --dry-run              실제 접속 없이 경로만 출력
   -c, --cmd string       로그인 후 실행할 명령어
-  -L, --local-forward    로컬 포트 포워딩  (local:host:port)
-  -R, --remote-forward   원격 포트 포워딩 (remote:host:port)
+  -L, --local-forward    로컬 포트 포워딩: PORT | LPORT:RPORT | LPORT:host:RPORT | lhost:LPORT:host:RPORT
+  -R, --remote-forward   역방향 포트 포워딩 (SSH -R): RPORT:lhost:LPORT | rhost:RPORT:lhost:LPORT
 ```
 
 ```bash
-alogin connect                     # TUI 선택기
-alogin connect web-01              # 직접 접속
-alogin connect gw-01 web-01        # 명시적 2홉
-alogin connect gw-01 gw-02 web-01  # 명시적 3홉
-alogin connect web-01 --auto-gw    # 등록된 게이트웨이 경유
+alogin connect                          # TUI 선택기
+alogin connect web-01                   # 직접 접속
+alogin connect gw-01 web-01             # 명시적 2홉
+alogin connect gw-01 gw-02 web-01       # 명시적 3홉
+alogin connect web-01 --auto-gw         # 등록된 게이트웨이 경유
+alogin connect web-01 -L 2222:22        # 로컬 2222 → web-01:22 포트포워딩
+alogin connect web-01 --auto-gw -L 2222:22  # 게이트웨이 경유 + 포트포워딩
 ```
 
 ### 파일 전송
@@ -202,6 +205,37 @@ alogin alias delete name
 ```bash
 alogin migrate --from /path/to/alogin_root [--dry-run]
 ```
+
+### 터널 관리
+
+```bash
+alogin tunnel [name] [flags]
+```
+
+tmux 백그라운드 세션으로 SSH 포트포워딩을 영구적으로 유지합니다.
+
+```bash
+# 터널 등록
+alogin tunnel add db-local --server db.prod --local-port 5432 --remote-host db.prod --remote-port 5432
+alogin tunnel add web-local --server web-01 --dir L --local-port 8080 --remote-host localhost --remote-port 80
+
+# 시작 / 정지 / 상태
+alogin tunnel start db-local    # tmux 세션에서 포워딩 시작
+alogin tunnel stop  db-local
+alogin tunnel status db-local
+
+# 목록 / 수정 / 삭제
+alogin tunnel list
+alogin tunnel edit db-local --remote-port 5433
+alogin tunnel rm   db-local
+
+# TUI로 관리
+alogin tunnel                   # TUI 터널 관리 화면으로 진입 (/tunnel 슬래시 커맨드)
+```
+
+`--dir L` (기본값): 로컬 포워딩 (`-L localHost:localPort:remoteHost:remotePort`)
+`--dir R`: 역방향 포워딩 (`-R remotePort:localHost:localPort`)
+`--auto-gw`: 서버에 등록된 게이트웨이 경유
 
 ### Web UI
 
@@ -344,6 +378,7 @@ alogin web [--port 8484] [--no-browser]
 - **서버 목록** — 검색, 탐색, 접속
 - **웹 터미널** — 브라우저의 xterm.js 기반 완전한 SSH 세션
 - **클러스터 관리** — 클러스터 생성 및 편집
+- **터널 관리** — 터널 추가/편집/삭제, 시작/정지/상태 확인
 
 웹 서버는 기본적으로 로컬 전용입니다. 인증 없이 네트워크에 노출하지 마세요.
 
@@ -420,6 +455,7 @@ internal/
   migrate/           v1 TSV → SQLite 마이그레이션 파서
   cluster/           클러스터 세션 오케스트레이션 (tmux / iTerm2 / Terminal.app)
   tui/               Bubbletea 대화형 호스트 선택기
+  tunnel/            tmux 기반 영구 SSH 터널 관리 (start/stop/status)
   web/               HTTP 서버 + WebSocket 터미널 + REST API
 web/frontend/        React + xterm.js (Vite)
 completions/         셸 심 + zsh/bash 자동완성 스크립트

@@ -109,6 +109,29 @@ type LocalHost struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+// TunnelDirection indicates the direction of an SSH port-forward.
+type TunnelDirection string
+
+const (
+	TunnelLocal  TunnelDirection = "L" // -L local forward
+	TunnelRemote TunnelDirection = "R" // -R remote forward
+)
+
+// Tunnel is a saved SSH port-forward configuration.
+type Tunnel struct {
+	ID         int64           `json:"id"`
+	Name       string          `json:"name"`
+	ServerID   int64           `json:"server_id"`
+	Direction  TunnelDirection `json:"direction"`
+	LocalHost  string          `json:"local_host"`
+	LocalPort  int             `json:"local_port"`
+	RemoteHost string          `json:"remote_host"`
+	RemotePort int             `json:"remote_port"`
+	AutoGW     bool            `json:"auto_gw"`
+	CreatedAt  time.Time       `json:"created_at"`
+	UpdatedAt  time.Time       `json:"updated_at"`
+}
+
 // ConnectOptions carries runtime flags for a single connection attempt.
 type ConnectOptions struct {
 	Command  string   // -c: run command after login

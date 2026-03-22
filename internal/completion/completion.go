@@ -99,8 +99,8 @@ _alogin() {
             '--auto-gw[auto-detect gateway route (legacy r)]' \
             '--dry-run[print connection route without connecting]' \
             '(-c --cmd)'{-c,--cmd}'[run command after login]:command:' \
-            '(-L --local-forward)'{-L,--local-forward}'[local port forward]:spec \(local\:host\:port\):' \
-            '(-R --remote-forward)'{-R,--remote-forward}'[remote port forward]:spec \(remote\:host\:port\):' \
+            '*(-L --local-forward)'{-L,--local-forward}'[local port forward (PORT|LPORT\:RPORT|LPORT\:host\:RPORT)]:spec:' \
+            '*(-R --remote-forward)'{-R,--remote-forward}'[reverse port forward SSH -R (RPORT\:lhost\:LPORT)]:spec:' \
             '1: :_alogin_hosts'
           ;;
 

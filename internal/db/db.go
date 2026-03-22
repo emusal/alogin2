@@ -22,6 +22,7 @@ type DB struct {
 	Clusters ClusterRepo
 	Themes   ThemeRepo
 	Hosts    HostRepo
+	Tunnels  TunnelRepo
 }
 
 // Open opens (or creates) the SQLite database at the given path and
@@ -47,6 +48,7 @@ func Open(path string) (*DB, error) {
 	db.Clusters = &clusterRepo{db: sqlDB}
 	db.Themes = &themeRepo{db: sqlDB}
 	db.Hosts = &hostRepo{db: sqlDB}
+	db.Tunnels = &tunnelRepo{db: sqlDB}
 	return db, nil
 }
 
@@ -126,6 +128,33 @@ func applyMigrations(db *sql.DB) error {
 			return fmt.Errorf("migration v4 index: %w", err)
 		}
 		_, _ = db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version) VALUES (4)`)
+	}
+
+	if version < 5 {
+		_, err := db.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS tunnels (
+				id          INTEGER PRIMARY KEY AUTOINCREMENT,
+				name        TEXT    NOT NULL UNIQUE,
+				server_id   INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+				direction   TEXT    NOT NULL DEFAULT 'L' CHECK(direction IN ('L','R')),
+				local_host  TEXT    NOT NULL DEFAULT '127.0.0.1',
+				local_port  INTEGER NOT NULL,
+				remote_host TEXT    NOT NULL,
+				remote_port INTEGER NOT NULL,
+				auto_gw     INTEGER NOT NULL DEFAULT 0,
+				created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+				updated_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+			)
+		`)
+		if err != nil && !strings.Contains(err.Error(), "already exists") {
+			return fmt.Errorf("migration v5: %w", err)
+		}
+		_, err = db.ExecContext(ctx,
+			`CREATE INDEX IF NOT EXISTS idx_tunnels_name ON tunnels(name)`)
+		if err != nil && !strings.Contains(err.Error(), "already exists") {
+			return fmt.Errorf("migration v5 index: %w", err)
+		}
+		_, _ = db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version) VALUES (5)`)
 	}
 
 	return nil

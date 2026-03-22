@@ -16,6 +16,7 @@
 - **Encrypted credential vault** — macOS Keychain, Linux Secret Service, or `age`-encrypted file fallback
 - **Cluster sessions** — connect to multiple hosts simultaneously via tmux (cross-platform) or iTerm2 / Terminal.app (macOS)
 - **Web UI** — browser-based SSH terminal + server management dashboard (`alogin web`)
+- **Persistent SSH tunnels** — named port-forward tunnels kept alive in tmux background sessions (`alogin tunnel`)
 - **v1 compatibility** — drop-in `t`, `r`, `s`, `f`, `m`, `ct`, `cr` shell functions via a thin shim
 - **Migration tool** — one command to import existing `server_list`, `gateway_list`, `clusters`, etc.
 
@@ -137,16 +138,18 @@ alogin connect [user@]host... [flags]
   --auto-gw              Auto-detect gateway route (legacy 'r' behavior)
   --dry-run              Print connection route without connecting
   -c, --cmd string       Run command after login
-  -L, --local-forward    Local port forward  (local:host:port)
-  -R, --remote-forward   Remote port forward (remote:host:port)
+  -L, --local-forward    Local port forward: PORT | LPORT:RPORT | LPORT:host:RPORT | lhost:LPORT:host:RPORT
+  -R, --remote-forward   Reverse port forward (SSH -R): RPORT:lhost:LPORT | rhost:RPORT:lhost:LPORT
 ```
 
 ```bash
-alogin connect                     # TUI selector
-alogin connect web-01              # direct connect
-alogin connect gw-01 web-01        # explicit 2-hop
-alogin connect gw-01 gw-02 web-01  # explicit 3-hop
-alogin connect web-01 --auto-gw    # via registered gateway
+alogin connect                          # TUI selector
+alogin connect web-01                   # direct connect
+alogin connect gw-01 web-01             # explicit 2-hop
+alogin connect gw-01 gw-02 web-01       # explicit 3-hop
+alogin connect web-01 --auto-gw         # via registered gateway
+alogin connect web-01 -L 2222:22        # forward local:2222 → web-01:22
+alogin connect web-01 --auto-gw -L 2222:22  # gateway + port forward
 ```
 
 ### File Transfer
@@ -201,6 +204,37 @@ alogin alias delete name
 ```bash
 alogin migrate --from /path/to/alogin_root [--dry-run]
 ```
+
+### Tunnel Management
+
+```bash
+alogin tunnel [name] [flags]
+```
+
+Keeps SSH port-forwards alive in tmux background sessions — survives terminal disconnect.
+
+```bash
+# Register a tunnel
+alogin tunnel add db-local --server db.prod --local-port 5432 --remote-host db.prod --remote-port 5432
+alogin tunnel add web-local --server web-01 --dir L --local-port 8080 --remote-host localhost --remote-port 80
+
+# Start / stop / status
+alogin tunnel start db-local    # spawn detached tmux session
+alogin tunnel stop  db-local
+alogin tunnel status db-local
+
+# List / edit / remove
+alogin tunnel list
+alogin tunnel edit db-local --remote-port 5433
+alogin tunnel rm   db-local
+
+# Manage via TUI
+alogin tunnel                   # opens tunnel management screen (/tunnel slash command)
+```
+
+`--dir L` (default): local forward (`-L localHost:localPort:remoteHost:remotePort`)
+`--dir R`: reverse tunnel (`-R remotePort:localHost:localPort`)
+`--auto-gw`: route through the server's registered gateway chain
 
 ### Web UI
 
@@ -336,6 +370,7 @@ Opens `http://localhost:8484` with:
 - **Server list** — browse, search, connect
 - **Web terminal** — full xterm.js SSH session in the browser
 - **Cluster management** — create and edit clusters
+- **Tunnel management** — add/edit/delete tunnels, start/stop/check status
 
 The web server is local-only by default. Do not expose it to the network without adding authentication.
 
@@ -412,6 +447,7 @@ internal/
   migrate/           v1 TSV → SQLite migration parsers
   cluster/           Cluster session orchestration (tmux / iTerm2 / Terminal.app)
   tui/               Bubbletea interactive host picker
+  tunnel/            tmux-backed persistent SSH tunnel manager (start/stop/status)
   web/               HTTP server + WebSocket terminal + REST API
 web/frontend/        React + xterm.js (Vite)
 completions/         Shell shim + zsh/bash completion scripts
