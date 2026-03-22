@@ -87,6 +87,22 @@ go build -o alogin ./cmd/alogin
 sudo mv alogin /usr/local/bin/
 ```
 
+### Uninstall
+
+```bash
+# Remove binary, completions, and config (database and vault are preserved)
+alogin uninstall
+
+# Remove everything including database and vault (irreversible)
+alogin uninstall --purge
+
+# Script-based removal (when binary is unavailable or for remote execution)
+curl -fsSL https://raw.githubusercontent.com/emusal/alogin2/main/uninstall.sh | sh
+
+# Full removal via script
+curl -fsSL https://raw.githubusercontent.com/emusal/alogin2/main/uninstall.sh | ALOGIN_PURGE=1 sh
+```
+
 ---
 
 ## Quick Start

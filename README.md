@@ -87,6 +87,22 @@ go build -o alogin ./cmd/alogin
 sudo mv alogin /usr/local/bin/
 ```
 
+### 제거
+
+```bash
+# 바이너리, 완성 스크립트, 설정 제거 (데이터베이스·볼트는 보존)
+alogin uninstall
+
+# 모든 데이터 포함 완전 제거 (데이터베이스·볼트까지 삭제, 복구 불가)
+alogin uninstall --purge
+
+# 스크립트로 제거 (바이너리가 없거나 원격 실행 시)
+curl -fsSL https://raw.githubusercontent.com/emusal/alogin2/main/uninstall.sh | sh
+
+# 완전 제거 (스크립트)
+curl -fsSL https://raw.githubusercontent.com/emusal/alogin2/main/uninstall.sh | ALOGIN_PURGE=1 sh
+```
+
 ---
 
 ## 빠른 시작
