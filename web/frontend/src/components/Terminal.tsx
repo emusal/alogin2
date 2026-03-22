@@ -8,9 +8,10 @@ import './Terminal.css'
 
 interface Props {
   server: Server
+  autoGW?: boolean
 }
 
-export function Terminal({ server }: Props) {
+export function Terminal({ server, autoGW = false }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<XTerm | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
@@ -58,12 +59,13 @@ export function Terminal({ server }: Props) {
 
     // Connect WebSocket
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsURL = `${proto}//${window.location.host}/ws/terminal/${server.id}`
+    const wsURL = `${proto}//${window.location.host}/ws/terminal/${server.id}${autoGW ? '?auto_gw=true' : ''}`
     const ws = new WebSocket(wsURL)
     wsRef.current = ws
 
     ws.onopen = () => {
-      term.write('\x1b[32mConnecting to ' + server.user + '@' + server.host + '...\x1b[0m\r\n')
+      const gwLabel = autoGW ? ' (via GW)' : ''
+      term.write('\x1b[32mConnecting to ' + server.user + '@' + server.host + gwLabel + '...\x1b[0m\r\n')
     }
 
     ws.onmessage = (event) => {
@@ -110,7 +112,7 @@ export function Terminal({ server }: Props) {
       ws.close()
       term.dispose()
     }
-  }, [server.id])
+  }, [server.id, autoGW])
 
   return (
     <div className="terminal-container">

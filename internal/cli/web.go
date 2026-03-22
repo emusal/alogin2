@@ -29,8 +29,7 @@ Press Ctrl+C to stop the server.`,
 			ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
 
-			_ = noBrowser
-			srv := web.NewServer(database, vlt, port)
+			srv := web.NewServer(database, vlt, port, !noBrowser)
 			return srv.Run(ctx)
 		},
 	}

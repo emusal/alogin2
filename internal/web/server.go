@@ -8,6 +8,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
+	"runtime"
 	"time"
 
 	"github.com/emusal/alogin2/internal/db"
@@ -21,14 +23,15 @@ import (
 
 // Server is the alogin Web UI HTTP server.
 type Server struct {
-	database *db.DB
-	vlt      vault.Vault
-	port     int
+	database    *db.DB
+	vlt         vault.Vault
+	port        int
+	openBrowser bool
 }
 
 // NewServer creates a web server backed by the given DB and vault.
-func NewServer(database *db.DB, vlt vault.Vault, port int) *Server {
-	return &Server{database: database, vlt: vlt, port: port}
+func NewServer(database *db.DB, vlt vault.Vault, port int, openBrowser bool) *Server {
+	return &Server{database: database, vlt: vlt, port: port, openBrowser: openBrowser}
 }
 
 // Run starts the HTTP server and blocks until ctx is cancelled.
@@ -55,7 +58,9 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 
 	fmt.Printf("alogin web UI: http://localhost%s\n", addr)
-	openBrowser(fmt.Sprintf("http://localhost%s", addr))
+	if s.openBrowser {
+		launchBrowser(fmt.Sprintf("http://localhost%s", addr))
+	}
 
 	srv := &http.Server{Handler: r}
 	go func() {
@@ -88,11 +93,17 @@ func staticHandler() http.Handler {
 	})
 }
 
-func openBrowser(url string) {
-	// Best-effort; ignore errors
-	_ = url
-	// Phase 4 full: exec.Command("open", url).Start() on macOS
-	// exec.Command("xdg-open", url).Start() on Linux
+func launchBrowser(url string) {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "linux":
+		cmd = exec.Command("xdg-open", url)
+	default:
+		return
+	}
+	_ = cmd.Start()
 }
 
 const frontendPlaceholder = `<!DOCTYPE html>

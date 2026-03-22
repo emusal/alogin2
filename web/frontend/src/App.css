@@ -51,6 +51,43 @@
 .nav-btn:hover { color: var(--text); border-color: var(--accent2); }
 .nav-btn.active { color: var(--accent); border-color: var(--accent); }
 
+/* Terminal tab with close button */
+.nav-tab {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+.nav-tab.active { border-color: var(--accent); }
+.nav-tab:hover { border-color: var(--accent2); }
+
+.nav-tab-label {
+  background: none;
+  border: none;
+  color: var(--dim);
+  padding: 0.35rem 0.6rem;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+.nav-tab.active .nav-tab-label { color: var(--accent); }
+.nav-tab:hover .nav-tab-label { color: var(--text); }
+
+.nav-tab-close {
+  background: none;
+  border: none;
+  border-left: 1px solid var(--border);
+  color: var(--dim);
+  padding: 0.35rem 0.5rem;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  transition: color 0.15s, background 0.15s;
+}
+.nav-tab-close:hover { color: var(--red); background: rgba(240,113,120,0.1); }
+
 .main {
   flex: 1;
   overflow: hidden;

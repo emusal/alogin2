@@ -246,7 +246,8 @@ _alogin() {
 
         web)
           _arguments \
-            '(-p --port)'{-p,--port}'[HTTP port (default 8080)]:port:'
+            '(-p --port)'{-p,--port}'[HTTP port (default 8484)]:port:' \
+            '--no-browser[do not open browser automatically]'
           ;;
 
       esac
@@ -366,7 +367,7 @@ _alogin_completion() {
       COMPREPLY=($(compgen -W "--shell" -- "$cur"))
       ;;
     web)
-      COMPREPLY=($(compgen -W "--port -p" -- "$cur"))
+      COMPREPLY=($(compgen -W "--port -p --no-browser" -- "$cur"))
       ;;
   esac
 }

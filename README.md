@@ -329,10 +329,17 @@ alogin cluster delete prod-web
 ## Web UI
 
 ```bash
-alogin web
+alogin web [--port 8484] [--no-browser]
 ```
 
-`http://localhost:8484`에서 다음을 제공합니다:
+실행하면 `http://localhost:8484`를 자동으로 브라우저에서 엽니다.
+
+| 옵션 | 기본값 | 설명 |
+|------|--------|------|
+| `--port` | `8484` | HTTP 리스닝 포트 |
+| `--no-browser` | — | 브라우저 자동 열기 억제 |
+
+제공 기능:
 
 - **서버 목록** — 검색, 탐색, 접속
 - **웹 터미널** — 브라우저의 xterm.js 기반 완전한 SSH 세션

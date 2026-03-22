@@ -18,6 +18,7 @@ import (
 type SelectedServer struct {
 	Server *model.Server
 	User   string
+	AutoGW bool // true = connect via gateway (legacy 'r' behaviour)
 }
 
 // state tracks what the TUI is currently doing.

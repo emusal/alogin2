@@ -121,6 +121,12 @@ func (m Model) renderWelcome() string {
 func (m Model) renderMainList() string {
 	var sb strings.Builder
 	sb.WriteString(m.titleStyle.Render("alogin"))
+	sb.WriteString("\n")
+	l1, l2 := pageDesc("server")
+	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	sb.WriteString(descStyle.Render("  " + l1))
+	sb.WriteString("\n")
+	sb.WriteString(descStyle.Render("  " + l2))
 	sb.WriteString("\n\n")
 
 	// Input bar — Claude-style "> " prompt
@@ -150,8 +156,8 @@ func (m Model) renderMainList() string {
 	}
 
 	// Server list — viewport-clipped to terminal height
-	// Fixed lines: title(1) blank(1) inputBorder(3) blank(1) hint(1) blank(1) = 8
-	viewport := m.visibleRows(8)
+	// Fixed lines: title(1) desc(2) blank(1) inputBorder(3) blank(1) hint(1) blank(1) = 10
+	viewport := m.visibleRows(10)
 	total := len(m.filtered)
 	viewStart, viewEnd := m.viewWindow(m.cursor, total, viewport)
 
@@ -179,7 +185,7 @@ func (m Model) renderMainList() string {
 	}
 
 	sb.WriteString("\n")
-	hint := "[↑↓] navigate  [Enter] connect  [Tab] details  [/] commands"
+	hint := "[↑↓] navigate  [Enter] connect  [r] via-gw  [Tab] details  [/] commands"
 	if m.query == "" {
 		hint += "  [a] add  [e] edit  [d] delete  [q] quit"
 	} else {
@@ -242,7 +248,7 @@ func (m Model) renderDetail(s *model.Server) string {
 		}
 	}
 	sb.WriteString("\n")
-	sb.WriteString("[Enter] connect  [e] edit  [d] delete  [Tab/Esc] back")
+	sb.WriteString("[Enter] connect  [r] via-gw  [e] edit  [d] delete  [Tab/Esc] back")
 	return m.detailStyle.Render(sb.String())
 }
 
@@ -358,10 +364,16 @@ func (m Model) renderConfirmDelete() string {
 func (m Model) renderGatewayList() string {
 	var sb strings.Builder
 	sb.WriteString(m.titleStyle.Render("alogin — /gateway"))
+	sb.WriteString("\n")
+	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	l1, l2 := pageDesc("gateway")
+	sb.WriteString(descStyle.Render("  " + l1))
+	sb.WriteString("\n")
+	sb.WriteString(descStyle.Render("  " + l2))
 	sb.WriteString("\n\n")
 
-	// Fixed lines: title(1) blank(1) hint(1) blank(1) = 4
-	viewport := m.visibleRows(4)
+	// Fixed lines: title(1) desc(2) blank(1) hint(1) blank(1) = 6
+	viewport := m.visibleRows(6)
 	total := len(m.gateways)
 	viewStart, viewEnd := m.viewWindow(m.gatewayCursor, total, viewport)
 
@@ -461,9 +473,15 @@ func (m Model) renderGatewayForm() string {
 func (m Model) renderClusterList() string {
 	var sb strings.Builder
 	sb.WriteString(m.titleStyle.Render("alogin — /cluster"))
+	sb.WriteString("\n")
+	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	l1, l2 := pageDesc("cluster")
+	sb.WriteString(descStyle.Render("  " + l1))
+	sb.WriteString("\n")
+	sb.WriteString(descStyle.Render("  " + l2))
 	sb.WriteString("\n\n")
 
-	viewport := m.visibleRows(4)
+	viewport := m.visibleRows(6)
 	total := len(m.clusters)
 	viewStart, viewEnd := m.viewWindow(m.clCursor, total, viewport)
 
@@ -564,9 +582,15 @@ func (m Model) renderClusterForm() string {
 func (m Model) renderHostList() string {
 	var sb strings.Builder
 	sb.WriteString(m.titleStyle.Render("alogin — /hosts"))
+	sb.WriteString("\n")
+	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	l1, l2 := pageDesc("hosts")
+	sb.WriteString(descStyle.Render("  " + l1))
+	sb.WriteString("\n")
+	sb.WriteString(descStyle.Render("  " + l2))
 	sb.WriteString("\n\n")
 
-	viewport := m.visibleRows(4)
+	viewport := m.visibleRows(6)
 	total := len(m.localHosts)
 	viewStart, viewEnd := m.viewWindow(m.hostCursor, total, viewport)
 

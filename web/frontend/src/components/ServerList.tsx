@@ -4,7 +4,7 @@ import { ServerFormModal } from './ServerFormModal'
 import './ServerList.css'
 
 interface Props {
-  onConnect: (server: Server) => void
+  onConnect: (server: Server, autoGW?: boolean) => void
 }
 
 export function ServerList({ onConnect }: Props) {
@@ -118,6 +118,9 @@ export function ServerList({ onConnect }: Props) {
                 <td><span className="dim">{server.locale || '—'}</span></td>
                 <td className="actions-cell">
                   <button className="connect-btn" onClick={() => onConnect(server)}>Connect</button>
+                  {(server.gateway_id || server.gateway_server_id) && (
+                    <button className="connect-btn gw" onClick={() => onConnect(server, true)} title="Connect via gateway">GW</button>
+                  )}
                   <button className="action-btn" onClick={() => { setEditingServer(server); setModalMode('edit') }}>Edit</button>
                   <button className="action-btn danger" onClick={() => handleDelete(server)}>Delete</button>
                 </td>

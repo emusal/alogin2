@@ -55,5 +55,6 @@ func runTUIAtWithOpts(ctx context.Context, start tui.StartAt, opts *model.Connec
 		return nil // user quit without selecting
 	}
 
+	opts.AutoGW = choice.AutoGW
 	return doConnect(ctx, choice.User, choice.Server.Host, opts)
 }

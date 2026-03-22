@@ -95,6 +95,8 @@
   margin-right: 0.3rem;
 }
 .connect-btn:hover { background: var(--accent); color: var(--bg); }
+.connect-btn.gw { border-color: var(--accent2); color: var(--accent2); margin-right: 0.3rem; }
+.connect-btn.gw:hover { background: var(--accent2); color: var(--bg); }
 
 .action-btn {
   background: none;

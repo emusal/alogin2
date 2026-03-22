@@ -1,0 +1,23 @@
+.page-banner {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  padding: 0.5rem 1.5rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.page-banner-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--accent2);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.page-banner-desc {
+  font-size: 0.9rem;
+  color: var(--dim);
+  line-height: 1.4;
+}

@@ -157,6 +157,17 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.choice = &SelectedServer{Server: srv, User: srv.User}
 		return m, tea.Quit
 
+	case "r":
+		if m.query == "" && len(m.filtered) > 0 {
+			srv := m.filtered[m.cursor]
+			m.choice = &SelectedServer{Server: srv, User: srv.User, AutoGW: true}
+			return m, tea.Quit
+		}
+		// fall through to default (append 'r' to search)
+		m.query += "r"
+		m.applyFilter()
+		return m, nil
+
 	case "tab":
 		if len(m.filtered) > 0 {
 			m.state = stateDetail
@@ -293,6 +304,12 @@ func (m Model) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.filtered) > 0 {
 			srv := m.filtered[m.cursor]
 			m.choice = &SelectedServer{Server: srv, User: srv.User}
+			return m, tea.Quit
+		}
+	case "r":
+		if len(m.filtered) > 0 {
+			srv := m.filtered[m.cursor]
+			m.choice = &SelectedServer{Server: srv, User: srv.User, AutoGW: true}
 			return m, tea.Quit
 		}
 	case "e":

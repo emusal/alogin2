@@ -54,25 +54,27 @@ func (h *Handler) ServeWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	autoGW := r.URL.Query().Get("auto_gw") == "true"
+
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
 	}
 	defer ws.Close()
 
-	if err := h.runSession(r.Context(), ws, serverID); err != nil {
+	if err := h.runSession(r.Context(), ws, serverID, autoGW); err != nil {
 		msg, _ := json.Marshal(wsMessage{Type: "data", Data: "\r\nError: " + err.Error() + "\r\n"})
 		ws.WriteMessage(websocket.TextMessage, msg)
 	}
 }
 
-func (h *Handler) runSession(ctx context.Context, ws *websocket.Conn, serverID int64) error {
+func (h *Handler) runSession(ctx context.Context, ws *websocket.Conn, serverID int64, autoGW bool) error {
 	srv, err := h.db.Servers.GetByID(ctx, serverID)
 	if err != nil || srv == nil {
 		return fmt.Errorf("server %d not found", serverID)
 	}
 
-	hops, err := h.buildHops(ctx, srv)
+	hops, err := h.buildHops(ctx, srv, autoGW)
 	if err != nil {
 		return err
 	}
@@ -171,35 +173,82 @@ func (h *Handler) runSession(ctx context.Context, ws *websocket.Conn, serverID i
 	return nil
 }
 
-func (h *Handler) buildHops(ctx context.Context, srv *model.Server) ([]internalssh.HopConfig, error) {
+// resolveHost looks up the hostname in the local_hosts table; returns as-is if not found.
+func (h *Handler) resolveHost(ctx context.Context, hostname string) string {
+	return h.db.Hosts.Resolve(ctx, hostname)
+}
+
+func (h *Handler) buildHops(ctx context.Context, srv *model.Server, autoGW bool) ([]internalssh.HopConfig, error) {
 	var hops []internalssh.HopConfig
 
-	if srv.GatewayID != nil {
-		gwHops, err := h.db.Gateways.HopsFor(ctx, srv.ID)
-		if err != nil {
-			return nil, err
-		}
-		for _, gh := range gwHops {
-			hopSrv, err := h.db.Servers.GetByID(ctx, gh.ServerID)
-			if err != nil || hopSrv == nil {
-				continue
+	if autoGW {
+		// Case 1: named gateway route (GatewayID set).
+		if srv.GatewayID != nil {
+			gwHops, err := h.db.Gateways.HopsFor(ctx, srv.ID)
+			if err != nil {
+				return nil, err
 			}
-			pwd, _ := h.vlt.Get(hopSrv.User + "@" + hopSrv.Host)
-			hops = append(hops, internalssh.HopConfig{
-				Host:     hopSrv.Host,
-				Port:     hopSrv.EffectivePort(),
-				User:     hopSrv.User,
-				Password: pwd,
-			})
+			for _, gh := range gwHops {
+				hopSrv, err := h.db.Servers.GetByID(ctx, gh.ServerID)
+				if err != nil || hopSrv == nil {
+					continue
+				}
+				pwd, _ := h.vlt.Get(hopSrv.User + "@" + hopSrv.Host)
+				hops = append(hops, internalssh.HopConfig{
+					Host:     h.resolveHost(ctx, hopSrv.Host),
+					Port:     hopSrv.EffectivePort(),
+					User:     hopSrv.User,
+					Password: pwd,
+				})
+			}
+		} else if srv.GatewayServerID != nil {
+			// Case 2: recursive server chain (GatewayServerID set).
+			chain, err := h.resolveGatewayChain(ctx, srv)
+			if err != nil {
+				return nil, err
+			}
+			hops = append(hops, chain...)
 		}
 	}
 
+	// Destination hop
 	pwd, _ := h.vlt.Get(srv.User + "@" + srv.Host)
 	hops = append(hops, internalssh.HopConfig{
-		Host:     srv.Host,
+		Host:     h.resolveHost(ctx, srv.Host),
 		Port:     srv.EffectivePort(),
 		User:     srv.User,
 		Password: pwd,
 	})
 	return hops, nil
+}
+
+// resolveGatewayChain follows gateway_server_id links recursively, returning hops
+// in order [outermost-gw ... innermost-gw] (destination appended by caller).
+func (h *Handler) resolveGatewayChain(ctx context.Context, dest *model.Server) ([]internalssh.HopConfig, error) {
+	var chain []internalssh.HopConfig
+	visited := map[int64]bool{dest.ID: true}
+
+	cur := dest
+	for cur.GatewayServerID != nil {
+		gwSrv, err := h.db.Servers.GetByID(ctx, *cur.GatewayServerID)
+		if err != nil || gwSrv == nil {
+			return nil, fmt.Errorf("gateway server %d not found", *cur.GatewayServerID)
+		}
+		if visited[gwSrv.ID] {
+			return nil, fmt.Errorf("gateway loop detected at server %s", gwSrv.Host)
+		}
+		visited[gwSrv.ID] = true
+
+		pwd, _ := h.vlt.Get(gwSrv.User + "@" + gwSrv.Host)
+		// Prepend so the outermost gateway is first.
+		chain = append([]internalssh.HopConfig{{
+			Host:     h.resolveHost(ctx, gwSrv.Host),
+			Port:     gwSrv.EffectivePort(),
+			User:     gwSrv.User,
+			Password: pwd,
+		}}, chain...)
+
+		cur = gwSrv
+	}
+	return chain, nil
 }

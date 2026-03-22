@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { LocalHost } from '../types'
 import './GatewayList.css'
+import './Modal.css'
 
 export function HostList() {
   const [hosts, setHosts] = useState<LocalHost[]>([])
@@ -172,9 +173,9 @@ function HostFormModal({ initial, onSave, onClose }: ModalProps) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <h2 className="modal-title">{initial ? `Edit: ${initial.hostname}` : 'Add Local Host'}</h2>
-        <form onSubmit={handleSubmit} className="modal-form">
-          <label>
-            Hostname
+        <form onSubmit={handleSubmit}>
+          <div className="form-row">
+            <label>Hostname</label>
             <input
               value={hostname}
               onChange={e => setHostname(e.target.value)}
@@ -182,27 +183,28 @@ function HostFormModal({ initial, onSave, onClose }: ModalProps) {
               placeholder="e.g. myserver"
               autoFocus
             />
-          </label>
-          <label>
-            IP Address
+            {!!initial && <span className="form-hint">Hostname cannot be changed after creation.</span>}
+          </div>
+          <div className="form-row">
+            <label>IP Address</label>
             <input
               value={ip}
               onChange={e => setIp(e.target.value)}
               placeholder="e.g. 192.168.1.10"
             />
-          </label>
-          <label>
-            Description
+          </div>
+          <div className="form-row">
+            <label>Description</label>
             <input
               value={description}
               onChange={e => setDescription(e.target.value)}
               placeholder="optional"
             />
-          </label>
-          {err && <div className="form-error">{err}</div>}
+          </div>
+          {err && <div className="modal-error">{err}</div>}
           <div className="modal-actions">
             <button type="button" onClick={onClose} disabled={saving}>Cancel</button>
-            <button type="submit" className="primary" disabled={saving}>
+            <button type="submit" className="btn-primary" disabled={saving}>
               {saving ? 'Saving…' : 'Save'}
             </button>
           </div>
