@@ -24,29 +24,56 @@
 
 ## Installation
 
-### Homebrew (recommended)
+### Script install (Linux / macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/emusal/alogin2/main/install.sh | sh
+```
+
+Installs the Web UI binary to `~/.local/bin/alogin`. Customize with environment variables:
+
+```bash
+# CLI-only (no Web UI, smaller binary)
+curl -fsSL https://raw.githubusercontent.com/emusal/alogin2/main/install.sh | ALOGIN_NO_WEB=1 sh
+
+# Specific version
+curl -fsSL https://raw.githubusercontent.com/emusal/alogin2/main/install.sh | ALOGIN_VERSION=2.0.3 sh
+
+# Custom install path
+curl -fsSL https://raw.githubusercontent.com/emusal/alogin2/main/install.sh | ALOGIN_INSTALL_DIR=/usr/local/bin sh
+```
+
+### Homebrew (macOS, recommended)
 
 ```bash
 brew tap emusal/alogin --custom-remote git@github.com:emusal/alogin2.git
 brew install alogin
 ```
 
-### Download binary
+### Windows
+
+Native Windows binaries are not supported. Install via WSL (Windows Subsystem for Linux) using the script above.
+
+### Download binary directly
 
 Grab the latest release from the [Releases](https://github.com/emusal/alogin2/releases) page:
 
 ```bash
 # macOS (Apple Silicon)
-curl -L https://github.com/emusal/alogin2/releases/latest/download/alogin-darwin-arm64 -o /usr/local/bin/alogin
-chmod +x /usr/local/bin/alogin
+curl -fsSL https://github.com/emusal/alogin2/releases/latest/download/alogin-web-darwin-arm64 -o ~/.local/bin/alogin
+chmod +x ~/.local/bin/alogin
 
 # macOS (Intel)
-curl -L https://github.com/emusal/alogin2/releases/latest/download/alogin-darwin-amd64 -o /usr/local/bin/alogin
-chmod +x /usr/local/bin/alogin
+curl -fsSL https://github.com/emusal/alogin2/releases/latest/download/alogin-web-darwin-amd64 -o ~/.local/bin/alogin
+chmod +x ~/.local/bin/alogin
 
 # Linux (amd64)
-curl -L https://github.com/emusal/alogin2/releases/latest/download/alogin-linux-amd64 -o /usr/local/bin/alogin
-chmod +x /usr/local/bin/alogin
+curl -fsSL https://github.com/emusal/alogin2/releases/latest/download/alogin-web-linux-amd64 -o ~/.local/bin/alogin
+chmod +x ~/.local/bin/alogin
+
+# Linux (arm64)
+curl -fsSL https://github.com/emusal/alogin2/releases/latest/download/alogin-web-linux-arm64 -o ~/.local/bin/alogin
+chmod +x ~/.local/bin/alogin
 ```
 
 ### Build from source

@@ -24,29 +24,56 @@
 
 ## 설치
 
-### Homebrew (권장)
+### 스크립트 설치 (Linux / macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/emusal/alogin2/main/install.sh | sh
+```
+
+`~/.local/bin/alogin`에 Web UI 포함 바이너리를 설치합니다. 환경변수로 커스터마이징 가능:
+
+```bash
+# CLI-only 버전 (Web UI 제외, 더 작은 파일)
+curl -fsSL https://raw.githubusercontent.com/emusal/alogin2/main/install.sh | ALOGIN_NO_WEB=1 sh
+
+# 특정 버전 설치
+curl -fsSL https://raw.githubusercontent.com/emusal/alogin2/main/install.sh | ALOGIN_VERSION=2.0.3 sh
+
+# 커스텀 설치 경로 (예: /usr/local/bin, sudo 필요 시 별도 처리)
+curl -fsSL https://raw.githubusercontent.com/emusal/alogin2/main/install.sh | ALOGIN_INSTALL_DIR=/usr/local/bin sh
+```
+
+### Homebrew (macOS, 권장)
 
 ```bash
 brew tap emusal/alogin --custom-remote git@github.com:emusal/alogin2.git
 brew install alogin
 ```
 
+### Windows
+
+네이티브 Windows 바이너리는 미지원입니다. WSL(Windows Subsystem for Linux) 환경에서 위 스크립트로 설치하세요.
+
 ### 바이너리 직접 다운로드
 
-[Releases](https://github.com/emusal/alogin2/releases) 페이지에서 최신 버전을 받습니다.
+[Releases](https://github.com/emusal/alogin2/releases) 페이지에서 직접 받을 수도 있습니다.
 
 ```bash
 # macOS (Apple Silicon)
-curl -L https://github.com/emusal/alogin2/releases/latest/download/alogin-darwin-arm64 -o /usr/local/bin/alogin
-chmod +x /usr/local/bin/alogin
+curl -fsSL https://github.com/emusal/alogin2/releases/latest/download/alogin-web-darwin-arm64 -o ~/.local/bin/alogin
+chmod +x ~/.local/bin/alogin
 
 # macOS (Intel)
-curl -L https://github.com/emusal/alogin2/releases/latest/download/alogin-darwin-amd64 -o /usr/local/bin/alogin
-chmod +x /usr/local/bin/alogin
+curl -fsSL https://github.com/emusal/alogin2/releases/latest/download/alogin-web-darwin-amd64 -o ~/.local/bin/alogin
+chmod +x ~/.local/bin/alogin
 
 # Linux (amd64)
-curl -L https://github.com/emusal/alogin2/releases/latest/download/alogin-linux-amd64 -o /usr/local/bin/alogin
-chmod +x /usr/local/bin/alogin
+curl -fsSL https://github.com/emusal/alogin2/releases/latest/download/alogin-web-linux-amd64 -o ~/.local/bin/alogin
+chmod +x ~/.local/bin/alogin
+
+# Linux (arm64)
+curl -fsSL https://github.com/emusal/alogin2/releases/latest/download/alogin-web-linux-arm64 -o ~/.local/bin/alogin
+chmod +x ~/.local/bin/alogin
 ```
 
 ### 소스 빌드
