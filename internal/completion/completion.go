@@ -86,6 +86,8 @@ _alogin() {
         'web:Start the web UI server'
         'completion:Generate or install shell completion scripts'
         'shell-init:Output shell compatibility shim (source with <(...))'
+        'uninstall:Remove alogin binary, completions, and config'
+        'upgrade:Upgrade alogin to the latest release'
         'version:Print version'
       )
       _describe 'command' commands
@@ -250,6 +252,17 @@ _alogin() {
             '--no-browser[do not open browser automatically]'
           ;;
 
+        uninstall)
+          _arguments \
+            '--purge[also remove database and vault (irreversible)]' \
+            '(-y --yes)'{-y,--yes}'[skip confirmation prompt]'
+          ;;
+
+        upgrade)
+          _arguments \
+            '(-y --yes)'{-y,--yes}'[skip confirmation prompt]'
+          ;;
+
       esac
       ;;
   esac
@@ -274,7 +287,7 @@ _alogin_completion() {
     cword=$COMP_CWORD
   }
 
-  local commands="connect sftp ftp mount cluster server gateway alias migrate tui web completion shell-init version"
+  local commands="connect sftp ftp mount cluster server gateway alias migrate tui web completion shell-init uninstall upgrade version"
 
   # Helpers
   _alogin_hosts() {
@@ -368,6 +381,12 @@ _alogin_completion() {
       ;;
     web)
       COMPREPLY=($(compgen -W "--port -p --no-browser" -- "$cur"))
+      ;;
+    uninstall)
+      COMPREPLY=($(compgen -W "--purge --yes -y" -- "$cur"))
+      ;;
+    upgrade)
+      COMPREPLY=($(compgen -W "--yes -y" -- "$cur"))
       ;;
   esac
 }

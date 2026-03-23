@@ -4,6 +4,8 @@ class Alogin < Formula
   version "2.0.8"
   license "MIT"
 
+  depends_on "tmux"
+
   on_macos do
     on_arm do
       url "https://github.com/emusal/alogin2/releases/download/v2.0.8/alogin-web-darwin-arm64"

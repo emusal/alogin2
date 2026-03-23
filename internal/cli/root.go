@@ -29,7 +29,7 @@ and server credentials with an encrypted vault.`,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			// Skip DB init for version/completion commands
-			skip := map[string]bool{"version": true, "completion": true, "shell-init": true, "uninstall": true}
+			skip := map[string]bool{"version": true, "completion": true, "shell-init": true, "uninstall": true, "upgrade": true}
 			if skip[cmd.Name()] {
 				return nil
 			}
@@ -61,6 +61,7 @@ and server credentials with an encrypted vault.`,
 		newCompletionCmd(),
 		newWebCmd(),
 		newUninstallCmd(),
+		newUpgradeCmd(),
 	)
 
 	return root

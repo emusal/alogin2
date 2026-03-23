@@ -27,7 +27,7 @@
 - **Cluster sessions** — connect to multiple hosts simultaneously via tmux (cross-platform) or iTerm2 / Terminal.app (macOS)
 - **Web UI** — browser-based SSH terminal + server management dashboard (`alogin web`)
 - **Persistent SSH tunnels** — named port-forward tunnels kept alive in tmux background sessions (`alogin tunnel`)
-- **v1 compatibility** — drop-in `t`, `r`, `s`, `f`, `m`, `ct`, `cr` shell functions via a thin shim
+- **Shell shortcuts** — `t`, `r`, `s`, `f`, `m`, `ct`, `cr` shorthand commands with tab completion (`alogin shell-init`)
 - **Migration tool** — one command to import existing `server_list`, `gateway_list`, `clusters`, etc.
 
 ---
@@ -97,6 +97,18 @@ go build -o alogin ./cmd/alogin
 sudo mv alogin /usr/local/bin/
 ```
 
+### Upgrade
+
+```bash
+# Upgrade to the latest release
+alogin upgrade
+
+# Skip confirmation prompt
+alogin upgrade --yes
+```
+
+If installed via Homebrew, use `brew upgrade alogin` instead.
+
 ### Uninstall
 
 ```bash
@@ -116,6 +128,27 @@ curl -fsSL https://raw.githubusercontent.com/emusal/alogin2/main/uninstall.sh | 
 ---
 
 ## Quick Start
+
+### Shell initialization 
+
+Add to your `~/.zshrc` or `~/.bashrc`:
+
+```bash
+source <(alogin shell-init)
+```
+
+This enables shorthand commands and tab completion:
+
+```bash
+t web-01          # SSH connect (direct)
+r admin@bastion   # SSH connect (auto gateway detection)
+s web-01          # SFTP
+f ftp-server      # FTP
+m web-01          # SSHFS mount
+ct prod-cluster   # cluster connect (tiled windows)
+cr prod-cluster   # cluster connect via gateways
+```
+
 
 ### 1. Verify installation
 
@@ -151,26 +184,6 @@ alogin connect web-01       # connect directly by hostname
 alogin connect admin@web-01 # specify user
 ```
 
-### 5. Shell compatibility (v1 users)
-
-Add to your `~/.zshrc` or `~/.bashrc`:
-
-```bash
-source <(alogin shell-init)
-```
-
-Then use the same v1 commands as before:
-
-```bash
-t web-01          # SSH connect (direct)
-r admin@bastion   # SSH connect (auto gateway detection)
-s web-01          # SFTP
-f ftp-server      # FTP
-m web-01          # SSHFS mount
-ct prod-cluster   # cluster connect (tiled windows)
-cr prod-cluster   # cluster connect via gateways
-```
-
 ---
 
 ## Commands
@@ -196,6 +209,9 @@ alogin connect [user@]host... [flags]
 ```
 
 ```bash
+t web-01                                # shorthand
+r web-01                                # shorthand (auto gateway)
+
 alogin connect                          # TUI selector
 alogin connect web-01                   # direct connect
 alogin connect gw-01 web-01             # explicit 2-hop
@@ -205,17 +221,48 @@ alogin connect web-01 -L 2222:22        # forward local:2222 → web-01:22
 alogin connect web-01 --auto-gw -L 2222:22  # gateway + port forward
 ```
 
+#### Remote command execution (`--cmd`)
+
+Runs the specified command after login and exits.
+
+```bash
+alogin connect web-01 --cmd "uptime"
+alogin connect web-01 --cmd "df -h && free -m"
+```
+
+To run multiple commands in sequence, put them in a batch file and pipe it via stdin:
+
+```bash
+# create cmd.bat
+cat > cmd.bat << 'EOF'
+cd /var/log
+tail -20 syslog
+df -h
+EOF
+
+alogin connect web-01 < cmd.bat
+```
+
+`--cmd` runs without a PTY, making it easy to pipe or chain output. `< cmd.bat` feeds commands into an interactive shell one by one — useful when you need prompts or environment setup between steps.
+
 ### File Transfer
 
 ```bash
+s web-01                                # sftp shorthand
+f ftp-server                            # ftp shorthand
+m web-01                                # mount shorthand
+
 alogin sftp [user@]host [-p local_file] [-g remote_file]
 alogin ftp  [user@]host
-alogin mount [user@]host [remote_path]   # SSHFS mount
+alogin mount [user@]host [remote_path]  # SSHFS mount
 ```
 
 ### Cluster
 
 ```bash
+ct prod-cluster                         # shorthand
+cr prod-cluster                         # shorthand (via gateway)
+
 alogin cluster [name] [flags]
 
   --gateway          Route through gateways (legacy 'cr')
@@ -285,8 +332,30 @@ alogin tunnel rm   db-local
 alogin tunnel                   # opens tunnel management screen (/tunnel slash command)
 ```
 
-`--dir L` (default): local forward (`-L localHost:localPort:remoteHost:remotePort`)
-`--dir R`: reverse tunnel (`-R remotePort:localHost:localPort`)
+**`--dir L` (default): local forward** — expose a remote port locally
+
+```mermaid
+graph LR
+    A["app\nlocalhost:5432"] -->|connect| T["alogin tunnel\n(tmux background)"]
+    T -->|"SSH -L 5432:db.prod:5432"| S["SSH server\ndb.prod"]
+    S -->|internal| D[("DB\n:5432")]
+
+    style T fill:#1b4332,color:#fff,stroke:none
+    style D fill:#264653,color:#fff,stroke:none
+```
+
+**`--dir R`: reverse tunnel** — expose a local port on the remote side
+
+```mermaid
+graph RL
+    A["remote client\nremote:8080"] -->|connect| S["SSH server\n(remote)"]
+    S -->|"SSH -R 8080:localhost:3000"| T["alogin tunnel\n(tmux background)"]
+    T -->|forward| L["local app\nlocalhost:3000"]
+
+    style T fill:#1b4332,color:#fff,stroke:none
+    style L fill:#264653,color:#fff,stroke:none
+```
+
 `--auto-gw`: route through the server's registered gateway chain
 
 ### Web UI
@@ -296,6 +365,15 @@ alogin web [--port 8484] [--no-browser]
 ```
 
 Opens `http://localhost:8484` automatically.
+
+### Upgrade
+
+```bash
+alogin upgrade          # upgrade to the latest release (checks GitHub)
+alogin upgrade --yes    # skip confirmation prompt
+```
+
+Checks GitHub Releases for the latest version, downloads the matching binary for the current platform, and replaces the binary in-place. Use `brew upgrade alogin` if installed via Homebrew.
 
 ### Shell Completion
 
@@ -350,12 +428,28 @@ port = 8484
 
 ### Credential storage
 
-Passwords are **never stored in the database**. The `password` column holds `_HIDDEN_` as a sentinel. Actual credentials are stored in:
+Passwords are stored in the first available backend (priority order):
 
-1. **macOS Keychain** (default on macOS) — uses `Security.framework`
-2. **Linux Secret Service** (default on Linux) — GNOME Keyring / KWallet via D-Bus
-3. **age-encrypted file** — cross-platform fallback; unlocked with a master passphrase
-4. **Plaintext** — only for reading legacy `server_list` during migration
+```mermaid
+flowchart TD
+    A[Store / retrieve password] --> B{keychain_use = true?}
+    B -->|Yes| C[🔑 macOS Keychain\nLinux Secret Service]
+    B -->|No| D{vault file exists\nALOGIN_VAULT_PASS set?}
+    D -->|Yes| E[🔒 age-encrypted file]
+    D -->|No| F[⚠️ SQLite plaintext\nservers.password column]
+
+    style C fill:#2d6a4f,color:#fff
+    style E fill:#1d6b8a,color:#fff
+    style F fill:#9b2226,color:#fff
+```
+
+For any security-sensitive environment, configure Keychain or age explicitly:
+
+```toml
+# ~/.config/alogin/config.toml
+[vault]
+keychain_use = true
+```
 
 ### SSH key authentication
 
@@ -383,11 +477,37 @@ alogin server add
 
 alogin dials each hop in order using Go's native SSH library — no ProxyCommand shell escaping, no expect patterns:
 
-```
-local → bastion-01:22 → internal-gw:22 → web-01:22
+```mermaid
+graph LR
+    L[💻 local] -->|"TCP :22"| B[bastion-01]
+    B -->|"TCP :22"| I[internal-gw]
+    I -->|"TCP :22"| W[🖥️ web-01]
+
+    subgraph GW[gateway route: prod-route]
+        B
+        I
+    end
+
+    style GW fill:#1a1a2e,color:#eee,stroke:#4a4e9a
+    style L fill:#264653,color:#fff,stroke:none
+    style W fill:#264653,color:#fff,stroke:none
 ```
 
-If an intermediate hop has `AllowTcpForwarding` disabled, alogin automatically falls back to the **shell-chain method** (runs `ssh -tt` inside the shell of each hop — identical to v1's `conn.exp` behavior).
+If an intermediate hop has `AllowTcpForwarding` disabled, alogin automatically falls back to the **shell-chain method**:
+
+```mermaid
+graph LR
+    L[💻 local] -->|"ssh -tt"| B["bastion-01\n(shell)"]
+    B -->|"ssh -tt"| I["internal-gw\n(shell)"]
+    I -->|"ssh"| W[🖥️ web-01]
+
+    style L fill:#264653,color:#fff,stroke:none
+    style W fill:#264653,color:#fff,stroke:none
+    style B fill:#6d3a3a,color:#fff,stroke:none
+    style I fill:#6d3a3a,color:#fff,stroke:none
+```
+
+Shell-chain does not use ProxyJump TCP forwarding, so `AllowTcpForwarding` restrictions do not apply (identical to v1's `conn.exp` behavior).
 
 ---
 
@@ -399,6 +519,20 @@ Connect to all members of a cluster simultaneously:
 alogin cluster prod-web --mode tmux      # tmux panes (macOS + Linux)
 alogin cluster prod-web --mode iterm     # iTerm2 split panes (macOS)
 alogin cluster prod-web --mode terminal  # Terminal.app tiles (macOS)
+```
+
+```mermaid
+graph TD
+    C["alogin cluster prod-web\n--mode tmux"] --> TM["tmux session"]
+    TM --> P1["pane 1"] & P2["pane 2"] & P3["pane 3"]
+    P1 -->|SSH| S1[web-01]
+    P2 -->|SSH| S2[web-02]
+    P3 -->|SSH| S3[web-03]
+
+    style TM fill:#1a1a2e,color:#eee,stroke:#4a4e9a
+    style P1 fill:#264653,color:#fff,stroke:none
+    style P2 fill:#264653,color:#fff,stroke:none
+    style P3 fill:#264653,color:#fff,stroke:none
 ```
 
 Manage clusters:
@@ -459,7 +593,7 @@ This:
 - Moves passwords to the system keychain (removes from database)
 - Leaves the original files untouched
 
-After migration, source the compatibility shim to keep using `t`, `r`, `s`, etc.:
+If you haven't set up shell initialization yet, add it now:
 
 ```bash
 source <(alogin shell-init)
