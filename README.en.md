@@ -366,6 +366,103 @@ alogin web [--port 8484] [--no-browser]
 
 Opens `http://localhost:8484` automatically.
 
+### MCP Server (AI Integration)
+
+```bash
+alogin mcp-server
+```
+
+Runs an MCP (Model Context Protocol) server over stdio. MCP-compatible LLM clients like Claude Desktop can query servers, manage tunnels, and run SSH commands through alogin using natural language.
+
+**Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json`):**
+
+```json
+{
+  "mcpServers": {
+    "alogin": {
+      "command": "/bin/zsh",
+      "args": ["-l", "-c", "alogin mcp-server"]
+    }
+  }
+}
+```
+
+> The `-l` flag runs alogin through a login shell so that `~/.zprofile`, PATH, and SSH_AUTH_SOCK are correctly inherited.
+> After saving the config, fully quit and relaunch Claude Desktop.
+
+**Available tools:**
+
+| Tool | Description |
+|------|-------------|
+| `list_servers` | List servers (optional `query` filter) |
+| `get_server` | Get server details |
+| `list_tunnels` | List tunnels with running status |
+| `get_tunnel` | Get tunnel details |
+| `start_tunnel` | Start a tunnel (via tmux) |
+| `stop_tunnel` | Stop a tunnel (via tmux) |
+| `list_clusters` | List clusters |
+| `get_cluster` | Get cluster with member server details |
+| `exec_command` | Run SSH commands on a single server |
+| `exec_on_cluster` | Run SSH commands on all cluster servers in parallel |
+
+**Example conversation:**
+
+```
+User: Show me the registered server list
+
+Claude: There are 5 servers registered in alogin.
+
+| ID | Host   | User   | Protocol | Device Type |
+|----|--------|--------|----------|-------------|
+| 1  | web-01 | ubuntu | ssh      | linux       |
+| 2  | db-01  | admin  | ssh      | linux       |
+| 3  | gw-01  | root   | ssh      | linux       |
+| 4  | router | admin  | ssh      | router      |
+| 5  | nas    | emusal | ssh      | linux       |
+```
+
+```
+User: Check disk usage on web-01
+
+Claude: I'll SSH into web-01 and run df -h.
+
+[exec_command: server_id=1, commands=["df -h"]]
+
+Result:
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda1        50G   32G   16G  67% /
+/dev/sda2       200G   89G  100G  47% /data
+tmpfs           3.9G     0  3.9G   0% /dev/shm
+
+Root partition is at 67% usage. /data has plenty of space.
+```
+
+```
+User: Check uptime on all servers in web-cluster
+
+Claude: Running uptime in parallel across 3 servers in web-cluster.
+
+[exec_on_cluster: cluster_id=2, commands=["uptime"]]
+
+Results:
+- web-01: up 30 days, load average: 0.12, 0.08, 0.05
+- web-02: up 30 days, load average: 0.45, 0.32, 0.28
+- web-03: up 12 days, load average: 0.08, 0.06, 0.04
+
+web-03 was restarted 12 days ago, while the others have been up for 30 days.
+```
+
+```
+User: Start db-tunnel
+
+Claude: Starting db-tunnel in a detached tmux session.
+
+[start_tunnel: id=2]
+
+db-tunnel is now running. tmux session: alogin-tunnel-db-tunnel
+Forwarding localhost:5432 → db-01:5432.
+```
+
 ### Upgrade
 
 ```bash
@@ -374,6 +471,18 @@ alogin upgrade --yes    # skip confirmation prompt
 ```
 
 Checks GitHub Releases for the latest version, downloads the matching binary for the current platform, and replaces the binary in-place. Use `brew upgrade alogin` if installed via Homebrew.
+
+After upgrade, `alogin db-migrate` is run automatically to apply any pending DB schema changes and report results.
+
+### Database Schema Migration
+
+```bash
+alogin db-migrate
+```
+
+Applies any pending database schema migrations for the current binary version. If the schema is already up to date, the command does nothing. Useful after manually installing a new binary.
+
+Migrations also run automatically whenever any alogin command opens the database.
 
 ### Shell Completion
 

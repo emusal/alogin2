@@ -88,6 +88,8 @@ _alogin() {
         'shell-init:Output shell compatibility shim (source with <(...))'
         'uninstall:Remove alogin binary, completions, and config'
         'upgrade:Upgrade alogin to the latest release'
+        'mcp-server:Run alogin as an MCP server over stdio'
+        'db-migrate:Apply pending database schema migrations'
         'version:Print version'
       )
       _describe 'command' commands
@@ -287,7 +289,7 @@ _alogin_completion() {
     cword=$COMP_CWORD
   }
 
-  local commands="connect sftp ftp mount cluster server gateway alias migrate tui web completion shell-init uninstall upgrade version"
+  local commands="connect sftp ftp mount cluster server gateway alias migrate tui web completion shell-init uninstall upgrade mcp-server db-migrate version"
 
   # Helpers
   _alogin_hosts() {

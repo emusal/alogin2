@@ -365,6 +365,103 @@ alogin web [--port 8484] [--no-browser]
 
 `http://localhost:8484`을 자동으로 엽니다.
 
+### MCP 서버 (AI 연동)
+
+```bash
+alogin mcp-server
+```
+
+stdio 기반 MCP(Model Context Protocol) 서버를 실행합니다. Claude Desktop 등 MCP를 지원하는 LLM 클라이언트에서 서버 목록 조회, 터널 제어, SSH 명령 실행 등을 자연어로 수행할 수 있습니다.
+
+**Claude Desktop 설정 (`~/Library/Application Support/Claude/claude_desktop_config.json`):**
+
+```json
+{
+  "mcpServers": {
+    "alogin": {
+      "command": "/bin/zsh",
+      "args": ["-l", "-c", "alogin mcp-server"]
+    }
+  }
+}
+```
+
+> `-l` 플래그로 login shell을 통해 실행해야 `~/.zprofile`, PATH, SSH_AUTH_SOCK 등 셸 환경이 올바르게 상속됩니다.
+> 설정 저장 후 Claude Desktop을 완전히 종료했다가 다시 시작하세요.
+
+**제공 tools:**
+
+| Tool | 설명 |
+|------|------|
+| `list_servers` | 서버 목록 조회 (`query?` 로 필터) |
+| `get_server` | 서버 상세 조회 |
+| `list_tunnels` | 터널 목록 + 실행 상태 |
+| `get_tunnel` | 터널 상세 조회 |
+| `start_tunnel` | 터널 시작 (tmux) |
+| `stop_tunnel` | 터널 중지 (tmux) |
+| `list_clusters` | 클러스터 목록 조회 |
+| `get_cluster` | 클러스터 상세 (멤버 서버 포함) |
+| `exec_command` | 단일 서버 SSH 명령 실행 |
+| `exec_on_cluster` | 클러스터 전체 병렬 SSH 명령 실행 |
+
+**대화 예시:**
+
+```
+나: 등록된 서버 목록 보여줘
+
+Claude: 현재 alogin에 등록된 서버는 총 5개입니다.
+
+| ID | 호스트 | 사용자 | 프로토콜 | 장치 유형 |
+|----|--------|--------|----------|----------|
+| 1  | web-01 | ubuntu | ssh      | linux    |
+| 2  | db-01  | admin  | ssh      | linux    |
+| 3  | gw-01  | root   | ssh      | linux    |
+| 4  | router | admin  | ssh      | router   |
+| 5  | nas    | emusal | ssh      | linux    |
+```
+
+```
+나: web-01 디스크 사용량 확인해줘
+
+Claude: web-01에 SSH로 접속해 df -h를 실행하겠습니다.
+
+[exec_command 호출: server_id=1, commands=["df -h"]]
+
+결과:
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda1        50G   32G   16G  67% /
+/dev/sda2       200G   89G  100G  47% /data
+tmpfs           3.9G     0  3.9G   0% /dev/shm
+
+루트 파티션 사용률이 67%입니다. /data는 여유가 있습니다.
+```
+
+```
+나: web-cluster 전체 서버 uptime 확인해줘
+
+Claude: web-cluster 내 3개 서버에 병렬로 uptime을 실행하겠습니다.
+
+[exec_on_cluster 호출: cluster_id=2, commands=["uptime"]]
+
+결과:
+- web-01: 15:42:01 up 30 days, 4:12, load average: 0.12, 0.08, 0.05
+- web-02: 15:42:01 up 30 days, 4:11, load average: 0.45, 0.32, 0.28
+- web-03: 15:42:01 up 12 days, 2:33, load average: 0.08, 0.06, 0.04
+
+web-03이 최근 12일 전에 재시작된 것이 확인됩니다.
+```
+
+```
+나: db-tunnel 시작해줘
+
+Claude: db-tunnel을 tmux 세션에서 시작하겠습니다.
+
+[start_tunnel 호출: id=2]
+
+db-tunnel이 시작되었습니다. tmux 세션 이름: alogin-tunnel-db-tunnel
+localhost:5432 → db-01:5432 포워딩이 활성화되었습니다.
+```
+
 ### 업그레이드
 
 ```bash
@@ -373,6 +470,18 @@ alogin upgrade --yes    # 확인 프롬프트 건너뜀
 ```
 
 GitHub Releases에서 최신 버전을 확인하고, 현재 플랫폼에 맞는 바이너리를 다운로드해 in-place 교체합니다. Homebrew로 설치한 경우 `brew upgrade alogin`을 사용하세요.
+
+업그레이드 완료 후 `alogin db-migrate`를 자동으로 실행해 DB 스키마 변경을 즉시 적용하고 결과를 출력합니다.
+
+### DB 스키마 마이그레이션
+
+```bash
+alogin db-migrate
+```
+
+데이터베이스 스키마를 현재 바이너리가 기대하는 버전으로 마이그레이션합니다. 이미 최신 상태면 아무 작업도 하지 않습니다. 바이너리를 수동으로 교체한 경우 이 명령으로 마이그레이션을 실행할 수 있습니다.
+
+마이그레이션은 다른 alogin 명령 실행 시에도 자동으로 적용됩니다.
 
 ### 셸 자동완성
 

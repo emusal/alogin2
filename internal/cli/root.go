@@ -10,6 +10,24 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// printMigrationNotice writes a human-readable report of applied migrations to stderr.
+// Called from initRuntime and from the db-migrate command's RunE.
+func printMigrationNotice(applied []int) {
+	if len(applied) == 0 {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "Database schema migrated:\n")
+	for _, v := range applied {
+		desc := db.MigrationDescription(v)
+		if desc != "" {
+			fmt.Fprintf(os.Stderr, "  v%d  %s\n", v, desc)
+		} else {
+			fmt.Fprintf(os.Stderr, "  v%d\n", v)
+		}
+	}
+	fmt.Fprintf(os.Stderr, "Schema is now at v%d.\n", applied[len(applied)-1])
+}
+
 var (
 	cfg      *config.Config
 	database *db.DB
@@ -62,6 +80,8 @@ and server credentials with an encrypted vault.`,
 		newWebCmd(),
 		newUninstallCmd(),
 		newUpgradeCmd(),
+		newMCPServerCmd(),
+		newDBMigrateCmd(),
 	)
 
 	return root
@@ -89,6 +109,7 @@ func initRuntime() error {
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
+	printMigrationNotice(database.AppliedMigrations)
 
 	vlt = buildVault()
 	return nil

@@ -319,6 +319,8 @@ func (h *Handler) createServer(w http.ResponseWriter, r *http.Request) {
 		GatewayID       *int64 `json:"gateway_id"`
 		GatewayServerID *int64 `json:"gateway_server_id"`
 		Locale          string `json:"locale"`
+		DeviceType      string `json:"device_type"`
+		Note            string `json:"note"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
@@ -332,6 +334,8 @@ func (h *Handler) createServer(w http.ResponseWriter, r *http.Request) {
 		GatewayID:       req.GatewayID,
 		GatewayServerID: req.GatewayServerID,
 		Locale:          req.Locale,
+		DeviceType:      model.DeviceType(req.DeviceType),
+		Note:            req.Note,
 	}
 	if err := h.db.Servers.Create(r.Context(), srv, req.Password); err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
@@ -369,6 +373,8 @@ func (h *Handler) updateServer(w http.ResponseWriter, r *http.Request) {
 		GatewayID       *int64 `json:"gateway_id"`
 		GatewayServerID *int64 `json:"gateway_server_id"`
 		Locale          string `json:"locale"`
+		DeviceType      string `json:"device_type"`
+		Note            string `json:"note"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
@@ -383,6 +389,8 @@ func (h *Handler) updateServer(w http.ResponseWriter, r *http.Request) {
 		GatewayID:       req.GatewayID,
 		GatewayServerID: req.GatewayServerID,
 		Locale:          req.Locale,
+		DeviceType:      model.DeviceType(req.DeviceType),
+		Note:            req.Note,
 	}
 	if err := h.db.Servers.Update(r.Context(), srv, req.Password); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)

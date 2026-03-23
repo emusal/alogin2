@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"runtime"
 	"strings"
 
@@ -90,6 +91,16 @@ func runUpgrade(yes bool) error {
 	}
 
 	fmt.Printf("alogin upgraded to %s.\n", latestVer)
+
+	// Apply any pending DB schema migrations with the new binary and report results.
+	fmt.Println("Applying database schema migrations...")
+	migrateCmd := exec.Command(binPath, "db-migrate")
+	migrateCmd.Stdout = os.Stdout
+	migrateCmd.Stderr = os.Stderr
+	if err := migrateCmd.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: db-migrate failed (%v). Run 'alogin db-migrate' manually.\n", err)
+	}
+
 	return nil
 }
 

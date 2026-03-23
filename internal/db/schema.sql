@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS servers (
     gateway_id        INTEGER REFERENCES gateway_routes(id) ON DELETE SET NULL,
     gateway_server_id INTEGER REFERENCES servers(id) ON DELETE SET NULL,
     locale            TEXT    NOT NULL DEFAULT '-',
+    device_type       TEXT    NOT NULL DEFAULT 'linux',
+    note              TEXT    NOT NULL DEFAULT '',
     created_at        TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
     updated_at        TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
     UNIQUE(host, user)
@@ -118,3 +120,5 @@ INSERT OR IGNORE INTO schema_migrations(version) VALUES (1);
 INSERT OR IGNORE INTO schema_migrations(version) VALUES (2);
 INSERT OR IGNORE INTO schema_migrations(version) VALUES (3);
 INSERT OR IGNORE INTO schema_migrations(version) VALUES (4);
+INSERT OR IGNORE INTO schema_migrations(version) VALUES (5);
+INSERT OR IGNORE INTO schema_migrations(version) VALUES (6);

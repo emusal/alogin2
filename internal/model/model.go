@@ -31,6 +31,18 @@ func (p Protocol) DefaultPort() int {
 	return 22
 }
 
+// DeviceType represents the type of a server device.
+type DeviceType string
+
+const (
+	DeviceLinux    DeviceType = "linux"
+	DeviceWindows  DeviceType = "windows"
+	DeviceRouter   DeviceType = "router"
+	DeviceSwitch   DeviceType = "switch"
+	DeviceFirewall DeviceType = "firewall"
+	DeviceOther    DeviceType = "other"
+)
+
 // Server represents one entry in the server registry (replaces a row in server_list).
 type Server struct {
 	ID       int64    `json:"id"`
@@ -38,12 +50,14 @@ type Server struct {
 	Host     string   `json:"host"`
 	User     string   `json:"user"`
 	// Password is never stored here at runtime; it is fetched from Vault on demand.
-	Port            int       `json:"port"`              // 0 = use protocol default
-	GatewayID       *int64    `json:"gateway_id"`        // named route from gateway_routes (mirrors gateway_list)
-	GatewayServerID *int64    `json:"gateway_server_id"` // direct server reference (mirrors server_list.gateway)
-	Locale          string    `json:"locale"`            // e.g. "ko_KR.eucKR"; "-" or "" = system default
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	Port            int        `json:"port"`              // 0 = use protocol default
+	GatewayID       *int64     `json:"gateway_id"`        // named route from gateway_routes (mirrors gateway_list)
+	GatewayServerID *int64     `json:"gateway_server_id"` // direct server reference (mirrors server_list.gateway)
+	Locale          string     `json:"locale"`            // e.g. "ko_KR.eucKR"; "-" or "" = system default
+	DeviceType      DeviceType `json:"device_type"`       // linux|windows|router|switch|firewall|other
+	Note            string     `json:"note"`              // free-form description (LLM context)
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
 // EffectivePort returns the actual TCP port to connect to.
