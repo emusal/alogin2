@@ -109,6 +109,25 @@ CREATE TABLE IF NOT EXISTS local_hosts (
 CREATE INDEX IF NOT EXISTS idx_local_hosts_hostname ON local_hosts(hostname);
 
 -- ----------------------------------------------------------------
+-- tunnels: persistent SSH port-forward tunnels (v5)
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS tunnels (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT    NOT NULL UNIQUE,
+    server_id   INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    direction   TEXT    NOT NULL DEFAULT 'L' CHECK(direction IN ('L','R')),
+    local_host  TEXT    NOT NULL DEFAULT '127.0.0.1',
+    local_port  INTEGER NOT NULL,
+    remote_host TEXT    NOT NULL,
+    remote_port INTEGER NOT NULL,
+    auto_gw     INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    updated_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_tunnels_name ON tunnels(name);
+
+-- ----------------------------------------------------------------
 -- schema_migrations: version tracking
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS schema_migrations (

@@ -142,6 +142,28 @@ func tableExists(db *sql.DB, ctx context.Context, name string) bool {
 		`SELECT name FROM sqlite_master WHERE type='table' AND name=?`, name).Scan(&n) == nil
 }
 
+// columnExists reports whether the given column exists in the named table.
+func columnExists(db *sql.DB, ctx context.Context, table, column string) bool {
+	rows, err := db.QueryContext(ctx, `PRAGMA table_info(`+table+`)`)
+	if err != nil {
+		return false
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notnull, pk int
+		var dflt interface{}
+		if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
+			continue
+		}
+		if name == column {
+			return true
+		}
+	}
+	return false
+}
+
 // applyMigrations runs incremental ALTER TABLE migrations for existing databases.
 // New databases get the full schema from schema.sql; existing ones need column additions.
 // Returns the list of schema versions that were actually applied in this call.
@@ -236,7 +258,10 @@ func applyMigrations(db *sql.DB) ([]int, error) {
 		applied = append(applied, 5)
 	}
 
-	if version < 6 {
+	// v6: use columnExists as the authoritative check — schema_migrations may have
+	// been populated ahead of the actual ALTER TABLE (e.g. schema.sql INSERT ran on
+	// an existing DB), leaving the version marker without the columns.
+	if version < 6 || !columnExists(db, ctx, "servers", "device_type") {
 		for _, col := range []struct{ name, def string }{
 			{"device_type", "TEXT NOT NULL DEFAULT 'linux'"},
 			{"note", "TEXT NOT NULL DEFAULT ''"},
