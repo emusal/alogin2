@@ -53,7 +53,8 @@ func newHostsAddCmd() *cobra.Command {
 }
 
 func newHostsListCmd() *cobra.Command {
-	return &cobra.Command{
+	var format string
+	cmd := &cobra.Command{
 		Use:     "list",
 		Aliases: []string{"ls"},
 		Short:   "List all hostname→IP mappings",
@@ -63,6 +64,14 @@ func newHostsListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
+			if format == "json" {
+				if hosts == nil {
+					hosts = []*model.LocalHost{}
+				}
+				return printJSON(hosts)
+			}
+
 			if len(hosts) == 0 {
 				fmt.Println("No hosts defined.")
 				return nil
@@ -75,6 +84,8 @@ func newHostsListCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&format, "format", "table", "output format: table|json")
+	return cmd
 }
 
 func newHostsShowCmd() *cobra.Command {

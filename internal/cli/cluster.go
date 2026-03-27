@@ -7,6 +7,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/emusal/alogin2/internal/cluster"
+	"github.com/emusal/alogin2/internal/model"
 	"github.com/emusal/alogin2/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -31,7 +32,7 @@ Examples:
   alogin cluster
   alogin cluster prod-cluster
   alogin cluster prod-cluster --mode iterm
-  alogin cluster prod-cluster --gateway`,
+  alogin cluster prod-cluster --auto-gw`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
@@ -81,6 +82,7 @@ Examples:
 					User:     user,
 					Password: pwd,
 					Hops:     hops,
+					UseGW:    useGW,
 				})
 			}
 
@@ -96,13 +98,15 @@ Examples:
 
 	cmd.Flags().StringVar(&mode, "mode", "tmux", "session mode: tmux|iterm|terminal")
 	cmd.Flags().IntVarP(&tileX, "tile-x", "x", 0, "number of columns for tiling (0=auto)")
-	cmd.Flags().BoolVar(&useGW, "gateway", false, "route through gateways (like legacy 'cr')")
+	cmd.Flags().BoolVar(&useGW, "auto-gw", false, "route through gateways (like legacy 'cr')")
+	cmd.AddCommand(newClusterAddCmd())
 	cmd.AddCommand(newClusterListCmd())
 	return cmd
 }
 
 func newClusterListCmd() *cobra.Command {
-	return &cobra.Command{
+	var format string
+	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List all clusters",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -111,6 +115,20 @@ func newClusterListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
+			if format == "json" {
+				type clusterJSON struct {
+					ID          int64  `json:"id"`
+					Name        string `json:"name"`
+					MemberCount int    `json:"member_count"`
+				}
+				out := make([]clusterJSON, 0, len(clusters))
+				for _, cl := range clusters {
+					out = append(out, clusterJSON{ID: cl.ID, Name: cl.Name, MemberCount: len(cl.Members)})
+				}
+				return printJSON(out)
+			}
+
 			if len(clusters) == 0 {
 				fmt.Println("No clusters registered.")
 				return nil
@@ -124,4 +142,38 @@ func newClusterListCmd() *cobra.Command {
 			return w.Flush()
 		},
 	}
+	cmd.Flags().StringVar(&format, "format", "table", "output format: table|json")
+	return cmd
 }
+
+func newClusterAddCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "add <name> <host1> [host2...]",
+		Short: "Add a new cluster with members",
+		Args:  cobra.MinimumNArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+			name := args[0]
+			var members []model.ClusterMember
+
+			for i, host := range args[1:] {
+				srv, err := database.Servers.GetByHost(ctx, host, "")
+				if err != nil || srv == nil {
+					return fmt.Errorf("server %q not found in registry (you must add it first)", host)
+				}
+				members = append(members, model.ClusterMember{
+					ServerID:    srv.ID,
+					MemberOrder: i,
+				})
+			}
+
+			if _, err := database.Clusters.Create(ctx, name, members); err != nil {
+				return fmt.Errorf("failed to create cluster %q: %w", name, err)
+			}
+
+			fmt.Printf("Successfully created cluster %q with %d members.\n", name, len(members))
+			return nil
+		},
+	}
+}
+

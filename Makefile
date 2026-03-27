@@ -1,7 +1,6 @@
 BIN      := alogin
 CMD      := ./cmd/alogin
-#INSTALL  := $(shell go env GOPATH)/bin/$(BIN)
-INSTALL  := /usr/local/bin/$(BIN)
+INSTALL  := ~/.local/bin/$(BIN)
 FRONTEND := web/frontend
 VERSION  := $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo "dev")
 LDFLAGS  := -ldflags "-X github.com/emusal/alogin2/internal/cli.Version=$(VERSION) -s -w"
@@ -27,12 +26,14 @@ build-race:                     ## Build with race detector
 # ── install ───────────────────────────────────────────────────────────────────
 
 .PHONY: install
-install: frontend               ## Install CLI with embedded Web UI to /usr/local/bin
-	go install $(LDFLAGS) -tags web $(CMD)
+install: build-web              ## Install CLI with embedded Web UI to $(INSTALL)
+	mkdir -p $(dir $(INSTALL))
+	cp $(BIN) $(INSTALL)
 
 .PHONY: install-no-web
-install-no-web:                 ## Install CLI without Web UI to /usr/local/bin
-	go install $(LDFLAGS) $(CMD)
+install-no-web: build           ## Install CLI without Web UI to $(INSTALL)
+	mkdir -p $(dir $(INSTALL))
+	cp $(BIN) $(INSTALL)
 
 # ── frontend ──────────────────────────────────────────────────────────────────
 

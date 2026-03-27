@@ -13,6 +13,9 @@ func newCompletionCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "completion <zsh|bash|install>",
 		Short: "Generate or install shell completion scripts",
+		Annotations: map[string]string{
+			skipDBAnnotation: "true",
+		},
 		Long: `Generate shell completion scripts or install them Docker-style into an fpath directory.
 
 Generate (pipe/eval):

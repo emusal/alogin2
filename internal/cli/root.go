@@ -10,6 +10,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// skipDBAnnotation is applied to commands that do not need database initialization.
+// Commands with this annotation skip initRuntime() in PersistentPreRunE.
+const skipDBAnnotation = "alogin:skip-db"
+
 // printMigrationNotice writes a human-readable report of applied migrations to stderr.
 // Called from initRuntime and from the db-migrate command's RunE.
 func printMigrationNotice(applied []int) {
@@ -38,17 +42,29 @@ var (
 func NewRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "alogin",
-		Short: "Modern SSH connection manager",
-		Long: `alogin — SSH automation tool for system administrators.
+		Short: "Security Gateway for Agentic AI",
+		Long: `alogin — Security Gateway for Agentic AI
 
-Manages SSH connections, SFTP transfers, port tunnels, cluster sessions,
-and server credentials with an encrypted vault.`,
+A secure conduit for LLMs and AI agents to access infrastructure safely.
+Manages SSH connections, port tunnels, cluster sessions, and server credentials
+with an encrypted vault and a full audit trail.
+
+Command groups:
+  compute   Manage servers (compute resources)
+  access    Connect to remote hosts (SSH, SFTP, FTP, SSHFS, cluster)
+  auth      Manage credentials and routing (gateways, aliases, vault)
+  agent     AI/MCP tools: run as MCP server, configure AI clients, manage policies
+  net       Manage network resources (hosts, tunnels)
+
+Interactive UIs:
+  tui       Terminal UI host selector
+  web       Embedded Web UI
+
+Run 'alogin agent setup' to configure Claude Desktop or other AI clients.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			// Skip DB init for version/completion commands
-			skip := map[string]bool{"version": true, "completion": true, "shell-init": true, "uninstall": true, "upgrade": true}
-			if skip[cmd.Name()] {
+			if cmd.Annotations[skipDBAnnotation] == "true" {
 				return nil
 			}
 			return initRuntime()
@@ -61,27 +77,26 @@ and server credentials with an encrypted vault.`,
 		},
 	}
 
+	// ---- Canonical new hierarchy ----
 	root.AddCommand(
-		newConnectCmd(),
-		newSFTPCmd(),
-		newFTPCmd(),
-		newMountCmd(),
-		newClusterCmd(),
-		newServerCmd(),
-		newGatewayCmd(),
-		newAliasCmd(),
-		newHostsCmd(),
-		newTunnelCmd(),
-		newMigrateCmd(),
+		newComputeCmd(), // alogin compute  (alias: server)
+		newAccessCmd(),  // alogin access
+		newAuthCmd(),    // alogin auth
+		newAgentCmd(),   // alogin agent
+		newNetCmd(),     // alogin net
+	)
+
+	// ---- Unchanged root-level commands ----
+	root.AddCommand(
+		newTUICmd(),
+		newWebCmd(),
 		newVersionCmd(),
 		newShellInitCmd(),
-		newTUICmd(),
 		newCompletionCmd(),
-		newWebCmd(),
-		newUninstallCmd(),
-		newUpgradeCmd(),
-		newMCPServerCmd(),
+		newMigrateCmd(),
 		newDBMigrateCmd(),
+		newUpgradeCmd(),
+		newUninstallCmd(),
 	)
 
 	return root

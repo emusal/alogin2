@@ -51,7 +51,8 @@ func newGatewayAddCmd() *cobra.Command {
 }
 
 func newGatewayListCmd() *cobra.Command {
-	return &cobra.Command{
+	var format string
+	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List all gateway routes",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -60,6 +61,27 @@ func newGatewayListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
+			if format == "json" {
+				type gatewayJSON struct {
+					ID   int64    `json:"id"`
+					Name string   `json:"name"`
+					Hops []string `json:"hops"`
+				}
+				out := make([]gatewayJSON, 0, len(gws))
+				for _, gw := range gws {
+					hops := make([]string, 0, len(gw.Hops))
+					for _, h := range gw.Hops {
+						srv, _ := database.Servers.GetByID(ctx, h.ServerID)
+						if srv != nil {
+							hops = append(hops, srv.Host)
+						}
+					}
+					out = append(out, gatewayJSON{ID: gw.ID, Name: gw.Name, Hops: hops})
+				}
+				return printJSON(out)
+			}
+
 			if len(gws) == 0 {
 				fmt.Println("No gateway routes.")
 				return nil
@@ -79,6 +101,8 @@ func newGatewayListCmd() *cobra.Command {
 			return w.Flush()
 		},
 	}
+	cmd.Flags().StringVar(&format, "format", "table", "output format: table|json")
+	return cmd
 }
 
 func newGatewayShowCmd() *cobra.Command {

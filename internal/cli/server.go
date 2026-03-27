@@ -114,7 +114,8 @@ Examples:
 }
 
 func newServerListCmd() *cobra.Command {
-	return &cobra.Command{
+	var format string
+	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List all servers",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -123,6 +124,38 @@ func newServerListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
+			if format == "json" {
+				type serverJSON struct {
+					ID         int64  `json:"id"`
+					Protocol   string `json:"protocol"`
+					Host       string `json:"host"`
+					User       string `json:"user"`
+					Port       int    `json:"port"`
+					Gateway    string `json:"gateway"`
+					Locale     string `json:"locale"`
+					DeviceType string `json:"device_type"`
+					Note       string `json:"note"`
+				}
+				out := make([]serverJSON, 0, len(servers))
+				for _, s := range servers {
+					gw := ""
+					if s.GatewayID != nil {
+						r, _ := database.Gateways.GetByID(ctx, *s.GatewayID)
+						if r != nil {
+							gw = r.Name
+						}
+					}
+					out = append(out, serverJSON{
+						ID: s.ID, Protocol: string(s.Protocol),
+						Host: s.Host, User: s.User, Port: s.Port,
+						Gateway: gw, Locale: s.Locale,
+						DeviceType: string(s.DeviceType), Note: s.Note,
+					})
+				}
+				return printJSON(out)
+			}
+
 			if len(servers) == 0 {
 				fmt.Println("No servers registered.")
 				return nil
@@ -149,6 +182,8 @@ func newServerListCmd() *cobra.Command {
 			return w.Flush()
 		},
 	}
+	cmd.Flags().StringVar(&format, "format", "table", "output format: table|json")
+	return cmd
 }
 
 func newServerShowCmd() *cobra.Command {

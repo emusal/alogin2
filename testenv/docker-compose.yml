@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  bastion:
+    build:
+      context: ./docker/ubuntu
+      args:
+        BASE_IMAGE: ubuntu:22.04
+    container_name: alogin_bastion
+    hostname: bastion
+    ports:
+      - "2222:22"
+    networks:
+      - front_net
+      - back_net
+    restart: always
+
+  target-ubuntu:
+    build:
+      context: ./docker/ubuntu
+      args:
+        BASE_IMAGE: ubuntu:24.04
+    container_name: alogin_target_ubuntu
+    hostname: target-ubuntu
+    networks:
+      - back_net
+    restart: always
+
+  target-alpine:
+    build:
+      context: ./docker/alpine
+    container_name: alogin_target_alpine
+    hostname: target-alpine
+    networks:
+      - back_net
+    restart: always
+
+  target-centos7:
+    platform: linux/amd64
+    build:
+      context: ./docker/centos7
+    container_name: alogin_target_centos7
+    hostname: target-centos7
+    networks:
+      - back_net
+    restart: always
+
+  target-centos6:
+    platform: linux/amd64
+    build:
+      context: ./docker/centos6
+    container_name: alogin_target_centos6
+    hostname: target-centos6
+    networks:
+      - back_net
+    restart: always
+
+  target-legacy-rsa:
+    build:
+      context: ./docker/legacy-rsa
+    container_name: alogin_target_legacy_rsa
+    hostname: target-legacy-rsa
+    networks:
+      - back_net
+    restart: always
+
+networks:
+  front_net:
+  back_net:
+    internal: true

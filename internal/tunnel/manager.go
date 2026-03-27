@@ -17,14 +17,14 @@ func IsRunning(name string) bool {
 	return exec.Command("tmux", "has-session", "-t", SessionName(name)).Run() == nil
 }
 
-// Start spawns `{binPath} tunnel run {name}` in a detached tmux session.
+// Start spawns `{binPath} net tunnel run {name}` in a detached tmux session.
 // binPath should be the path to the current alogin binary (os.Executable()).
 func Start(name, binPath string) error {
 	if IsRunning(name) {
 		return fmt.Errorf("tunnel %q is already running", name)
 	}
 	sess := SessionName(name)
-	cmd := exec.Command("tmux", "new-session", "-d", "-s", sess, binPath, "tunnel", "run", name)
+	cmd := exec.Command("tmux", "new-session", "-d", "-s", sess, binPath, "net", "tunnel", "run", name)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {

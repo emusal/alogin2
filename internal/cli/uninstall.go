@@ -18,6 +18,9 @@ func newUninstallCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "uninstall",
 		Short: "Remove alogin binary, completions, and config",
+		Annotations: map[string]string{
+			skipDBAnnotation: "true",
+		},
 		Long: `Remove the alogin binary, shell completions, and configuration directory.
 
 By default the database and vault (~/.local/share/alogin/) are preserved so

@@ -27,6 +27,9 @@ func newUpgradeCmd() *cobra.Command {
 The current binary is replaced in-place. Data, config, and vault are not affected.
 
 If alogin was installed via Homebrew, use 'brew upgrade alogin' instead.`,
+		Annotations: map[string]string{
+			skipDBAnnotation: "true",
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runUpgrade(yes)
 		},

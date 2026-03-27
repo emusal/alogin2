@@ -45,14 +45,37 @@ func newAliasAddCmd() *cobra.Command {
 }
 
 func newAliasListCmd() *cobra.Command {
-	return &cobra.Command{
-		Use: "list",
+	var format string
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List all aliases",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			aliases, err := database.Aliases.ListAll(ctx)
 			if err != nil {
 				return err
 			}
+
+			if format == "json" {
+				type aliasJSON struct {
+					Name   string `json:"name"`
+					Target string `json:"target"`
+				}
+				out := make([]aliasJSON, 0, len(aliases))
+				for _, a := range aliases {
+					srv, _ := database.Servers.GetByID(ctx, a.ServerID)
+					target := fmt.Sprintf("id=%d", a.ServerID)
+					if srv != nil {
+						target = srv.User + "@" + srv.Host
+						if a.User != "" {
+							target = a.User + "@" + srv.Host
+						}
+					}
+					out = append(out, aliasJSON{Name: a.Name, Target: target})
+				}
+				return printJSON(out)
+			}
+
 			if len(aliases) == 0 {
 				fmt.Println("No aliases.")
 				return nil
@@ -73,6 +96,8 @@ func newAliasListCmd() *cobra.Command {
 			return w.Flush()
 		},
 	}
+	cmd.Flags().StringVar(&format, "format", "table", "output format: table|json")
+	return cmd
 }
 
 func newAliasShowCmd() *cobra.Command {

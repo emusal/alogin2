@@ -19,6 +19,7 @@ type HostEntry struct {
 	User     string
 	Password string
 	Hops     []HopEntry // gateway chain (may be empty for direct)
+	UseGW    bool       // whether to force auto-gw flag for child processes
 }
 
 // Manager opens cluster sessions using the configured mode.
@@ -60,8 +61,8 @@ func (m *Manager) Open(ctx context.Context, clusterName string, hosts []HostEntr
 // When binPath is empty (fallback), it builds a plain ssh command.
 func buildConnCmd(binPath string, h HostEntry) string {
 	if binPath != "" {
-		cmd := binPath + " connect"
-		if len(h.Hops) > 0 {
+		cmd := binPath + " access ssh"
+		if h.UseGW || len(h.Hops) > 0 {
 			cmd += " --auto-gw"
 		}
 		cmd += " " + h.User + "@" + h.Host

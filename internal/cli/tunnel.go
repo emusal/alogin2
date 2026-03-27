@@ -48,7 +48,8 @@ Examples:
 }
 
 func newTunnelListCmd() *cobra.Command {
-	return &cobra.Command{
+	var format string
+	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List tunnel configurations",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -57,6 +58,39 @@ func newTunnelListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
+			if format == "json" {
+				type tunnelJSON struct {
+					ID         int64  `json:"id"`
+					Name       string `json:"name"`
+					Server     string `json:"server"`
+					Direction  string `json:"direction"`
+					LocalHost  string `json:"local_host"`
+					LocalPort  int    `json:"local_port"`
+					RemoteHost string `json:"remote_host"`
+					RemotePort int    `json:"remote_port"`
+					AutoGW     bool   `json:"auto_gw"`
+					Running    bool   `json:"running"`
+				}
+				out := make([]tunnelJSON, 0, len(tunnels))
+				for _, t := range tunnels {
+					srv, _ := database.Servers.GetByID(ctx, t.ServerID)
+					srvHost := fmt.Sprintf("id=%d", t.ServerID)
+					if srv != nil {
+						srvHost = srv.Host
+					}
+					out = append(out, tunnelJSON{
+						ID: t.ID, Name: t.Name, Server: srvHost,
+						Direction:  string(t.Direction),
+						LocalHost:  t.LocalHost, LocalPort: t.LocalPort,
+						RemoteHost: t.RemoteHost, RemotePort: t.RemotePort,
+						AutoGW:  t.AutoGW,
+						Running: tunnel.IsRunning(t.Name),
+					})
+				}
+				return printJSON(out)
+			}
+
 			if len(tunnels) == 0 {
 				fmt.Println("No tunnels configured. Use 'alogin tunnel add' to create one.")
 				return nil
@@ -83,6 +117,8 @@ func newTunnelListCmd() *cobra.Command {
 			return w.Flush()
 		},
 	}
+	cmd.Flags().StringVar(&format, "format", "table", "output format: table|json")
+	return cmd
 }
 
 func newTunnelAddCmd() *cobra.Command {
