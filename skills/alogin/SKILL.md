@@ -1,73 +1,124 @@
 ---
 name: alogin
-description: Securely access SSH servers, run remote commands, inspect node health, and manage persistent SSH tunnels via the alogin MCP server. Use when you need to connect to servers, run commands on remote hosts, check disk/CPU/memory, manage clusters, or control SSH tunnels.
+description: Securely access SSH servers, run remote commands, and manage clusters via alogin. Use this skill to query server infrastructure, inspect node health, and execute remote commands safely without handling SSH keys or ProxyJumps manually.
 license: Apache-2.0
-compatibility: Requires the `alogin` MCP server connected via stdio. Available via Smithery.
-metadata:
-  author: emusal
-  version: '2.2.0'
-  homepage: https://github.com/emusal/alogin2
-  mcp-transport: stdio
+metadata: { "openclaw": { "requires": { "bins": ["alogin"] }, "homepage": "https://github.com/emusal/alogin2" } }
 ---
 
-# alogin — Agentic SSH Gateway (MCP Tools)
+# alogin
 
-This skill provides instructions on how to orchestrate the **`alogin` MCP tools** exposed over a `stdio` connection. 
-Because the `alogin` MCP server automatically handles SSH routing, ProxyJumps, and credential injection, **you do not need to use CLI commands (like `ssh`, `bash`, or `curl`) directly on your local machine.** Instead, you MUST exclusively use the provided MCP tools to manage remote infrastructure securely.
+The secure gateway for Agentic AI and System Administrators.
 
-## Core Workflow (Plan-Validate-Execute)
+Use `alogin --help` and `<command> --help` for flags, arguments, and full examples.
+This skill focuses on concepts and canonical workflows.
 
-Always follow this validation loop when interacting with infrastructure:
-1. **DISCOVER** — Use the `list_servers` or `list_clusters` MCP tools to find the target IDs of your remote hosts.
-2. **INSPECT (Validate)** — Call the `inspect_node` tool to understand the server's current state (CPU, memory, disk, background processes) BEFORE attempting any state changes.
-3. **ACT (Execute)** — Call `exec_command` or `exec_on_cluster`. You MUST specify a descriptive `intent` parameter explaining why you are taking this action for the audit log.
-4. **VERIFY** — Re-run a read-only command or `inspect_node` to verify your changes succeeded without unintended side-effects.
+## Quick Start
 
-## Available MCP Tools Overview
+```bash
+# 1. Install
+curl -fsSL https://raw.githubusercontent.com/emusal/alogin2/main/install.sh | sh
 
-### Query tools (read-only)
-- `list_servers`: Find servers by host, user, or note.
-- `get_server`: Get full details (gateway routes, device types) for one server.
-- `list_clusters`: See all cluster groups.
-- `get_cluster`: Get all member servers of a cluster.
-- `list_tunnels`: Check all SSH tunnel statuses.
-- `get_tunnel`: Get details for a specific tunnel.
-- `inspect_node`: Get CPU load, memory, disk, top processes — **always run before writes**.
+# 2. Add a server to the encrypted registry
+alogin compute add --host 10.0.0.10 --user admin
 
-### Execution tools (write)
-- `exec_command`: Run commands on a single server. Use standard Linux commands unless the device type is restricted.
-- `exec_on_cluster`: Run commands on all cluster members in parallel.
+# 3. Connect instantly
+alogin access ssh 10.0.0.10
 
-### Tunnel lifecycle tools
-- `start_tunnel`: Start a saved tunnel in a detached background session.
-- `stop_tunnel`: Stop a running tunnel.
+# 4. Run a command and exit
+alogin access ssh 10.0.0.10 --cmd "df -h"
 
-## Safety Rules & Gotchas
+# 5. List all servers in JSON for parsing
+alogin compute list --format json
+```
 
-### Gotchas
-- **Non-Linux devices**: If the server's `device_type` is `router`, `switch`, or `firewall`, do not assume standard POSIX commands (like `bash` or `df -h`) will work. Use network-specific syntax via `exec_command`.
-- **Duplicate Tunnels**: Always check `list_tunnels` before calling `start_tunnel` to avoid conflicts on local ports.
-- **Audit Logging**: Every write and inspect call is strictly recorded by the MCP server along with your `intent`. Do not omit reasoning.
+## Core Concepts
 
-### Safety Checklist
-- [ ] Did I call `inspect_node` before changing state?
-- [ ] Is my `intent` string detailed enough to explain **why** this action was taken?
-- [ ] Did I check for potentially destructive commands (`rm -rf`, `shutdown`, `reboot`, `DROP TABLE`)? Do **not** run these without explicit user confirmation.
+### [Compute (Server Registry)](https://github.com/emusal/alogin2#compute--server-registry)
 
-## Example Procedures
+The registry stores server metadata and credentials in an encrypted vault (macOS Keychain, Linux Secret Service, or `age`).
+Canonical flow:
 
-### 1. Check disk usage across a cluster
-1. Call the `list_clusters` tool to find the target cluster ID.
-2. Call `get_cluster(id)` to review its members and verify they are standard Linux hosts.
-3. Call `exec_on_cluster(id, ["df -h"], intent="disk pre-flight check")`.
-4. Parse the tabular output to ensure no node is at 100% capacity.
+```bash
+alogin compute list
+alogin compute add --host prod-db --user dbadmin --note "Primary DB"
+alogin compute show prod-db
+alogin compute passwd prod-db    # Update vault password
+```
 
-### 2. Manage a persistent SSH tunnel
-1. Call `list_tunnels` to verify if the tunnel is already running.
-2. If inactive, call `start_tunnel(id)`.
-3. Use the local port-forwarding for your task.
-4. Once completed, always call `stop_tunnel(id)` to clean up resources.
+### [Access (Remote Connectivity)](https://github.com/emusal/alogin2#access--remote-connectivity)
 
-## Smithery & MCP Configuration Note
+Access handles SSH, SFTP, and Cluster sessions. It automatically injects credentials and handles multi-hop ProxyJumps.
+Canonical flows:
 
-If deployed via **Smithery**, the MCP server is initialized automatically using the `stdio` transport. The tools listed above will be seamlessly injected into the LLM context. No local command-line installation (e.g., `brew` or `curl`) is required by the agent. If manual configuration in a client (like Claude Desktop) is needed, ensure the transport is set to `stdio` executing the `alogin agent mcp` command.
+```bash
+# Simple SSH
+alogin access ssh user@host
+
+# Parallel Cluster execution
+alogin access cluster add web-cluster 10.0.1.1 10.0.1.2
+alogin access cluster web-cluster --cmd "uptime"
+
+# Mounting remote FS
+alogin access mount user@host:/var/log ~/mnt/logs
+```
+
+### [Auth (Gateway & Routing)](https://github.com/emusal/alogin2#multi-hop-gateway-routing)
+
+Define multi-hop jump paths once, then use them for any server.
+Mental model:
+- A gateway is a sequence of hops.
+- A server is assigned a gateway for automatic routing.
+
+Canonical flow:
+
+```bash
+# 1. Register hops
+alogin compute add --host bastion.ext.com
+alogin compute add --host internal-jump --gateway bastion.ext.com
+
+# 2. Define a named gateway route
+alogin auth gateway add secure-zone bastion.ext.com internal-jump
+
+# 3. Route a target server via the gateway
+alogin compute add --host prod-sql --gateway secure-zone
+alogin access ssh prod-sql --auto-gw
+```
+
+### [Net (Tunnels & DNS)](https://github.com/emusal/alogin2#connection--tunnels)
+
+Manage persistent SSH port-forwards in detached `tmux` sessions and local DNS overrides.
+Canonical flow:
+
+```bash
+# Register a persistent tunnel
+alogin net tunnel add db-proxy --server prod-db --local-port 5432 --remote-port 5432
+
+# Lifecycle management
+alogin net tunnel start db-proxy
+alogin net tunnel status db-proxy
+alogin net tunnel stop db-proxy
+```
+
+### [Agent (MCP & AI)](https://github.com/emusal/alogin2#ai-agent-integration-mcp)
+
+Commands for configuring alogin as an MCP (Model Context Protocol) server for LLMs like Claude or ChatGPT.
+Canonical flow:
+
+```bash
+# Setup MCP config for Claude Desktop
+alogin agent setup
+
+# Start the MCP server (called by the AI client)
+alogin agent mcp
+
+# Audit tool calls
+alogin agent audit list --since 1h
+```
+
+### Piped Output
+
+When output is piped or `--format json` is used, `alogin` emits machine-readable data:
+
+```bash
+alogin compute list --format json | jq '.[].host'
+```
