@@ -355,11 +355,33 @@ _alogin() {
           agent_subcmds=(
             'mcp:Run alogin as an MCP server over stdio'
             'setup:Print MCP config and system prompt for AI clients'
-            'policy:HITL/RBAC policy management (Phase 2)'
+            'policy:Manage HITL/RBAC safety policies'
+            'audit:Query the MCP execution audit log'
+            'approve:Approve a pending HITL request'
+            'deny:Deny a pending HITL request'
+            'pending:List pending HITL approval requests'
+            'server-policy:Manage per-server policy overrides'
+            'server-prompt:Manage per-server LLM system prompt overrides'
           )
-          _arguments -C '1: :->sub'
+          _arguments -C '1: :->sub' '*:: :->sub_args'
           case $state in
             sub) _describe 'subcommand' agent_subcmds ;;
+            sub_args)
+              case $words[1] in
+                policy)
+                  local -a policy_subcmds
+                  policy_subcmds=('show:Print active policy' 'validate:Validate policy file')
+                  _describe 'subcommand' policy_subcmds ;;
+                audit)
+                  local -a audit_subcmds
+                  audit_subcmds=('list:List recent audit events' 'tail:Stream new audit events')
+                  _describe 'subcommand' audit_subcmds ;;
+                server-policy|server-prompt)
+                  local -a sp_subcmds
+                  sp_subcmds=('set:Set value' 'show:Show value' 'clear:Clear value')
+                  _describe 'subcommand' sp_subcmds ;;
+              esac
+              ;;
           esac
           ;;
 
@@ -566,7 +588,29 @@ _alogin_completion() {
     # ── agent ───────────────────────────────────────────────────────────────
     agent)
       if [[ $cword -eq 2 ]]; then
-        COMPREPLY=($(compgen -W "mcp setup policy" -- "$cur"))
+        COMPREPLY=($(compgen -W "mcp setup policy audit approve deny pending server-policy server-prompt" -- "$cur"))
+      elif [[ $cword -ge 3 ]]; then
+        case "$sub" in
+          policy)
+            if [[ $cword -eq 3 ]]; then
+              COMPREPLY=($(compgen -W "show validate" -- "$cur"))
+            fi
+            ;;
+          audit)
+            if [[ $cword -eq 3 ]]; then
+              COMPREPLY=($(compgen -W "list tail" -- "$cur"))
+            elif [[ $cword -ge 4 ]]; then
+              case "$sub2" in
+                list) COMPREPLY=($(compgen -W "--agent --server --event --since --limit --json" -- "$cur")) ;;
+              esac
+            fi
+            ;;
+          server-policy|server-prompt)
+            if [[ $cword -eq 3 ]]; then
+              COMPREPLY=($(compgen -W "set show clear" -- "$cur"))
+            fi
+            ;;
+        esac
       fi
       ;;
 

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/emusal/alogin2/internal/mcp"
+	"github.com/emusal/alogin2/internal/policy"
 	"github.com/spf13/cobra"
 )
 
@@ -14,17 +15,29 @@ import (
 func newAgentCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "agent",
-		Short: "AI agent tools: MCP server, setup guide, and policy management",
+		Short: "AI agent tools: MCP server, setup guide, and safety policy management",
 		Long: `Tools for integrating alogin with AI agents (LLMs).
 
-  alogin agent mcp     — run as an MCP server over stdio (for Claude Desktop, etc.)
-  alogin agent setup   — print the MCP config and system prompt to copy into your AI client
-  alogin agent policy  — manage HITL/RBAC safety policies (Phase 2)`,
+  alogin agent mcp            — run as an MCP server over stdio (for Claude Desktop, etc.)
+  alogin agent setup          — print the MCP config and system prompt to copy into your AI client
+  alogin agent policy         — manage global HITL/RBAC safety policies (show, validate)
+  alogin agent audit          — query the structured MCP execution audit log
+  alogin agent approve        — approve a pending HITL request
+  alogin agent deny           — deny a pending HITL request
+  alogin agent pending        — list pending HITL approval requests
+  alogin agent server-policy  — manage per-server policy overrides (set/show/clear)
+  alogin agent server-prompt  — manage per-server LLM system prompt overrides (set/show/clear)`,
 	}
 	cmd.AddCommand(
 		newAgentMCPCmd(),
 		newAgentSetupCmd(),
 		newAgentPolicyCmd(),
+		newAgentAuditCmd(),
+		newAgentApproveCmd(),
+		newAgentDenyCmd(),
+		newAgentPendingCmd(),
+		newAgentServerPolicyCmd(),
+		newAgentServerPromptCmd(),
 	)
 	return cmd
 }
@@ -64,11 +77,25 @@ Available tools:
 				}
 			}
 
+			var policyEngine *policy.Engine
+			configDir := ""
+			if cfg != nil {
+				configDir = cfg.ConfigDir
+				policyPath := filepath.Join(cfg.ConfigDir, "agent-policy.yaml")
+				if pe, err := policy.LoadFile(policyPath); err != nil {
+					fmt.Fprintf(os.Stderr, "warning: failed to load agent policy: %v\n", err)
+				} else {
+					policyEngine = pe
+				}
+			}
+
 			return mcp.Serve(mcp.Deps{
-				DB:       database,
-				Vault:    vlt,
-				BinPath:  binPath,
-				AuditLog: auditLog,
+				DB:        database,
+				Vault:     vlt,
+				BinPath:   binPath,
+				AuditLog:  auditLog,
+				Policy:    policyEngine,
+				ConfigDir: configDir,
 			})
 		},
 	}
@@ -126,6 +153,19 @@ Available MCP tools (12):
 Audit log: %s
   All exec_command, exec_on_cluster, inspect_node, and log_analyzer calls are logged here in JSONL format.
   Fields: timestamp, event, agent_id, server/cluster info, commands, intent.
+  Query: alogin agent audit list [--agent <id>] [--server <id>] [--since 1h] [--json]
+
+Safety policy (optional): ~/.config/alogin/agent-policy.yaml
+  YAML file that controls what commands agents can run without human approval.
+  Supports: command regex rules, agent-id globs, server/cluster scoping, time windows.
+  Actions per rule: allow | deny | require_approval (HITL)
+  Guide: docs/agent-policy.md   — full syntax reference with examples
+  $ alogin agent policy show       — print active policy
+  $ alogin agent policy validate   — check for syntax errors
+
+Per-server overrides:
+  $ alogin agent server-policy set <server-id> --file policy.yaml
+  $ alogin agent server-prompt set <server-id> --text "Only run read-only commands on this host."
 
 LLM system prompt guide: docs/SYSTEM_PROMPT.md
   Copy the recommended snippet into your AI client's system prompt for safe agentic usage.
@@ -138,23 +178,69 @@ Ready-to-use config file: docs/mcp-config.json
 	}
 }
 
-// newAgentPolicyCmd is a Phase 2 stub for HITL/RBAC policy management.
+// newAgentPolicyCmd manages HITL/RBAC safety policies.
 func newAgentPolicyCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "policy",
-		Short: "HITL/RBAC policy management (Phase 2)",
-		Annotations: map[string]string{
-			skipDBAnnotation: "true",
-		},
+		Short: "Manage HITL/RBAC safety policies",
+		Long: `Manage the agent safety policy file (~/.config/alogin/agent-policy.yaml).
+
+  alogin agent policy show      — print the active policy file
+  alogin agent policy validate  — validate the policy file for syntax errors`,
+		Annotations: map[string]string{skipDBAnnotation: "true"},
+	}
+	cmd.AddCommand(newAgentPolicyShowCmd(), newAgentPolicyValidateCmd())
+	return cmd
+}
+
+func newAgentPolicyShowCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "show",
+		Short: "Print the active agent-policy.yaml",
+		Annotations: map[string]string{skipDBAnnotation: "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println("agent policy: not yet implemented (Phase 2)")
-			fmt.Println("")
-			fmt.Println("Planned features:")
-			fmt.Println("  - Command whitelists/blacklists per agent-id")
-			fmt.Println("  - Time-of-day access restrictions")
-			fmt.Println("  - Host group targeting policies")
-			fmt.Println("  - Human-in-the-loop (HITL) approval prompts for destructive commands")
+			path := policyFilePath()
+			data, err := os.ReadFile(path)
+			if os.IsNotExist(err) {
+				fmt.Printf("No policy file found at %s\n", path)
+				fmt.Println("Built-in destructive-command patterns are active by default.")
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			fmt.Printf("# %s\n\n", path)
+			fmt.Print(string(data))
 			return nil
 		},
 	}
+}
+
+func newAgentPolicyValidateCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "validate",
+		Short: "Validate agent-policy.yaml for syntax and pattern errors",
+		Annotations: map[string]string{skipDBAnnotation: "true"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path := policyFilePath()
+			engine, err := policy.LoadFile(path)
+			if os.IsNotExist(err) || (err == nil && engine == nil) {
+				fmt.Printf("No policy file at %s — nothing to validate.\n", path)
+				return nil
+			}
+			if err != nil {
+				return fmt.Errorf("policy invalid: %w", err)
+			}
+			fmt.Printf("Policy is valid: %s\n", path)
+			return nil
+		},
+	}
+}
+
+func policyFilePath() string {
+	if cfg != nil {
+		return filepath.Join(cfg.ConfigDir, "agent-policy.yaml")
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".config", "alogin", "agent-policy.yaml")
 }

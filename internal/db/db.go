@@ -15,7 +15,7 @@ var schemaSQL string
 
 // CurrentSchemaVersion is the schema version this binary expects.
 // Increment when adding a new migration.
-const CurrentSchemaVersion = 6
+const CurrentSchemaVersion = 8
 
 // migrationDescriptions maps each migration version to a human-readable summary.
 var migrationDescriptions = map[int]string{
@@ -24,6 +24,8 @@ var migrationDescriptions = map[int]string{
 	4: "local_hosts table (custom hostname → IP mapping)",
 	5: "tunnels table (persistent SSH port-forward tunnels)",
 	6: "servers.device_type, servers.note columns (device classification, notes for AI context)",
+	7: "audit_log table for structured MCP exec records",
+	8: "servers.policy_yaml, servers.system_prompt columns (per-server policy and LLM prompt override)",
 }
 
 // MigrationDescription returns a human-readable description for a schema version.
@@ -42,6 +44,7 @@ type DB struct {
 	Themes   ThemeRepo
 	Hosts    HostRepo
 	Tunnels  TunnelRepo
+	AuditLog AuditRepo
 
 	// AppliedMigrations holds the schema versions that were actually applied
 	// during this Open() call (i.e. were pending before the call).
@@ -77,6 +80,7 @@ func Open(path string) (*DB, error) {
 	db.Themes = &themeRepo{db: sqlDB}
 	db.Hosts = &hostRepo{db: sqlDB}
 	db.Tunnels = &tunnelRepo{db: sqlDB}
+	db.AuditLog = &auditRepo{db: sqlDB}
 	return db, nil
 }
 
@@ -274,6 +278,56 @@ func applyMigrations(db *sql.DB) ([]int, error) {
 		}
 		_, _ = db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version) VALUES (6)`)
 		applied = append(applied, 6)
+	}
+
+	if version < 7 {
+		_, err := db.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS audit_log (
+				id            INTEGER PRIMARY KEY AUTOINCREMENT,
+				timestamp     TEXT    NOT NULL,
+				event         TEXT    NOT NULL,
+				agent_id      TEXT    NOT NULL DEFAULT '',
+				server_id     INTEGER REFERENCES servers(id) ON DELETE SET NULL,
+				server_host   TEXT    NOT NULL DEFAULT '',
+				cluster_id    INTEGER REFERENCES clusters(id) ON DELETE SET NULL,
+				cluster_name  TEXT    NOT NULL DEFAULT '',
+				commands      TEXT    NOT NULL DEFAULT '[]',
+				intent        TEXT    NOT NULL DEFAULT '',
+				timeout_sec   INTEGER NOT NULL DEFAULT 0,
+				policy_action TEXT,
+				approved_by   TEXT,
+				created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+			)
+		`)
+		if err != nil && !strings.Contains(err.Error(), "already exists") {
+			return applied, fmt.Errorf("migration v7: %w", err)
+		}
+		for _, idx := range []string{
+			`CREATE INDEX IF NOT EXISTS idx_audit_log_agent_id   ON audit_log(agent_id)`,
+			`CREATE INDEX IF NOT EXISTS idx_audit_log_server_id  ON audit_log(server_id)`,
+			`CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at)`,
+		} {
+			if _, err := db.ExecContext(ctx, idx); err != nil && !strings.Contains(err.Error(), "already exists") {
+				return applied, fmt.Errorf("migration v7 index: %w", err)
+			}
+		}
+		_, _ = db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version) VALUES (7)`)
+		applied = append(applied, 7)
+	}
+
+	if version < 8 || !columnExists(db, ctx, "servers", "policy_yaml") {
+		for _, col := range []struct{ name, def string }{
+			{"policy_yaml", "TEXT"},
+			{"system_prompt", "TEXT"},
+		} {
+			_, err := db.ExecContext(ctx,
+				`ALTER TABLE servers ADD COLUMN `+col.name+` `+col.def)
+			if err != nil && !strings.Contains(err.Error(), "duplicate column") {
+				return applied, fmt.Errorf("migration v8 (%s): %w", col.name, err)
+			}
+		}
+		_, _ = db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version) VALUES (8)`)
+		applied = append(applied, 8)
 	}
 
 	return applied, nil

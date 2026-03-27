@@ -12,32 +12,38 @@ import (
 
 	"github.com/emusal/alogin2/internal/db"
 	"github.com/emusal/alogin2/internal/model"
+	"github.com/emusal/alogin2/internal/policy"
 	"github.com/emusal/alogin2/internal/tunnel"
 	"github.com/emusal/alogin2/internal/vault"
+	"github.com/google/uuid"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
 
 // Deps holds dependencies for all MCP tool handlers.
 type Deps struct {
-	DB       *db.DB
-	Vault    vault.Vault
-	BinPath  string    // path to the alogin binary (for tunnel start)
-	AuditLog io.Writer // nil = disabled; typically an *os.File opened in append mode
+	DB        *db.DB
+	Vault     vault.Vault
+	BinPath   string    // path to the alogin binary (for tunnel start)
+	AuditLog  io.Writer // nil = disabled; typically an *os.File opened in append mode
+	Policy    *policy.Engine // nil = allow-all with built-in destructive-command check only
+	ConfigDir string         // base config dir for HITL file paths
 }
 
 // auditEvent is one line in the JSONL audit log.
 type auditEvent struct {
-	Timestamp   string   `json:"timestamp"`
-	Event       string   `json:"event"`
-	AgentID     string   `json:"agent_id,omitempty"`
-	ServerID    int64    `json:"server_id,omitempty"`
-	ServerHost  string   `json:"server_host,omitempty"`
-	ClusterID   int64    `json:"cluster_id,omitempty"`
-	ClusterName string   `json:"cluster_name,omitempty"`
-	Commands    []string `json:"commands"`
-	Intent      string   `json:"intent,omitempty"`
-	TimeoutSec  int      `json:"timeout_sec,omitempty"`
+	Timestamp    string   `json:"timestamp"`
+	Event        string   `json:"event"`
+	AgentID      string   `json:"agent_id,omitempty"`
+	ServerID     int64    `json:"server_id,omitempty"`
+	ServerHost   string   `json:"server_host,omitempty"`
+	ClusterID    int64    `json:"cluster_id,omitempty"`
+	ClusterName  string   `json:"cluster_name,omitempty"`
+	Commands     []string `json:"commands"`
+	Intent       string   `json:"intent,omitempty"`
+	TimeoutSec   int      `json:"timeout_sec,omitempty"`
+	PolicyAction string   `json:"policy_action,omitempty"` // "allow", "deny", "require_approval"
+	ApprovedBy   string   `json:"approved_by,omitempty"`   // HITL token if approved
 }
 
 // writeAudit appends ev as a JSON line to w. Best-effort: errors are silently ignored.
@@ -52,6 +58,108 @@ func writeAudit(w io.Writer, ev auditEvent) {
 	}
 	data = append(data, '\n')
 	_, _ = w.Write(data)
+}
+
+// writeAuditDB persists ev to the DB audit_log table. Best-effort: errors are silently ignored.
+func writeAuditDB(ctx context.Context, d Deps, ev auditEvent) {
+	if d.DB == nil || d.DB.AuditLog == nil {
+		return
+	}
+	entry := db.AuditEntry{
+		Timestamp:    ev.Timestamp,
+		Event:        ev.Event,
+		AgentID:      ev.AgentID,
+		ServerHost:   ev.ServerHost,
+		ClusterName:  ev.ClusterName,
+		Commands:     ev.Commands,
+		Intent:       ev.Intent,
+		TimeoutSec:   ev.TimeoutSec,
+		PolicyAction: ev.PolicyAction,
+		ApprovedBy:   ev.ApprovedBy,
+	}
+	if ev.ServerID != 0 {
+		v := ev.ServerID
+		entry.ServerID = &v
+	}
+	if ev.ClusterID != 0 {
+		v := ev.ClusterID
+		entry.ClusterID = &v
+	}
+	_, _ = d.DB.AuditLog.Insert(ctx, entry)
+}
+
+// evalPolicy evaluates a policy check request against the given engine and returns
+// the CheckResult. eng may differ from d.Policy when a per-server override is active.
+// Built-in destructive patterns are always enforced as a safety floor. A named rule
+// that explicitly matches overrides the floor (the rule author is aware of what they
+// are allowing/denying); the default_action alone does not override it.
+func evalPolicy(eng *policy.Engine, req policy.CheckRequest) policy.CheckResult {
+	if eng != nil {
+		result := eng.Check(req)
+		// A named rule matched — the policy author explicitly handled this command.
+		if result.RuleName != "" {
+			return result
+		}
+		// No rule matched; default_action applied. Still enforce built-in floor.
+		if policy.IsDestructive(req.Commands) {
+			return policy.CheckResult{Action: "require_approval", RuleName: "built-in destructive patterns"}
+		}
+		return result
+	}
+	if policy.IsDestructive(req.Commands) {
+		return policy.CheckResult{Action: "require_approval", RuleName: "built-in destructive patterns"}
+	}
+	return policy.CheckResult{Action: "allow"}
+}
+
+// applyPolicyResult enforces a pre-computed CheckResult (HITL wait, deny, or allow).
+// Returns a non-nil *CallToolResult if execution should be blocked; nil means proceed.
+func applyPolicyResult(ctx context.Context, d Deps, eng *policy.Engine, result policy.CheckResult, req policy.CheckRequest) *mcpgo.CallToolResult {
+	switch result.Action {
+	case "deny":
+		msg := "policy denied"
+		if result.RuleName != "" {
+			msg += fmt.Sprintf(": rule %q", result.RuleName)
+		}
+		return toolError(msg)
+	case "require_approval":
+		if d.ConfigDir == "" {
+			return toolError("HITL required but ConfigDir not set")
+		}
+		token := uuid.New().String()
+		pending := policy.PendingRequest{
+			Token:     token,
+			AgentID:   req.AgentID,
+			ServerID:  req.ServerID,
+			ClusterID: req.ClusterID,
+			Commands:  req.Commands,
+			CreatedAt: time.Now(),
+		}
+		timeout := hitlTimeout(eng)
+		outcome, err := policy.RequestApproval(ctx, d.ConfigDir, pending, timeout)
+		if err != nil {
+			return toolError(fmt.Sprintf("HITL error: %v", err))
+		}
+		if outcome != policy.OutcomeApproved {
+			return toolError(fmt.Sprintf("HITL: %s (token: %s)", outcome, token))
+		}
+		return nil // approved — proceed
+	default:
+		return nil // "allow"
+	}
+}
+
+// checkPolicy is a convenience wrapper: evaluates then applies in one call.
+// eng is the effective engine for the target server (may differ from d.Policy).
+func checkPolicy(ctx context.Context, d Deps, eng *policy.Engine, req policy.CheckRequest) *mcpgo.CallToolResult {
+	return applyPolicyResult(ctx, d, eng, evalPolicy(eng, req), req)
+}
+
+func hitlTimeout(eng *policy.Engine) time.Duration {
+	if eng != nil {
+		return eng.HITLTimeout()
+	}
+	return 120 * time.Second
 }
 
 // RegisterTools registers all 10 MCP tools on srv.
@@ -263,13 +371,14 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 		agentID, _ := args["agent_id"].(string)
 		intent, _ := args["intent"].(string)
 
-		// Resolve server host for the audit log.
+		// Fetch server — needed for audit log, per-server policy, and system_prompt.
+		srv, _ := d.DB.Servers.GetByID(ctx, id)
 		srvHost := ""
-		if s, _ := d.DB.Servers.GetByID(ctx, id); s != nil {
-			srvHost = s.Host
+		if srv != nil {
+			srvHost = srv.Host
 		}
 
-		writeAudit(d.AuditLog, auditEvent{
+		ev := auditEvent{
 			Event:      "exec_command",
 			AgentID:    agentID,
 			ServerID:   id,
@@ -277,7 +386,26 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 			Commands:   commands,
 			Intent:     intent,
 			TimeoutSec: int(timeoutSec),
-		})
+		}
+		writeAudit(d.AuditLog, ev)
+		writeAuditDB(ctx, d, ev)
+
+		// Resolve per-server policy (falls back to global when PolicyYAML is empty).
+		srvPolicyYAML := ""
+		if srv != nil {
+			srvPolicyYAML = srv.PolicyYAML
+		}
+		eng, err := policy.ResolveFor(d.Policy, srvPolicyYAML)
+		if err != nil {
+			return toolError(fmt.Sprintf("per-server policy error: %v", err)), nil
+		}
+		if blocked := checkPolicy(ctx, d, eng, policy.CheckRequest{
+			AgentID:  agentID,
+			Commands: commands,
+			ServerID: id,
+		}); blocked != nil {
+			return blocked, nil
+		}
 
 		results, err := execOnServer(ctx, d.DB, d.Vault, ExecRequest{
 			ServerID:   id,
@@ -322,7 +450,7 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 			return toolError(fmt.Sprintf("cluster %d not found", clusterID)), nil
 		}
 
-		writeAudit(d.AuditLog, auditEvent{
+		clusterEv := auditEvent{
 			Event:       "exec_on_cluster",
 			AgentID:     agentID,
 			ClusterID:   c.ID,
@@ -330,7 +458,52 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 			Commands:    commands,
 			Intent:      intent,
 			TimeoutSec:  int(timeoutSec),
-		})
+		}
+		writeAudit(d.AuditLog, clusterEv)
+		writeAuditDB(ctx, d, clusterEv)
+
+		// Pre-fetch all member servers for per-server policy resolution and fan-out reuse.
+		type memberServer struct {
+			member model.ClusterMember
+			server *model.Server // may be nil if not found
+		}
+		memberSrvs := make([]memberServer, len(c.Members))
+		for i, m := range c.Members {
+			s, _ := d.DB.Servers.GetByID(ctx, m.ServerID)
+			memberSrvs[i] = memberServer{member: m, server: s}
+		}
+
+		// Strictest-member policy: deny > require_approval > allow.
+		// A single deny blocks; a single require_approval triggers HITL once.
+		strictnessRank := map[string]int{"allow": 0, "require_approval": 1, "deny": 2}
+		effectiveResult := policy.CheckResult{Action: "allow"}
+		for _, ms := range memberSrvs {
+			policyYAML := ""
+			if ms.server != nil {
+				policyYAML = ms.server.PolicyYAML
+			}
+			eng, err := policy.ResolveFor(d.Policy, policyYAML)
+			if err != nil {
+				return toolError(fmt.Sprintf("per-server policy error (server %d): %v",
+					ms.member.ServerID, err)), nil
+			}
+			result := evalPolicy(eng, policy.CheckRequest{
+				AgentID:   agentID,
+				Commands:  commands,
+				ServerID:  ms.member.ServerID,
+				ClusterID: c.ID,
+			})
+			if strictnessRank[result.Action] > strictnessRank[effectiveResult.Action] {
+				effectiveResult = result
+			}
+		}
+		if blocked := applyPolicyResult(ctx, d, d.Policy, effectiveResult, policy.CheckRequest{
+			AgentID:   agentID,
+			Commands:  commands,
+			ClusterID: c.ID,
+		}); blocked != nil {
+			return blocked, nil
+		}
 
 		type serverResult struct {
 			ServerID int64           `json:"server_id"`
@@ -339,21 +512,20 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 			Error    string          `json:"error,omitempty"`
 		}
 
-		results := make([]serverResult, len(c.Members))
+		results := make([]serverResult, len(memberSrvs))
 		var wg sync.WaitGroup
-		for i, m := range c.Members {
+		for i, ms := range memberSrvs {
 			wg.Add(1)
-			go func(idx int, member model.ClusterMember) {
+			go func(idx int, ms memberServer) {
 				defer wg.Done()
-				srv, _ := d.DB.Servers.GetByID(ctx, member.ServerID)
 				host := ""
-				if srv != nil {
-					host = srv.Host
+				if ms.server != nil {
+					host = ms.server.Host
 				}
-				results[idx] = serverResult{ServerID: member.ServerID, Host: host}
+				results[idx] = serverResult{ServerID: ms.member.ServerID, Host: host}
 
 				cmdResults, err := execOnServer(ctx, d.DB, d.Vault, ExecRequest{
-					ServerID:   member.ServerID,
+					ServerID:   ms.member.ServerID,
 					Commands:   commands,
 					Expect:     rules,
 					TimeoutSec: int(timeoutSec),
@@ -363,7 +535,7 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 				} else {
 					results[idx].Results = cmdResults
 				}
-			}(i, m)
+			}(i, ms)
 		}
 		wg.Wait()
 
@@ -404,7 +576,7 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 			"ps aux --sort=-%cpu 2>/dev/null | head -6 || ps aux | head -6",
 		}
 
-		writeAudit(d.AuditLog, auditEvent{
+		inspectEv := auditEvent{
 			Event:      "inspect_node",
 			AgentID:    agentID,
 			ServerID:   id,
@@ -412,7 +584,9 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 			Commands:   commands,
 			Intent:     intent,
 			TimeoutSec: int(timeoutSec),
-		})
+		}
+		writeAudit(d.AuditLog, inspectEv)
+		writeAuditDB(ctx, d, inspectEv)
 
 		results, err := execOnServer(ctx, d.DB, d.Vault, ExecRequest{
 			ServerID:   id,
@@ -513,15 +687,17 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 				lines, target, pattern, maxResults)
 		}
 
-		writeAudit(d.AuditLog, auditEvent{
+		logEv := auditEvent{
 			Event:      "log_analyzer",
 			AgentID:    agentID,
 			ServerID:   id,
 			ServerHost: host,
 			Commands:   []string{cmdStr},
 			Intent:     intent,
-			TimeoutSec: 30, // Default timeout
-		})
+			TimeoutSec: 30,
+		}
+		writeAudit(d.AuditLog, logEv)
+		writeAuditDB(ctx, d, logEv)
 
 		results, err := execOnServer(ctx, d.DB, d.Vault, ExecRequest{
 			ServerID:   id,

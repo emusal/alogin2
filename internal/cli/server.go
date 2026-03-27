@@ -187,7 +187,8 @@ func newServerListCmd() *cobra.Command {
 }
 
 func newServerShowCmd() *cobra.Command {
-	return &cobra.Command{
+	var format string
+	cmd := &cobra.Command{
 		Use:   "show [user@]host",
 		Short: "Show server details",
 		Args:  cobra.ExactArgs(1),
@@ -197,6 +198,28 @@ func newServerShowCmd() *cobra.Command {
 			srv, err := database.Servers.GetByHost(ctx, host, user)
 			if err != nil || srv == nil {
 				return fmt.Errorf("server %s not found", args[0])
+			}
+
+			if format == "json" {
+				gwName := ""
+				if srv.GatewayID != nil {
+					r, _ := database.Gateways.GetByID(ctx, *srv.GatewayID)
+					if r != nil {
+						gwName = r.Name
+					}
+				}
+				_, pwdErr := vlt.Get(vaultKey(srv))
+				hasPassword := pwdErr == nil
+				return printJSON(map[string]any{
+					"id": srv.ID, "protocol": string(srv.Protocol),
+					"host": srv.Host, "user": srv.User,
+					"port": srv.Port, "effective_port": srv.EffectivePort(),
+					"locale": srv.Locale, "gateway": gwName,
+					"device_type": string(srv.DeviceType), "note": srv.Note,
+					"has_password":  hasPassword,
+					"policy_yaml":   srv.PolicyYAML,
+					"system_prompt": srv.SystemPrompt,
+				})
 			}
 
 			fmt.Printf("ID:       %d\n", srv.ID)
@@ -232,9 +255,29 @@ func newServerShowCmd() *cobra.Command {
 			} else {
 				fmt.Printf("Password: (key auth)\n")
 			}
+
+			if srv.Note != "" {
+				fmt.Printf("Note:     %s\n", srv.Note)
+			}
+			if srv.PolicyYAML != "" {
+				fmt.Printf("Policy:   (set — use 'alogin agent server-policy show %d' to view)\n", srv.ID)
+			} else {
+				fmt.Printf("Policy:   (none — using global agent-policy.yaml)\n")
+			}
+			if srv.SystemPrompt != "" {
+				preview := srv.SystemPrompt
+				if len(preview) > 80 {
+					preview = preview[:77] + "..."
+				}
+				fmt.Printf("Prompt:   %s\n", preview)
+			} else {
+				fmt.Printf("Prompt:   (none)\n")
+			}
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&format, "format", "table", "output format: table|json")
+	return cmd
 }
 
 func newServerDeleteCmd() *cobra.Command {

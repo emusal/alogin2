@@ -1,0 +1,36 @@
+# smithery.yaml — alogin v2 MCP Server
+# https://smithery.ai/docs/build/project-config/smithery-yaml
+
+startCommand:
+  type: stdio
+
+configSchema:
+  type: object
+  properties:
+    vaultPassword:
+      type: string
+      description: "Master password for the alogin encrypted credential vault (leave empty if using macOS Keychain or SSH key auth)"
+    dbPath:
+      type: string
+      description: "Custom path to the alogin SQLite database (default: ~/.config/alogin/alogin.db)"
+    auditLog:
+      type: string
+      description: "Custom path for the audit JSONL log file (default: ~/.config/alogin/audit.jsonl)"
+
+commandFunction: |-
+  (config) => {
+    const env = {};
+    if (config.vaultPassword) env.ALOGIN_VAULT_PASSWORD = config.vaultPassword;
+    if (config.dbPath) env.ALOGIN_DB_PATH = config.dbPath;
+    if (config.auditLog) env.ALOGIN_AUDIT_LOG = config.auditLog;
+    return {
+      command: "alogin",
+      args: ["agent", "mcp"],
+      env,
+    };
+  }
+
+exampleConfig:
+  vaultPassword: ""
+  dbPath: ""
+  auditLog: ""

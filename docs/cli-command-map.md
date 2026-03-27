@@ -171,13 +171,47 @@ alogin agent setup
 Skips DB init.
 
 ### `agent policy`
-HITL/RBAC policy management (Phase 2 stub).
+Global HITL/RBAC policy management. Subcommands: `show`, `validate`. Skips DB init.
 
 ```
-alogin agent policy
+alogin agent policy show
+alogin agent policy validate
 ```
 
-Skips DB init.
+### `agent audit`
+Query the MCP execution audit log stored in SQLite. Subcommands: `list`, `tail`.
+
+```
+alogin agent audit list [--agent <id>] [--server <id>] [--event exec|cluster] [--since 1h] [--limit 50] [--json]
+alogin agent audit tail
+```
+
+### `agent approve / deny / pending`
+Manage HITL (Human-in-the-Loop) approval requests. Skips DB init.
+
+```
+alogin agent approve <token>
+alogin agent deny    <token>
+alogin agent pending [--json]
+```
+
+### `agent server-policy`
+Manage per-server policy YAML overrides stored in the database. When set, replaces the global `agent-policy.yaml` for commands targeting that server.
+
+```
+alogin agent server-policy set   <server-id> [--file policy.yaml | --stdin]
+alogin agent server-policy show  <server-id>
+alogin agent server-policy clear <server-id>
+```
+
+### `agent server-prompt`
+Manage per-server LLM system prompt snippets stored in the database.
+
+```
+alogin agent server-prompt set   <server-id> [--text "..." | --file prompt.txt | --stdin]
+alogin agent server-prompt show  <server-id>
+alogin agent server-prompt clear <server-id>
+```
 
 ---
 

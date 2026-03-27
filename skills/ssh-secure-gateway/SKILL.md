@@ -46,10 +46,12 @@ The registry stores server metadata and credentials in an encrypted vault (macOS
 Canonical flow:
 
 ```bash
-alogin compute list
+alogin compute list                                          # table (default)
+alogin compute list --format json                            # machine-readable
 alogin compute add --host prod-db --user dbadmin --note "Primary DB"
-alogin compute show prod-db
-alogin compute passwd prod-db    # Update vault password
+alogin compute show prod-db                                  # human-readable detail
+alogin compute show prod-db --format json                    # full detail as JSON
+alogin compute passwd prod-db                                # update vault password
 ```
 
 ### [Access (Remote Connectivity)](https://github.com/emusal/alogin2#access--remote-connectivity)
@@ -60,10 +62,15 @@ Canonical flows:
 ```bash
 # Simple SSH
 alogin access ssh user@host
+alogin access ssh user@host --cmd "df -h"     # run command, no interactive shell
 
-# Parallel Cluster execution
+# Parallel Cluster execution — results from all members in parallel
 alogin access cluster add web-cluster 10.0.1.1 10.0.1.2
-alogin access cluster web-cluster --cmd "uptime"
+alogin access cluster web-cluster --cmd "uptime"              # table output
+alogin access cluster web-cluster --cmd "df -h" --format json # JSON array
+
+# List clusters
+alogin access cluster list --format json
 
 # Mounting remote FS
 alogin access mount user@host:/var/log ~/mnt/logs
@@ -86,6 +93,8 @@ alogin compute add --host internal-jump --gateway bastion.ext.com
 
 # 2. Define a named gateway route
 alogin auth gateway add secure-zone bastion.ext.com internal-jump
+alogin auth gateway list --format json
+alogin auth gateway show secure-zone --format json
 
 # 3. Route a target server via the gateway
 alogin compute add --host prod-sql --gateway secure-zone
@@ -102,14 +111,20 @@ Canonical flow:
 alogin net tunnel add db-proxy --server prod-db --local-port 5432 --remote-port 5432
 
 # Lifecycle management
+alogin net tunnel list --format json
 alogin net tunnel start db-proxy
 alogin net tunnel status db-proxy
 alogin net tunnel stop db-proxy
+
+# Local DNS overrides
+alogin net hosts list --format json
+alogin net hosts show prod-db --format json
 ```
 
-### [Agent (MCP & AI)](https://github.com/emusal/alogin2#ai-agent-integration-mcp)
+### [Agent (MCP & AI Safety)](https://github.com/emusal/alogin2#ai-agent-integration-mcp)
 
 Commands for configuring alogin as an MCP (Model Context Protocol) server for LLMs like Claude or ChatGPT.
+Includes human-in-the-loop approval, policy-based RBAC, and a full audit trail.
 Canonical flow:
 
 ```bash
@@ -121,12 +136,43 @@ alogin agent mcp
 
 # Audit tool calls
 alogin agent audit list --since 1h
+alogin agent audit list --since 1h --format json
+alogin agent audit tail --format json    # stream new events
+
+# Human approval workflow
+alogin agent pending                     # list pending approvals
+alogin agent approve <token>
+alogin agent deny <token>
+
+# Per-server policy and system prompt overrides
+alogin agent server-policy set <id> --file policy.yaml
+alogin agent server-policy show <id>
+alogin agent server-prompt set <id> --text "Only run read-only commands."
 ```
 
-### Piped Output
+### JSON Output
 
-When output is piped or `--format json` is used, `alogin` emits machine-readable data:
+All list and show commands support `--format json` for machine-readable output:
+
+| Command | `--format json` output |
+|---------|----------------------|
+| `compute list` | array of server objects |
+| `compute show <host>` | single server object (incl. policy_yaml, system_prompt) |
+| `auth gateway list` | array of gateway objects |
+| `auth gateway show <name>` | gateway object with hops array |
+| `auth alias list` | array of alias objects |
+| `auth alias show <name>` | single alias object |
+| `net tunnel list` | array of tunnel objects with running status |
+| `net hosts list` | array of host mapping objects |
+| `net hosts show <hostname>` | single host mapping object |
+| `access cluster list` | array of cluster objects |
+| `access cluster <name> --cmd <cmd>` | array of `{host, output, exit_code, error}` |
+| `agent audit list` | array of audit entry objects |
+| `agent audit tail` | newline-delimited JSON stream |
 
 ```bash
+# Examples
 alogin compute list --format json | jq '.[].host'
+alogin access cluster prod --cmd "uptime" --format json | jq '.[] | {host, output}'
+alogin agent audit list --since 24h --format json | jq '.[] | select(.policy_action == "require_approval")'
 ```

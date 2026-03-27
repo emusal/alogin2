@@ -89,7 +89,8 @@ func newHostsListCmd() *cobra.Command {
 }
 
 func newHostsShowCmd() *cobra.Command {
-	return &cobra.Command{
+	var format string
+	cmd := &cobra.Command{
 		Use:   "show <hostname>",
 		Short: "Show a single hostname mapping",
 		Args:  cobra.ExactArgs(1),
@@ -102,6 +103,11 @@ func newHostsShowCmd() *cobra.Command {
 			if h == nil {
 				return fmt.Errorf("host %q not found", args[0])
 			}
+
+			if format == "json" {
+				return printJSON(h)
+			}
+
 			fmt.Printf("Hostname:    %s\n", h.Hostname)
 			fmt.Printf("IP:          %s\n", h.IP)
 			fmt.Printf("Description: %s\n", h.Description)
@@ -110,6 +116,8 @@ func newHostsShowCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&format, "format", "table", "output format: table|json")
+	return cmd
 }
 
 func newHostsUpdateCmd() *cobra.Command {

@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/screenshots/alogin2-banner.png" alt="fzf - a command-line fuzzy finder">
+  <img src="docs/screenshots/alogin2-banner.png" >
   <a href="https://github.com/emusal/alogin2/releases"><img src="https://img.shields.io/github/v/release/emusal/alogin2" alt="Version"></a>
   <a href="https://github.com/emusal/alogin2/blob/main/LICENSE"><img src="https://img.shields.io/github/license/emusal/alogin2" alt="License"></a>
 </div>
@@ -125,17 +125,34 @@ alogin access cluster add web-cluster 10.0.0.10 10.0.0.11
 ```
 
 **2. Agent Execution Phase**
-The human configures [Claude Desktop](https://claude.ai/download) to run the `alogin agent mcp` command in its config:
-```json
-{
-  "mcpServers": {
-    "alogin": {
-      "command": "/usr/local/bin/alogin",
-      "args": ["agent", "mcp"]
+Run `alogin agent setup` to print the exact config snippet and system prompt to copy:
+
+```
+$ alogin agent setup
+
+alogin — Security Gateway for Agentic AI
+========================================
+
+MCP server config (paste into Claude Desktop claude_desktop_config.json):
+
+  {
+    "mcpServers": {
+      "alogin": {
+        "command": "/usr/local/bin/alogin",
+        "args": ["agent", "mcp"]
+      }
     }
   }
-}
+
+Recommended system prompt snippet:
+  You have access to alogin, a secure SSH gateway for agentic infrastructure access.
+  ...
+
+Available MCP tools (12): list_servers, get_server, list_tunnels, ...
+Audit log: ~/.config/alogin/audit.jsonl
 ```
+
+Paste the JSON block into `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) and restart Claude Desktop.
 
 Now, the Human can type natural language instructions to Claude:
 > **Human:** *"Check the disk space on the entire web-cluster."*
@@ -146,11 +163,41 @@ Test Environment (`testenv`)
 
 alogin 2 includes a fully virtualized **Docker Compose** sandbox inside the `testenv/` directory to safely test agentic behaviors, script multi-hop SSH routing, and validate cross-OS compatibility.
 
+**Network topology:**
+
+```mermaid
+graph LR
+    subgraph host["Host Machine"]
+        alogin["alogin / AI Agent"]
+    end
+
+    subgraph front_net["front_net (exposed)"]
+        bastion["bastion\nUbuntu 22.04\n:2222"]
+    end
+
+    subgraph back_net["back_net (internal)"]
+        ubuntu["target-ubuntu\nUbuntu 24.04"]
+        centos7["target-centos7\nCentOS 7"]
+        centos6["target-centos6\nCentOS 6"]
+        alpine["target-alpine\nAlpine Linux"]
+        legacy["target-legacy-rsa\nLegacy RSA key"]
+    end
+
+    alogin -- "SSH :2222" --> bastion
+    bastion -- "ProxyJump" --> ubuntu
+    bastion -- "ProxyJump" --> centos7
+    bastion -- "ProxyJump" --> centos6
+    bastion -- "ProxyJump" --> alpine
+    bastion -- "ProxyJump" --> legacy
+```
+
 **Included Nodes:**
-* `bastion` (Ubuntu 22.04) — The only node exposed to the host machine. (Used to test jump routing).
-* `target-ubuntu` (Ubuntu 24.04) — Standard modern testing node on a private back-net.
-* `target-centos7` (CentOS 7) — Tests agentic compatibility with legacy EOL OS's (sysvinit, older package managers).
-* `target-alpine` (Alpine) — Tests interactions with lightweight containers.
+* `bastion` (Ubuntu 22.04) — The only node exposed to the host machine on port `2222`. Acts as the jump host for all back-net targets.
+* `target-ubuntu` (Ubuntu 24.04) — Standard modern testing node.
+* `target-centos7` (CentOS 7) — Legacy EOL OS compatibility (sysvinit, older package managers).
+* `target-centos6` (CentOS 6) — Very old EOL OS for extreme legacy testing.
+* `target-alpine` (Alpine) — Lightweight container OS.
+* `target-legacy-rsa` (Legacy RSA key) — Tests SSH connections requiring old RSA host keys.
 
 **How to run it:**
 ```bash
@@ -234,7 +281,42 @@ alogin exposes a built-in [Model Context Protocol (MCP)](https://modelcontextpro
 | `start_tunnel` | Start a saved tunnel in a detached tmux session |
 | `stop_tunnel` | Stop a running tunnel |
 
-All `exec_command`, `exec_on_cluster`, and `inspect_node` calls are appended to `~/.config/alogin/audit.jsonl`.
+All `exec_command`, `exec_on_cluster`, and `inspect_node` calls are appended to `~/.config/alogin/audit.jsonl` and the `audit_log` SQLite table.
+
+### Agentic Safety Rails
+
+#### Global policy (`~/.config/alogin/agent-policy.yaml`)
+```bash
+alogin agent policy show       # Print the active global policy file
+alogin agent policy validate   # Validate for syntax/pattern errors
+```
+
+#### Per-server policy & system prompt
+Each server can override the global policy and carry a custom LLM system prompt stored in the database:
+```bash
+alogin agent server-policy set   <id> --file policy.yaml   # Set per-server policy
+alogin agent server-policy show  <id>                       # Show per-server policy
+alogin agent server-policy clear <id>                       # Revert to global policy
+
+alogin agent server-prompt set   <id> --text "..."          # Set per-server system prompt
+alogin agent server-prompt show  <id>                       # Show per-server system prompt
+alogin agent server-prompt clear <id>                       # Remove per-server prompt
+```
+
+#### HITL (Human-in-the-Loop) approval
+Destructive commands (or commands matching `require_approval` policy rules) pause for human approval:
+```bash
+alogin agent pending              # List pending approval requests
+alogin agent approve <token>      # Approve a pending request
+alogin agent deny    <token>      # Deny a pending request
+```
+
+#### Audit log
+```bash
+alogin agent audit list           # List recent MCP exec events
+alogin agent audit list --since 1h --json
+alogin agent audit tail           # Stream new events (Ctrl+C to stop)
+```
 
 Advanced topics
 ---------------

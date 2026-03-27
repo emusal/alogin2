@@ -21,3 +21,9 @@
 | `db-migrate` command (explicit schema migration) | 6 | Done |
 | Uninstall command | 6 | Done |
 | TUI tunnel management panel | 6 | Done |
+| Agentic Safety Rails — HITL (Human-in-the-Loop) | 7 | Done |
+| Agentic Safety Rails — Policy-based RBAC (global + per-server) | 7 | Done |
+| Agentic Safety Rails — Agent Audit Trail (JSONL + SQLite) | 7 | Done |
+| Per-server policy_yaml + system_prompt fields (v8 DB migration) | 7 | Done |
+| `agent audit list/tail`, `agent approve/deny/pending` CLI | 7 | Done |
+| `agent server-policy/server-prompt set/show/clear` CLI | 7 | Done |

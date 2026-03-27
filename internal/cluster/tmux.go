@@ -79,6 +79,9 @@ func buildSSHCmd(h HostEntry) string {
 
 	args = append(args, "-p", strconv.Itoa(h.Port))
 	args = append(args, fmt.Sprintf("%s@%s", h.User, h.Host))
+	if h.Command != "" {
+		args = append(args, h.Command)
+	}
 
 	result := ""
 	for i, a := range args {

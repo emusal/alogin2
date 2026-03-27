@@ -36,6 +36,7 @@ type ExecRequest struct {
 	Commands   []string
 	Expect     []ExpectRule
 	TimeoutSec int
+	AutoGW     bool // follow gateway chain stored in the server registry
 }
 
 // ExpectRule is a pattern→response pair for interactive mode.
@@ -67,6 +68,12 @@ func (w *expectWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
+// ExecOnServer is the exported entry point for executing commands on a server.
+// It is used by both the MCP tool handlers and the CLI cluster --cmd flag.
+func ExecOnServer(ctx context.Context, database *db.DB, vlt vault.Vault, req ExecRequest) ([]CommandResult, error) {
+	return execOnServer(ctx, database, vlt, req)
+}
+
 // execOnServer connects to a server (following its gateway chain) and runs commands.
 // It returns one CommandResult per command in non-interactive mode, or one combined
 // result in PTY/interactive mode (when expect rules are provided).
@@ -83,7 +90,7 @@ func execOnServer(ctx context.Context, database *db.DB, vlt vault.Vault, req Exe
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	hops, err := buildHopChain(ctx, database, vlt, srv)
+	hops, err := buildHopChainGW(ctx, database, vlt, srv, req.AutoGW)
 	if err != nil {
 		return nil, err
 	}
@@ -185,12 +192,16 @@ func runPTY(client *internalssh.Client, commands []string, rules []ExpectRule) (
 	}}, nil
 }
 
-// buildHopChain constructs the SSH hop list for a server, following its gateway chain.
-// autoGW is always true here since the MCP context implies following the stored configuration.
+// buildHopChain constructs the SSH hop list for a server.
+// When autoGW is true (or always in MCP context), gateway chains are followed.
 func buildHopChain(ctx context.Context, database *db.DB, vlt vault.Vault, srv *model.Server) ([]internalssh.HopConfig, error) {
+	return buildHopChainGW(ctx, database, vlt, srv, true)
+}
+
+func buildHopChainGW(ctx context.Context, database *db.DB, vlt vault.Vault, srv *model.Server, autoGW bool) ([]internalssh.HopConfig, error) {
 	var hops []internalssh.HopConfig
 
-	if srv.GatewayID != nil {
+	if autoGW && srv.GatewayID != nil {
 		gwHops, err := database.Gateways.HopsFor(ctx, srv.ID)
 		if err != nil {
 			return nil, fmt.Errorf("gateway hops: %w", err)
@@ -208,7 +219,7 @@ func buildHopChain(ctx context.Context, database *db.DB, vlt vault.Vault, srv *m
 				Password: pwd,
 			})
 		}
-	} else if srv.GatewayServerID != nil {
+	} else if autoGW && srv.GatewayServerID != nil {
 		chain, err := resolveGatewayChain(ctx, database, vlt, srv)
 		if err != nil {
 			return nil, err

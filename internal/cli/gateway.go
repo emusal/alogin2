@@ -106,15 +106,35 @@ func newGatewayListCmd() *cobra.Command {
 }
 
 func newGatewayShowCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:  "show <name>",
-		Args: cobra.ExactArgs(1),
+	var format string
+	cmd := &cobra.Command{
+		Use:   "show <name>",
+		Short: "Show gateway details",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			gw, err := database.Gateways.GetByName(ctx, args[0])
 			if err != nil || gw == nil {
 				return fmt.Errorf("gateway %s not found", args[0])
 			}
+
+			if format == "json" {
+				type hopJSON struct {
+					Order int    `json:"order"`
+					Host  string `json:"host"`
+					User  string `json:"user"`
+					Port  int    `json:"port"`
+				}
+				hops := make([]hopJSON, 0, len(gw.Hops))
+				for i, h := range gw.Hops {
+					srv, _ := database.Servers.GetByID(ctx, h.ServerID)
+					if srv != nil {
+						hops = append(hops, hopJSON{Order: i + 1, Host: srv.Host, User: srv.User, Port: srv.EffectivePort()})
+					}
+				}
+				return printJSON(map[string]any{"id": gw.ID, "name": gw.Name, "hops": hops})
+			}
+
 			fmt.Printf("Name: %s\nHops:\n", gw.Name)
 			for i, h := range gw.Hops {
 				srv, _ := database.Servers.GetByID(ctx, h.ServerID)
@@ -125,6 +145,8 @@ func newGatewayShowCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&format, "format", "table", "output format: table|json")
+	return cmd
 }
 
 func newGatewayDeleteCmd() *cobra.Command {

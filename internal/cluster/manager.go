@@ -2,7 +2,10 @@
 // On macOS, Terminal.app and iTerm2 are supported. On all platforms, tmux is used.
 package cluster
 
-import "context"
+import (
+	"context"
+	"strings"
+)
 
 // HopEntry is one gateway hop for a cluster member.
 type HopEntry struct {
@@ -20,6 +23,7 @@ type HostEntry struct {
 	Password string
 	Hops     []HopEntry // gateway chain (may be empty for direct)
 	UseGW    bool       // whether to force auto-gw flag for child processes
+	Command  string     // optional command to run after login (--cmd)
 }
 
 // Manager opens cluster sessions using the configured mode.
@@ -66,7 +70,15 @@ func buildConnCmd(binPath string, h HostEntry) string {
 			cmd += " --auto-gw"
 		}
 		cmd += " " + h.User + "@" + h.Host
+		if h.Command != "" {
+			cmd += " --cmd " + shellQuote(h.Command)
+		}
 		return cmd
 	}
 	return buildSSHCmd(h)
+}
+
+// shellQuote wraps s in single quotes, escaping any single quotes within.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

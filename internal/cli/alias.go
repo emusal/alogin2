@@ -101,9 +101,11 @@ func newAliasListCmd() *cobra.Command {
 }
 
 func newAliasShowCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:  "show <alias>",
-		Args: cobra.ExactArgs(1),
+	var format string
+	cmd := &cobra.Command{
+		Use:   "show <alias>",
+		Short: "Show alias details",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			a, err := database.Aliases.GetByName(ctx, args[0])
@@ -111,12 +113,31 @@ func newAliasShowCmd() *cobra.Command {
 				return fmt.Errorf("alias %s not found", args[0])
 			}
 			srv, _ := database.Servers.GetByID(ctx, a.ServerID)
+
+			if format == "json" {
+				target := fmt.Sprintf("id=%d", a.ServerID)
+				user := a.User
+				if srv != nil {
+					if user == "" {
+						user = srv.User
+					}
+					target = user + "@" + srv.Host
+				}
+				return printJSON(map[string]any{"name": a.Name, "target": target, "user": user})
+			}
+
 			if srv != nil {
-				fmt.Printf("%s → %s@%s\n", a.Name, srv.User, srv.Host)
+				user := srv.User
+				if a.User != "" {
+					user = a.User
+				}
+				fmt.Printf("%s → %s@%s\n", a.Name, user, srv.Host)
 			}
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&format, "format", "table", "output format: table|json")
+	return cmd
 }
 
 func newAliasDeleteCmd() *cobra.Command {

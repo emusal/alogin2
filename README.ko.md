@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/screenshots/alogin2-banner.png" alt="alogin 2">
+  <img src="https://github.com/emusal/alogin2/blob/main/docs/screenshots/alogin2-banner.png">
   <a href="https://github.com/emusal/alogin2/releases"><img src="https://img.shields.io/github/v/release/emusal/alogin2" alt="Version"></a>
   <a href="https://github.com/emusal/alogin2/blob/main/LICENSE"><img src="https://img.shields.io/github/license/emusal/alogin2" alt="License"></a>
 </div>
@@ -12,7 +12,7 @@
 
 **언어** : 한국어 | [English](README.md)
 
-<img src="docs/screenshots/tui-picker.gif" width="640">
+<img src="https://github.com/emusal/alogin2/blob/main/docs/screenshots/tui-picker.gif" width="640">
 
 ## 주요 기능
 
@@ -98,17 +98,34 @@ alogin access cluster add web-cluster 10.0.0.10 10.0.0.11
 ```
 
 **2. 에이전트 실행 단계**
-사람이 [Claude Desktop](https://claude.ai/download) 설정에 `alogin agent mcp` 명령을 등록합니다:
-```json
-{
-  "mcpServers": {
-    "alogin": {
-      "command": "/usr/local/bin/alogin",
-      "args": ["agent", "mcp"]
+`alogin agent setup`을 실행하면 붙여넣을 설정과 시스템 프롬프트를 바로 출력합니다:
+
+```
+$ alogin agent setup
+
+alogin — Security Gateway for Agentic AI
+========================================
+
+MCP server config (paste into Claude Desktop claude_desktop_config.json):
+
+  {
+    "mcpServers": {
+      "alogin": {
+        "command": "/usr/local/bin/alogin",
+        "args": ["agent", "mcp"]
+      }
     }
   }
-}
+
+Recommended system prompt snippet:
+  You have access to alogin, a secure SSH gateway for agentic infrastructure access.
+  ...
+
+Available MCP tools (12): list_servers, get_server, list_tunnels, ...
+Audit log: ~/.config/alogin/audit.jsonl
 ```
+
+출력된 JSON 블록을 `~/Library/Application Support/Claude/claude_desktop_config.json`(macOS)에 붙여넣고 Claude Desktop을 재시작합니다.
 
 이제 Claude에게 자연어로 지시할 수 있습니다:
 > **사람:** *"web-cluster 전체 디스크 공간 확인해줘."*
@@ -118,11 +135,41 @@ alogin access cluster add web-cluster 10.0.0.10 10.0.0.11
 
 alogin 2는 `testenv/` 디렉토리에 완전히 가상화된 **Docker Compose** 샌드박스를 포함합니다. 에이전트 동작 테스트, 멀티홉 SSH 라우팅 스크립트 작성, 크로스 OS 호환성 검증에 활용할 수 있습니다.
 
+**네트워크 구성:**
+
+```mermaid
+graph LR
+    subgraph host["호스트 머신"]
+        alogin["alogin / AI 에이전트"]
+    end
+
+    subgraph front_net["front_net (외부망)"]
+        bastion["bastion\nUbuntu 22.04\n:2222"]
+    end
+
+    subgraph back_net["back_net (내부망)"]
+        ubuntu["target-ubuntu\nUbuntu 24.04"]
+        centos7["target-centos7\nCentOS 7"]
+        centos6["target-centos6\nCentOS 6"]
+        alpine["target-alpine\nAlpine Linux"]
+        legacy["target-legacy-rsa\n구형 RSA 키"]
+    end
+
+    alogin -- "SSH :2222" --> bastion
+    bastion -- "ProxyJump" --> ubuntu
+    bastion -- "ProxyJump" --> centos7
+    bastion -- "ProxyJump" --> centos6
+    bastion -- "ProxyJump" --> alpine
+    bastion -- "ProxyJump" --> legacy
+```
+
 **포함된 노드:**
-* `bastion` (Ubuntu 22.04) — 호스트 머신에서 접근 가능한 유일한 노드 (점프 라우팅 테스트용)
-* `target-ubuntu` (Ubuntu 24.04) — 프라이빗 백넷의 표준 현대 테스트 노드
-* `target-centos7` (CentOS 7) — 레거시 EOL OS(sysvinit, 구버전 패키지 매니저)와의 에이전트 호환성 테스트
-* `target-alpine` (Alpine) — 경량 컨테이너와의 상호작용 테스트
+* `bastion` (Ubuntu 22.04) — 호스트 머신에서 포트 `2222`로 접근 가능한 유일한 노드. 모든 내부망 노드의 점프 호스트 역할.
+* `target-ubuntu` (Ubuntu 24.04) — 최신 OS 표준 테스트 노드.
+* `target-centos7` (CentOS 7) — 레거시 EOL OS 호환성 테스트 (sysvinit, 구버전 패키지 매니저).
+* `target-centos6` (CentOS 6) — 극단적인 레거시 환경 테스트용.
+* `target-alpine` (Alpine) — 경량 컨테이너 OS.
+* `target-legacy-rsa` (구형 RSA 키) — 구형 RSA 호스트 키가 필요한 SSH 접속 테스트.
 
 **실행 방법:**
 ```bash
@@ -311,7 +358,42 @@ alogin에는 [Model Context Protocol (MCP)](https://modelcontextprotocol.io) 서
 | `start_tunnel` | 저장된 터널을 tmux 백그라운드 세션으로 시작 |
 | `stop_tunnel` | 실행 중인 터널 중지 |
 
-`exec_command`, `exec_on_cluster`, `inspect_node` 호출은 모두 `~/.config/alogin/audit.jsonl`에 기록됩니다.
+`exec_command`, `exec_on_cluster`, `inspect_node` 호출은 모두 `~/.config/alogin/audit.jsonl` 및 `audit_log` SQLite 테이블에 기록됩니다.
+
+### 에이전트 안전 레일
+
+#### 전역 정책 (`~/.config/alogin/agent-policy.yaml`)
+```bash
+alogin agent policy show       # 전역 정책 파일 출력
+alogin agent policy validate   # 정책 파일 구문/패턴 검증
+```
+
+#### 서버별 정책 및 시스템 프롬프트
+각 서버는 전역 정책을 재정의하고, LLM에게 서버별 맞춤 지침을 전달하는 시스템 프롬프트를 DB에 저장할 수 있습니다:
+```bash
+alogin agent server-policy set   <id> --file policy.yaml   # 서버별 정책 설정
+alogin agent server-policy show  <id>                       # 서버별 정책 조회
+alogin agent server-policy clear <id>                       # 전역 정책으로 복원
+
+alogin agent server-prompt set   <id> --text "..."          # 서버별 시스템 프롬프트 설정
+alogin agent server-prompt show  <id>                       # 서버별 시스템 프롬프트 조회
+alogin agent server-prompt clear <id>                       # 서버별 프롬프트 삭제
+```
+
+#### HITL (Human-in-the-Loop) 승인
+파괴적 명령어나 `require_approval` 정책 룰에 해당하는 명령은 사람의 승인을 기다립니다:
+```bash
+alogin agent pending              # 대기 중인 승인 요청 목록
+alogin agent approve <token>      # 요청 승인
+alogin agent deny    <token>      # 요청 거부
+```
+
+#### 감사 로그
+```bash
+alogin agent audit list           # 최근 MCP 실행 이벤트 조회
+alogin agent audit list --since 1h --json
+alogin agent audit tail           # 실시간 이벤트 스트리밍 (Ctrl+C로 종료)
+```
 
 ---
 

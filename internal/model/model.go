@@ -54,8 +54,10 @@ type Server struct {
 	GatewayID       *int64     `json:"gateway_id"`        // named route from gateway_routes (mirrors gateway_list)
 	GatewayServerID *int64     `json:"gateway_server_id"` // direct server reference (mirrors server_list.gateway)
 	Locale          string     `json:"locale"`            // e.g. "ko_KR.eucKR"; "-" or "" = system default
-	DeviceType      DeviceType `json:"device_type"`       // linux|windows|router|switch|firewall|other
-	Note            string     `json:"note"`              // free-form description (LLM context)
+	DeviceType      DeviceType `json:"device_type"`                  // linux|windows|router|switch|firewall|other
+	Note            string     `json:"note"`                         // free-form description (LLM context)
+	PolicyYAML      string     `json:"policy_yaml,omitempty"`        // inline YAML policy; "" = use global
+	SystemPrompt    string     `json:"system_prompt,omitempty"`      // per-server LLM system prompt; "" = use global
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
 }
