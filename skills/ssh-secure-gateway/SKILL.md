@@ -1,11 +1,18 @@
 ---
-name: alogin
+name: ssh-secure-gateway
 description: Securely access SSH servers, run remote commands, and manage clusters via alogin. Use this skill to query server infrastructure, inspect node health, and execute remote commands safely without handling SSH keys or ProxyJumps manually.
 license: Apache-2.0
-metadata: { "openclaw": { "requires": { "bins": ["alogin"] }, "homepage": "https://github.com/emusal/alogin2" } }
+metadata:
+  {
+    'openclaw':
+      {
+        'requires': { 'bins': ['alogin'] },
+        'homepage': 'https://github.com/emusal/alogin2',
+      },
+  }
 ---
 
-# alogin
+# alogin-based SSH Secure Gateway
 
 The secure gateway for Agentic AI and System Administrators.
 
@@ -66,6 +73,7 @@ alogin access mount user@host:/var/log ~/mnt/logs
 
 Define multi-hop jump paths once, then use them for any server.
 Mental model:
+
 - A gateway is a sequence of hops.
 - A server is assigned a gateway for automatic routing.
 
