@@ -9,6 +9,7 @@
 **alogin 2**는 수백 대 서버를 관리하는 시스템/네트워크 엔지니어를 위한 SSH 게이트웨이입니다. AI 에이전트가 비밀번호나 인증 정보를 전혀 모르는 상태에서도 인프라를 안전하게 다룰 수 있는 MCP 브리지 역할도 겸합니다.
 
 <img src="docs/screenshots/tui-picker.gif" width="640">
+<img src="docs/screenshots/cluster-tmux.gif" width="640">
 
 원본 [alogin v1](https://github.com/emusal/alogin)(2000년대 초 Bash + Expect 스크립트)을 Go로 처음부터 다시 만들었습니다. 같은 암호화 레지스트리 위에서 사람의 일상 업무와 AI 자동화를 함께 처리합니다.
 

@@ -9,6 +9,7 @@
 **alogin 2** is a secure SSH gateway for system and network engineers managing large server fleets — and a zero-knowledge MCP bridge for AI agents that need infrastructure access without ever touching your credentials.
 
 <img src="docs/screenshots/tui-picker.gif" width="640">
+<img src="docs/screenshots/cluster-tmux.gif" width="640">
 
 Full Go rewrite of the original [alogin v1](https://github.com/emusal/alogin) (~2000s Bash + Expect). Designed for daily operator workflow and AI-driven automation on the same encrypted registry.
 
