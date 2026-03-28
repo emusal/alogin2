@@ -65,6 +65,28 @@ for target in "${DB_SERVERS[@]}"; do
     --gateway bastion_gw || echo "Failed to add ${target}"
 done
 
+echo "[3.5] Registering 3-hop chain (bastion → middle → deep-target)..."
+# Register 'middle' server via named gateway route (bastion_gw).
+# This sets GatewayID so alogin knows: localhost → bastion → middle.
+alogin compute add \
+  --host middle \
+  --user testuser \
+  --password testuser \
+  --proto ssh \
+  --gateway bastion_gw || echo "Failed to add middle"
+
+# Register 'deep-target' using 'middle' as a server-name gateway.
+# alogin resolves this as GatewayServerID → recursive chain:
+#   deep-target.GatewayServerID = middle
+#   middle.GatewayID            = bastion_gw (bastion_host)
+# resolveGatewayChain() walks up the chain → [bastion_host, middle, deep-target]
+alogin compute add \
+  --host deep-target \
+  --user testuser \
+  --password testuser \
+  --proto ssh \
+  --gateway middle || echo "Failed to add deep-target"
+
 echo "[4] Creating Clusters..."
 # SSH target cluster
 alogin access cluster add test-cluster \
@@ -99,4 +121,5 @@ echo "  2) Cluster connect:      alogin access cluster test-cluster --mode tmux"
 echo "  3) Server list:          alogin compute list"
 echo "  4) Plugin connect:       alogin app-server connect mariadb-test"
 echo "  5) DB cluster inspect:   alogin access cluster db-cluster --mode tmux"
+echo "  6) 3-hop SSH:            alogin access ssh deep-target --auto-gw"
 echo "=========================================================="

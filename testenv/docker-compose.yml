@@ -120,7 +120,37 @@ services:
       - back_net
     restart: always
 
+  # ── 3-hop Test Services ───────────────────────────────────────────────────
+  # middle: SSH jump host in back_net + inner_net.
+  # Only reachable via bastion. Acts as the second hop.
+  middle:
+    build:
+      context: ./docker/ubuntu
+      args:
+        BASE_IMAGE: ubuntu:22.04
+    container_name: alogin_middle
+    hostname: middle
+    networks:
+      - back_net
+      - inner_net
+    restart: always
+
+  # deep-target: Final destination only reachable via bastion → middle.
+  # Used for testing 3-hop (multi-gateway chained) SSH connections.
+  deep-target:
+    build:
+      context: ./docker/ubuntu
+      args:
+        BASE_IMAGE: ubuntu:24.04
+    container_name: alogin_deep_target
+    hostname: deep-target
+    networks:
+      - inner_net
+    restart: always
+
 networks:
   front_net:
   back_net:
+    internal: true
+  inner_net:
     internal: true

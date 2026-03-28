@@ -315,5 +315,30 @@ func (h *Handler) resolveGatewayChain(ctx context.Context, dest *model.Server) (
 
 		cur = gwSrv
 	}
+
+	// If the outermost server in the GatewayServerID chain itself has a named
+	// gateway route (GatewayID), prepend those hops to complete the full path.
+	if cur.GatewayID != nil {
+		gwHops, err := h.db.Gateways.HopsFor(ctx, cur.ID)
+		if err != nil {
+			return nil, fmt.Errorf("gateway hops for %s: %w", cur.Host, err)
+		}
+		var prefix []internalssh.HopConfig
+		for _, hop := range gwHops {
+			hopSrv, err := h.db.Servers.GetByID(ctx, hop.ServerID)
+			if err != nil || hopSrv == nil {
+				return nil, fmt.Errorf("gateway hop server %d not found", hop.ServerID)
+			}
+			pwd, _ := h.vlt.Get(hopSrv.User + "@" + hopSrv.Host)
+			prefix = append(prefix, internalssh.HopConfig{
+				Host:     h.resolveHost(ctx, hopSrv.Host),
+				Port:     hopSrv.EffectivePort(),
+				User:     hopSrv.User,
+				Password: pwd,
+			})
+		}
+		chain = append(prefix, chain...)
+	}
+
 	return chain, nil
 }

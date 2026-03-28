@@ -259,5 +259,30 @@ func resolveGatewayChain(ctx context.Context, database *db.DB, vlt vault.Vault, 
 		}}, chain...)
 		cur = gwSrv
 	}
+
+	// If the outermost server in the GatewayServerID chain itself has a named
+	// gateway route (GatewayID), prepend those hops to complete the full path.
+	if cur.GatewayID != nil {
+		gwHops, err := database.Gateways.HopsFor(ctx, cur.ID)
+		if err != nil {
+			return nil, fmt.Errorf("gateway hops for %s: %w", cur.Host, err)
+		}
+		var prefix []internalssh.HopConfig
+		for _, h := range gwHops {
+			hopSrv, err := database.Servers.GetByID(ctx, h.ServerID)
+			if err != nil || hopSrv == nil {
+				return nil, fmt.Errorf("gateway hop server %d not found", h.ServerID)
+			}
+			pwd, _ := vlt.Get(hopSrv.User + "@" + hopSrv.Host)
+			prefix = append(prefix, internalssh.HopConfig{
+				Host:     database.Hosts.Resolve(ctx, hopSrv.Host),
+				Port:     hopSrv.EffectivePort(),
+				User:     hopSrv.User,
+				Password: pwd,
+			})
+		}
+		chain = append(prefix, chain...)
+	}
+
 	return chain, nil
 }
