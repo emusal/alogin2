@@ -1,10 +1,12 @@
 # alogin2 Test Environment
 
-이 환경은 `alogin2` 에이전트의 다양한 기능(인프라 정보 수집, 멀티홉 동작, 레거시 OS 접근성 등)을 테스트하기 위한 **Docker Compose** 기반 가상화 환경입니다.
+이 환경은 `alogin2` 에이전트의 다양한 기능(인프라 정보 수집, 멀티홉 동작, 레거시 OS 접근성, 플러그인 시스템 등)을 테스트하기 위한 **Docker Compose** 기반 가상화 환경입니다.
 
 ## 아키텍처 및 구성
 
 이 환경은 외부망(`front_net`)과 내부망(`back_net`)으로 분리된 네트워크 구조를 가집니다.
+
+### SSH 타겟 서버
 
 | 노드 이름 | OS / 버전 | 네트워크 | 목적 |
 |---|---|---|---|
@@ -12,15 +14,44 @@
 | `target-ubuntu` | Ubuntu 24.04 | `back_net` | 최신 OS 환경에서의 정보 수집 테스트용 |
 | `target-alpine` | Alpine Linux | `back_net` | 경량 컨테이너 OS 환경, 다른 패키지 관리자 구조에서의 수집 테스트용 |
 | `target-centos7` | CentOS 7 | `back_net` | EOL된 레거시 구형 OS(sysvinit/구버전 systemd) 환경에서의 수집 테스트용 |
+| `target-centos6` | CentOS 6 | `back_net` | 더 오래된 레거시 OS 환경 테스트용 |
+| `target-legacy-rsa` | Ubuntu (RSA only) | `back_net` | 구형 RSA 키 알고리즘 제한 환경 테스트용 |
+
+### 플러그인 시스템 테스트 서버 (DB/Cache)
+
+| 노드 이름 | 서비스 | 네트워크 | 목적 |
+|---|---|---|---|
+| `target-mariadb` | MariaDB | `back_net` | `--app mariadb` 플러그인 테스트용 |
+| `target-redis` | Redis | `back_net` | `--app redis` 플러그인 테스트용 |
+| `target-postgres` | PostgreSQL | `back_net` | `--app postgres` 플러그인 테스트용 |
+| `target-mongo` | MongoDB | `back_net` | `--app mongo` 플러그인 테스트용 |
 
 ## 초기 설정 및 실행
 
-테스트 환경을 실행하려면 다음 명령어를 사용하세요:
+### 1. 컨테이너 기동
 
 ```bash
 docker-compose up -d --build
 ```
+
 > 컨테이너를 중지하려면 `docker-compose down` 명령을 사용합니다.
+
+### 2. alogin 레지스트리 등록
+
+컨테이너가 모두 기동된 후 setup 스크립트를 실행합니다:
+
+```bash
+bash testenv/setup_alogin_cluster.sh
+```
+
+스크립트가 수행하는 작업:
+1. `bastion_host` (localhost:2222) 호스트 등록 및 서버 등록
+2. `bastion_gw` 게이트웨이 경로 등록
+3. SSH 타겟 서버 5개 등록 (gateway: bastion_gw)
+4. DB/Cache 플러그인 테스트 서버 4개 등록 (gateway: bastion_gw)
+5. `test-cluster` (SSH 서버 5개), `db-cluster` (DB 서버 4개) 클러스터 생성
+6. `testenv/plugins/*.yaml` → `~/.config/alogin/plugins/` 설치
+7. `app-server` 바인딩 4개 등록 (mariadb-test, redis-test, postgres-test, mongo-test)
 
 ## 접속 정보
 
@@ -47,13 +78,51 @@ Bastion 쉘 안에서는 각각의 `target-*` 서버로 바로 ssh 접속이 가
 ssh target-ubuntu
 ssh target-alpine
 ssh target-centos7
+ssh target-mariadb
 ```
 
-## `alogin2` 테스트 시나리오 예시
+## `alogin` 테스트 시나리오 예시
 
-로컬 머신에서 바로 내부망(`target-ubuntu`)에 대해 alogin의 Agent나 정보수집 커맨드를 실행하려고 하는 경우, `bastion`을 Jump host로 지정하여 접근이 되는지(`ProxyJump` 등 멀티홉 확인) 테스트할 수 있습니다.
+### 멀티홉 SSH
 
 ```bash
-# 예시: 로컬 터미널에서 Bastion을 경유하여 target-ubuntu 접근
-ssh -p 2222 -J testuser@localhost target-ubuntu
+# Bastion을 경유하여 target-ubuntu 접근
+alogin access ssh target-ubuntu --auto-gw
+
+# 레거시 RSA 환경 접근
+alogin access ssh target-legacy-rsa --auto-gw
+```
+
+### 클러스터 일괄 접속
+
+```bash
+# SSH 타겟 서버 5개 tmux 창 열기
+alogin access cluster test-cluster --mode tmux
+
+# DB 서버 4개 tmux 창 열기
+alogin access cluster db-cluster --mode tmux
+```
+
+### 플러그인 시스템 (app-server)
+
+```bash
+# MariaDB 접속 (vault 비밀번호 자동 주입)
+alogin app-server connect mariadb-test
+
+# Redis 접속
+alogin app-server connect redis-test
+
+# PostgreSQL 접속
+alogin app-server connect postgres-test
+
+# MongoDB 접속
+alogin app-server connect mongo-test
+```
+
+### MCP Agent를 통한 일괄 명령 실행
+
+```bash
+# alogin MCP 서버 기동 후 AI 클라이언트(Claude Desktop 등)에서:
+# exec_on_cluster tool로 db-cluster 전체에 명령 실행
+alogin agent mcp
 ```

@@ -182,11 +182,17 @@ graph LR
         alpine["target-alpine\nAlpine Linux"]
         legacy["target-legacy-rsa\nLegacy RSA key"]
 
-        subgraph app_layer["app-server layer  (SSH + plugin)"]
-            mariadb["target-mariadb\nSSH ＋ MariaDB"]
-            redis["target-redis\nSSH ＋ Redis"]
-            postgres["target-postgres\nSSH ＋ PostgreSQL"]
-            mongo["target-mongo\nSSH ＋ MongoDB"]
+        subgraph srv_mariadb["target-mariadb"]
+            ssh_mariadb["sshd"] --> app_mariadb[("MariaDB")]
+        end
+        subgraph srv_redis["target-redis"]
+            ssh_redis["sshd"] --> app_redis[("Redis")]
+        end
+        subgraph srv_postgres["target-postgres"]
+            ssh_postgres["sshd"] --> app_postgres[("PostgreSQL")]
+        end
+        subgraph srv_mongo["target-mongo"]
+            ssh_mongo["sshd"] --> app_mongo[("MongoDB")]
         end
     end
 
@@ -196,15 +202,15 @@ graph LR
     bastion -- "ProxyJump" --> centos6
     bastion -- "ProxyJump" --> alpine
     bastion -- "ProxyJump" --> legacy
-    bastion -- "ProxyJump" --> mariadb
-    bastion -- "ProxyJump" --> redis
-    bastion -- "ProxyJump" --> postgres
-    bastion -- "ProxyJump" --> mongo
+    bastion -- "ProxyJump" --> ssh_mariadb
+    bastion -- "ProxyJump" --> ssh_redis
+    bastion -- "ProxyJump" --> ssh_postgres
+    bastion -- "ProxyJump" --> ssh_mongo
 
-    alogin -. "app-server\nplugin" .-> mariadb
-    alogin -. "app-server\nplugin" .-> redis
-    alogin -. "app-server\nplugin" .-> postgres
-    alogin -. "app-server\nplugin" .-> mongo
+    alogin -. "app-server plugin\n(PTY automation)" .-> app_mariadb
+    alogin -. "app-server plugin\n(PTY automation)" .-> app_redis
+    alogin -. "app-server plugin\n(PTY automation)" .-> app_postgres
+    alogin -. "app-server plugin\n(PTY automation)" .-> app_mongo
 ```
 
 **SSH targets:**
