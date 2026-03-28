@@ -1,0 +1,16 @@
+{
+  "version": "0.2",
+  "words": [
+    "testuser",
+    "alogin",
+    "bastion",
+    "sysvinit",
+    "sshfs",
+    "proxyjump",
+    "bubbletea",
+    "lipgloss",
+    "mariadb",
+    "mongosh",
+    "testdb"
+  ]
+}

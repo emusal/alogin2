@@ -161,7 +161,7 @@ Now, the Human can type natural language instructions to Claude:
 Test Environment (`testenv`)
 ----------------------------
 
-alogin 2 includes a fully virtualized **Docker Compose** sandbox inside the `testenv/` directory to safely test agentic behaviors, script multi-hop SSH routing, and validate cross-OS compatibility.
+alogin 2 includes a fully virtualized **Docker Compose** sandbox inside the `testenv/` directory to safely test agentic behaviors, script multi-hop SSH routing, validate cross-OS compatibility, and test the app-server plugin system.
 
 **Network topology:**
 
@@ -181,6 +181,10 @@ graph LR
         centos6["target-centos6\nCentOS 6"]
         alpine["target-alpine\nAlpine Linux"]
         legacy["target-legacy-rsa\nLegacy RSA key"]
+        mariadb["target-mariadb\nMariaDB"]
+        redis["target-redis\nRedis"]
+        postgres["target-postgres\nPostgreSQL"]
+        mongo["target-mongo\nMongoDB"]
     end
 
     alogin -- "SSH :2222" --> bastion
@@ -189,22 +193,50 @@ graph LR
     bastion -- "ProxyJump" --> centos6
     bastion -- "ProxyJump" --> alpine
     bastion -- "ProxyJump" --> legacy
+    bastion -- "ProxyJump" --> mariadb
+    bastion -- "ProxyJump" --> redis
+    bastion -- "ProxyJump" --> postgres
+    bastion -- "ProxyJump" --> mongo
 ```
 
-**Included Nodes:**
-* `bastion` (Ubuntu 22.04) — The only node exposed to the host machine on port `2222`. Acts as the jump host for all back-net targets.
+**SSH targets:**
+* `bastion` (Ubuntu 22.04) — The only node exposed to the host on port `2222`. Acts as the jump host for all back-net targets.
 * `target-ubuntu` (Ubuntu 24.04) — Standard modern testing node.
 * `target-centos7` (CentOS 7) — Legacy EOL OS compatibility (sysvinit, older package managers).
 * `target-centos6` (CentOS 6) — Very old EOL OS for extreme legacy testing.
 * `target-alpine` (Alpine) — Lightweight container OS.
 * `target-legacy-rsa` (Legacy RSA key) — Tests SSH connections requiring old RSA host keys.
 
+**App-server plugin targets** (all credentials: `testuser` / `testuser`):
+* `target-mariadb` — Runs MariaDB. Plugin: `testenv/plugins/mariadb.yaml`
+* `target-redis` — Runs Redis with password auth. Plugin: `testenv/plugins/redis.yaml`
+* `target-postgres` — Runs PostgreSQL. Plugin: `testenv/plugins/postgres.yaml`
+* `target-mongo` — Runs MongoDB. Plugin: `testenv/plugins/mongo.yaml`
+
 **How to run it:**
 ```bash
 cd testenv/
 docker-compose up -d --build
 ```
-You can now ask the Agent to login to `target-ubuntu` safely by defining `bastion` as the gateway route. 
+
+**Testing app-server plugins:**
+```bash
+# 1. Copy test plugins to the alogin plugins directory
+cp testenv/plugins/*.yaml ~/.config/alogin/plugins/
+
+# 2. Register vault credentials (password: testuser)
+alogin compute add --host target-mariadb --user testuser --gateway bastion
+alogin auth vault set testuser@target-mariadb   # enter: testuser
+
+# 3. Add an app-server binding
+alogin app-server add --name test-mysql --server target-mariadb --app mariadb --auto-gw
+
+# 4. Connect — SSH in, launch mysql, auto-enter password
+alogin app-server connect test-mysql
+
+# 5. Non-interactive query
+alogin app-server connect test-mysql --cmd "SHOW DATABASES;"
+```
 
 Usage Reference
 ---------------
