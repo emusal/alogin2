@@ -229,6 +229,7 @@ alogin access           Remote connectivity (aliased: connect, t, r)
 alogin auth             Credentials, gateway routes, host aliases
 alogin agent            AI MCP server, client setup tools
 alogin net              Hosts definitions, Background SSH tunnels
+alogin app-server       Named server+plugin bindings (one-name launch)
 ```
 
 **JSON Output for scripts:** All listing commands support `--format=json`.
@@ -238,6 +239,7 @@ alogin net              Hosts definitions, Background SSH tunnels
 alogin access ssh gw-01 web-01                 # Explicit 2-hop route
 alogin access ssh web-01 --auto-gw             # Route automatically via registered gateway
 alogin access ssh web-01 --cmd "uptime"        # Run isolated command & exit
+alogin access ssh web-01 --app mariadb         # Connect and launch app plugin (e.g. MariaDB client)
 ```
 
 **Tunnels:** Easily persist SSH port-forwards inside detached `tmux` background sessions, so they survive terminal disconnects.
@@ -245,6 +247,16 @@ alogin access ssh web-01 --cmd "uptime"        # Run isolated command & exit
 alogin net tunnel add web-local --server web-01 --local-port 8080 --remote-port 80
 alogin net tunnel start web-local
 ```
+
+### App-Server (Named Application Bindings)
+Bind a server to an application plugin so one name launches the right app with automatic credential injection:
+```bash
+alogin app-server add --name prod-mysql --server prod-db --app mariadb --auto-gw
+alogin app-server connect prod-mysql          # SSH → launch MariaDB client → auto-enter password
+alogin app-server connect prod-mysql --cmd "SHOW DATABASES"  # non-interactive
+alogin app-server list --format json
+```
+Plugin YAML files (`~/.config/alogin/plugins/<name>.yaml`) define the command, args, and PTY automation (expect/send) for credential injection.
 
 AI Agent Integration (MCP)
 --------------------------

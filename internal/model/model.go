@@ -148,6 +148,18 @@ type Tunnel struct {
 	UpdatedAt  time.Time       `json:"updated_at"`
 }
 
+// AppServer binds a named shortcut to a compute server + application plugin.
+type AppServer struct {
+	ID          int64     `json:"id"`
+	Name        string    `json:"name"`
+	ServerID    int64     `json:"server_id"`
+	PluginName  string    `json:"plugin_name"`
+	AutoGW      bool      `json:"auto_gw"`
+	Description string    `json:"description"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
 // ConnectOptions carries runtime flags for a single connection attempt.
 type ConnectOptions struct {
 	Command  string   // -c: run command after login
@@ -163,4 +175,5 @@ type ConnectOptions struct {
 	Align    string   // cluster --left/--right
 	HostKeys string   // cluster --host_keys
 	Mode     string   // cluster --mode: tmux|iterm|terminal
+	AppName  string   // --app: application plugin name to launch after connecting
 }

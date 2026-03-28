@@ -28,6 +28,7 @@ Examples:
 		newFTPCmd(),
 		newMountCmd(),
 		newClusterCmd(),
+		newPluginCmd(),
 	)
 	return cmd
 }

@@ -1,0 +1,30 @@
+# mongo.yaml — Application-Aware Plugin for MongoDB mongosh client
+#
+# Usage:
+#   alogin connect <mongo-host> --app mongo
+#
+# Prerequisites:
+#   - Store the MongoDB admin password in the vault:
+#       alogin auth vault set testuser@target-mongo
+#
+# How it works:
+#   1. MONGO_PASS is resolved from vault.
+#   2. mongosh is launched with --password flag (arg injection).
+
+name: "mongo"
+version: "1"
+
+auth:
+  provider: "vault"
+  mapping:
+    - var: "MONGO_PASS"
+      path: "testuser@target-mongo"
+      expose: "arg"
+
+runtime:
+  cmd_flag: "--eval"
+  strategies: ["native"]
+  environments:
+    native:
+      command: "mongosh"
+      args: ["--username", "admin", "--password", "{{MONGO_PASS}}", "--authenticationDatabase", "admin"]

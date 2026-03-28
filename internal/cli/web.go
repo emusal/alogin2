@@ -5,6 +5,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/emusal/alogin2/internal/plugin"
 	"github.com/emusal/alogin2/internal/web"
 	"github.com/spf13/cobra"
 )
@@ -29,7 +30,8 @@ Press Ctrl+C to stop the server.`,
 			ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
 
-			srv := web.NewServer(database, vlt, port, !noBrowser)
+			srv := web.NewServer(database, vlt, port, !noBrowser).
+				WithPluginDir(plugin.PluginDir(cfg.ConfigDir))
 			return srv.Run(ctx)
 		},
 	}

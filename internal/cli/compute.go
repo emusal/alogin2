@@ -2,16 +2,13 @@ package cli
 
 import "github.com/spf13/cobra"
 
-// newComputeCmd returns the "compute" group command (alias: "server").
+// newComputeCmd returns the "compute" group command.
 // This is the canonical location for server registry management.
 func newComputeCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:     "compute",
-		Aliases: []string{"server"},
-		Short:   "Manage servers (compute resources)",
+		Use:   "compute",
+		Short: "Manage servers (compute resources)",
 		Long: `Manage the server registry: list, add, show, delete, and manage credentials.
-
-The 'server' alias is provided for backward compatibility.
 
 Examples:
   alogin compute list

@@ -1,0 +1,31 @@
+# postgres.yaml — Application-Aware Plugin for PostgreSQL psql client
+#
+# Usage:
+#   alogin connect <pg-host> --app postgres
+#
+# Prerequisites:
+#   - Store the DB password in the vault:
+#       alogin auth vault set testuser@target-postgres
+#
+# How it works:
+#   1. PGPASSWORD env var is injected so psql does not prompt.
+#   2. Runtime Detector checks for a "postgres" Docker container first,
+#      then falls back to native `psql`.
+
+name: "postgres"
+version: "1"
+
+auth:
+  provider: "vault"
+  mapping:
+    - var: "PGPASSWORD"
+      path: "testuser@target-postgres"
+      expose: "env"
+
+runtime:
+  cmd_flag: "-c"
+  strategies: ["native"]
+  environments:
+    native:
+      command: "psql"
+      args: ["-U", "postgres", "-h", "localhost"]

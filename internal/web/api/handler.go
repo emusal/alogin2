@@ -9,6 +9,7 @@ import (
 
 	"github.com/emusal/alogin2/internal/db"
 	"github.com/emusal/alogin2/internal/model"
+	"github.com/emusal/alogin2/internal/plugin"
 	tunnelpkg "github.com/emusal/alogin2/internal/tunnel"
 	"github.com/emusal/alogin2/internal/vault"
 	"github.com/go-chi/chi/v5"
@@ -16,9 +17,10 @@ import (
 
 // Handler holds dependencies for all API routes.
 type Handler struct {
-	db      *db.DB
-	vlt     vault.Vault
-	binPath string // path to the running alogin binary (for tunnel start)
+	db        *db.DB
+	vlt       vault.Vault
+	binPath   string // path to the running alogin binary (for tunnel start)
+	pluginDir string // path to the plugins directory
 }
 
 // NewHandler creates an API handler.
@@ -31,16 +33,22 @@ func NewHandlerWithBin(database *db.DB, vlt vault.Vault, binPath string) *Handle
 	return &Handler{db: database, vlt: vlt, binPath: binPath}
 }
 
+// WithPluginDir sets the plugin directory for the handler.
+func (h *Handler) WithPluginDir(dir string) *Handler {
+	h.pluginDir = dir
+	return h
+}
+
 // Router returns a chi router with all API routes mounted.
 func (h *Handler) Router() http.Handler {
 	r := chi.NewRouter()
 
-	// Servers
-	r.Get("/servers", h.listServers)
-	r.Post("/servers", h.createServer)
-	r.Get("/servers/{id}", h.getServer)
-	r.Put("/servers/{id}", h.updateServer)
-	r.Delete("/servers/{id}", h.deleteServer)
+	// Compute
+	r.Get("/compute", h.listServers)
+	r.Post("/compute", h.createServer)
+	r.Get("/compute/{id}", h.getServer)
+	r.Put("/compute/{id}", h.updateServer)
+	r.Delete("/compute/{id}", h.deleteServer)
 
 	// Gateways
 	r.Get("/gateways", h.listGateways)
@@ -59,6 +67,9 @@ func (h *Handler) Router() http.Handler {
 	// Aliases
 	r.Get("/aliases", h.listAliases)
 
+	// Plugins (read-only: loaded from pluginDir)
+	r.Get("/plugins", h.listPlugins)
+
 	// Local hosts
 	r.Get("/hosts", h.listHosts)
 	r.Post("/hosts", h.createHost)
@@ -75,6 +86,14 @@ func (h *Handler) Router() http.Handler {
 	r.Post("/tunnels/{id}/start", h.startTunnel)
 	r.Post("/tunnels/{id}/stop", h.stopTunnel)
 	r.Get("/tunnels/{id}/status", h.tunnelStatus)
+
+	// App-servers
+	r.Get("/app-servers", h.listAppServers)
+	r.Post("/app-servers", h.createAppServer)
+	r.Get("/app-servers/{id}", h.getAppServer)
+	r.Put("/app-servers/{id}", h.updateAppServer)
+	r.Delete("/app-servers/{id}", h.deleteAppServer)
+	r.Post("/app-servers/{id}/connect", h.connectAppServer)
 
 	return r
 }
@@ -744,6 +763,42 @@ func (h *Handler) deleteHost(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// --- Plugins ---
+
+func (h *Handler) listPlugins(w http.ResponseWriter, r *http.Request) {
+	if h.pluginDir == "" {
+		jsonOK(w, []any{})
+		return
+	}
+	plugins, err := plugin.LoadDir(h.pluginDir)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	type row struct {
+		Name       string   `json:"name"`
+		Version    string   `json:"version"`
+		Provider   string   `json:"provider"`
+		Strategies []string `json:"strategies"`
+		CmdFlag    string   `json:"cmd_flag"`
+	}
+	rows := make([]row, 0, len(plugins))
+	for _, p := range plugins {
+		flag := p.Runtime.CmdFlag
+		if flag == "" {
+			flag = "-e"
+		}
+		rows = append(rows, row{
+			Name:       p.Name,
+			Version:    p.Version,
+			Provider:   string(p.Auth.Provider),
+			Strategies: p.Runtime.Strategies,
+			CmdFlag:    flag,
+		})
+	}
+	jsonOK(w, rows)
+}
+
 // --- Aliases ---
 
 func (h *Handler) listAliases(w http.ResponseWriter, r *http.Request) {
@@ -753,6 +808,140 @@ func (h *Handler) listAliases(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonOK(w, aliases)
+}
+
+// --- App-servers ---
+
+func (h *Handler) listAppServers(w http.ResponseWriter, r *http.Request) {
+	list, err := h.db.AppServers.ListAll(r.Context())
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if list == nil {
+		list = []*model.AppServer{}
+	}
+	jsonOK(w, list)
+}
+
+func (h *Handler) getAppServer(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		jsonError(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	as, err := h.db.AppServers.GetByID(r.Context(), id)
+	if err != nil || as == nil {
+		jsonError(w, "not found", http.StatusNotFound)
+		return
+	}
+	jsonOK(w, as)
+}
+
+func (h *Handler) createAppServer(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name        string `json:"name"`
+		ServerID    int64  `json:"server_id"`
+		PluginName  string `json:"plugin_name"`
+		AutoGW      bool   `json:"auto_gw"`
+		Description string `json:"description"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if req.Name == "" || req.ServerID == 0 || req.PluginName == "" {
+		jsonError(w, "name, server_id, and plugin_name are required", http.StatusBadRequest)
+		return
+	}
+	as := &model.AppServer{
+		Name:        req.Name,
+		ServerID:    req.ServerID,
+		PluginName:  req.PluginName,
+		AutoGW:      req.AutoGW,
+		Description: req.Description,
+	}
+	if err := h.db.AppServers.Create(r.Context(), as); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	jsonOK(w, as)
+}
+
+func (h *Handler) updateAppServer(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		jsonError(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	existing, err := h.db.AppServers.GetByID(r.Context(), id)
+	if err != nil || existing == nil {
+		jsonError(w, "not found", http.StatusNotFound)
+		return
+	}
+	var req struct {
+		Name        string `json:"name"`
+		ServerID    int64  `json:"server_id"`
+		PluginName  string `json:"plugin_name"`
+		AutoGW      *bool  `json:"auto_gw"`
+		Description string `json:"description"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if req.Name != "" {
+		existing.Name = req.Name
+	}
+	if req.ServerID > 0 {
+		existing.ServerID = req.ServerID
+	}
+	if req.PluginName != "" {
+		existing.PluginName = req.PluginName
+	}
+	if req.AutoGW != nil {
+		existing.AutoGW = *req.AutoGW
+	}
+	if req.Description != "" {
+		existing.Description = req.Description
+	}
+	if err := h.db.AppServers.Update(r.Context(), existing); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonOK(w, existing)
+}
+
+func (h *Handler) deleteAppServer(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		jsonError(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	if err := h.db.AppServers.Delete(r.Context(), id); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) connectAppServer(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		jsonError(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	as, err := h.db.AppServers.GetByID(r.Context(), id)
+	if err != nil || as == nil {
+		jsonError(w, "not found", http.StatusNotFound)
+		return
+	}
+	jsonOK(w, map[string]any{
+		"server_id": as.ServerID,
+		"auto_gw":   as.AutoGW,
+		"app":       as.PluginName,
+	})
 }
 
 // --- helpers ---

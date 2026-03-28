@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react'
 import type { Server, Gateway } from '../types'
-import { ServerFormModal } from './ServerFormModal'
-import './ServerList.css'
+import { ComputeFormModal } from './ComputeFormModal'
+import './ComputeList.css'
 
 interface Props {
   onConnect: (server: Server, autoGW?: boolean) => void
 }
 
-export function ServerList({ onConnect }: Props) {
+export function ComputeList({ onConnect }: Props) {
   const [servers, setServers] = useState<Server[]>([])
   const [gateways, setGateways] = useState<Gateway[]>([])
   const [loading, setLoading] = useState(true)
@@ -23,7 +23,7 @@ export function ServerList({ onConnect }: Props) {
         return r.json()
       })
 
-    Promise.all([getJSON('/api/servers'), getJSON('/api/gateways')])
+    Promise.all([getJSON('/api/compute'), getJSON('/api/gateways')])
       .then(([srvData, gwData]) => {
         setServers(Array.isArray(srvData) ? srvData : [])
         setGateways(Array.isArray(gwData) ? gwData : [])
@@ -57,7 +57,7 @@ export function ServerList({ onConnect }: Props) {
   const handleDelete = async (server: Server) => {
     if (!window.confirm(`Delete ${server.user}@${server.host}?`)) return
     try {
-      const res = await fetch(`/api/servers/${server.id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/compute/${server.id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setServers(s => s.filter(x => x.id !== server.id))
     } catch (err: unknown) {
@@ -131,7 +131,7 @@ export function ServerList({ onConnect }: Props) {
       )}
 
       {modalMode !== null && (
-        <ServerFormModal
+        <ComputeFormModal
           initial={editingServer}
           gateways={gateways}
           servers={servers}

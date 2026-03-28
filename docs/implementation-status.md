@@ -27,3 +27,7 @@
 | Per-server policy_yaml + system_prompt fields (v8 DB migration) | 7 | Done |
 | `agent audit list/tail`, `agent approve/deny/pending` CLI | 7 | Done |
 | `agent server-policy/server-prompt set/show/clear` CLI | 7 | Done |
+| Plugin system (YAML, vault secrets, PTY automation) | 8 | Done |
+| App-server bindings (CLI CRUD + connect, TUI, Web UI) | 8 | Done |
+| `app-server` DB migration (v10) | 8 | Done |
+| Web terminal plugin PTY automation (expect/send) | 8 | Done |

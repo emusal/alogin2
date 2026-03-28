@@ -84,7 +84,11 @@ func Load() (*Config, error) {
 
 // EnsureDirs creates all required directories.
 func (c *Config) EnsureDirs() error {
-	for _, dir := range []string{c.DataDir, c.ConfigDir} {
+	for _, dir := range []string{
+		c.DataDir,
+		c.ConfigDir,
+		filepath.Join(c.ConfigDir, "plugins"),
+	} {
 		if err := os.MkdirAll(dir, 0700); err != nil {
 			return err
 		}

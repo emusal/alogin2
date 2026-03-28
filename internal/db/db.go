@@ -15,7 +15,7 @@ var schemaSQL string
 
 // CurrentSchemaVersion is the schema version this binary expects.
 // Increment when adding a new migration.
-const CurrentSchemaVersion = 8
+const CurrentSchemaVersion = 10
 
 // migrationDescriptions maps each migration version to a human-readable summary.
 var migrationDescriptions = map[int]string{
@@ -26,6 +26,8 @@ var migrationDescriptions = map[int]string{
 	6: "servers.device_type, servers.note columns (device classification, notes for AI context)",
 	7: "audit_log table for structured MCP exec records",
 	8: "servers.policy_yaml, servers.system_prompt columns (per-server policy and LLM prompt override)",
+	9:  "audit_log.plugin_name, plugin_vars, plugin_strategy columns (plugin execution audit)",
+	10: "app_servers table (named server+plugin bindings)",
 }
 
 // MigrationDescription returns a human-readable description for a schema version.
@@ -43,8 +45,9 @@ type DB struct {
 	Clusters ClusterRepo
 	Themes   ThemeRepo
 	Hosts    HostRepo
-	Tunnels  TunnelRepo
-	AuditLog AuditRepo
+	Tunnels    TunnelRepo
+	AppServers AppServerRepo
+	AuditLog   AuditRepo
 
 	// AppliedMigrations holds the schema versions that were actually applied
 	// during this Open() call (i.e. were pending before the call).
@@ -80,6 +83,7 @@ func Open(path string) (*DB, error) {
 	db.Themes = &themeRepo{db: sqlDB}
 	db.Hosts = &hostRepo{db: sqlDB}
 	db.Tunnels = &tunnelRepo{db: sqlDB}
+	db.AppServers = &appServerRepo{db: sqlDB}
 	db.AuditLog = &auditRepo{db: sqlDB}
 	return db, nil
 }
@@ -328,6 +332,47 @@ func applyMigrations(db *sql.DB) ([]int, error) {
 		}
 		_, _ = db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version) VALUES (8)`)
 		applied = append(applied, 8)
+	}
+
+	if version < 9 || !columnExists(db, ctx, "audit_log", "plugin_name") {
+		for _, col := range []struct{ name, def string }{
+			{"plugin_name", "TEXT"},     // plugin name, NULL = non-plugin exec
+			{"plugin_vars", "TEXT"},     // JSON array of injected var names (never values)
+			{"plugin_strategy", "TEXT"}, // "docker" | "native" | NULL
+		} {
+			_, err := db.ExecContext(ctx,
+				`ALTER TABLE audit_log ADD COLUMN `+col.name+` `+col.def)
+			if err != nil && !strings.Contains(err.Error(), "duplicate column") {
+				return applied, fmt.Errorf("migration v9 (%s): %w", col.name, err)
+			}
+		}
+		_, _ = db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version) VALUES (9)`)
+		applied = append(applied, 9)
+	}
+
+	if version < 10 {
+		_, err := db.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS app_servers (
+				id          INTEGER PRIMARY KEY AUTOINCREMENT,
+				name        TEXT    NOT NULL UNIQUE,
+				server_id   INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+				plugin_name TEXT    NOT NULL,
+				auto_gw     INTEGER NOT NULL DEFAULT 0,
+				description TEXT    NOT NULL DEFAULT '',
+				created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+				updated_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+			)
+		`)
+		if err != nil && !strings.Contains(err.Error(), "already exists") {
+			return applied, fmt.Errorf("migration v10: %w", err)
+		}
+		_, err = db.ExecContext(ctx,
+			`CREATE INDEX IF NOT EXISTS idx_app_servers_name ON app_servers(name)`)
+		if err != nil && !strings.Contains(err.Error(), "already exists") {
+			return applied, fmt.Errorf("migration v10 index: %w", err)
+		}
+		_, _ = db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version) VALUES (10)`)
+		applied = append(applied, 10)
 	}
 
 	return applied, nil

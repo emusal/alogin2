@@ -2,10 +2,13 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	pluginpkg "github.com/emusal/alogin2/internal/plugin"
 	tunnelpkg "github.com/emusal/alogin2/internal/tunnel"
 )
 
@@ -79,6 +82,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tnStatusMsg:
 		m.tnStatuses = msg.statuses
 		return m, nil
+	case pluginLoadedMsg:
+		m.plugins = msg.plugins
+		return m, nil
+	case pluginListLoadedMsg:
+		m.pluginList = msg.plugins
+		m.pluginListCursor = 0
+		m.state = statePluginList
+		return m, nil
+	case pluginReloadedMsg:
+		m.pluginList = msg.plugins
+		m.pluginDetail = msg.detail
+		m.state = statePluginDetail
+		m.statusMsg = "Saved."
+		return m, nil
+	case asDoneMsg:
+		m.appServers = msg.appServers
+		m.state = stateAppServerList
+		if msg.msg != "" {
+			m.statusMsg = msg.msg
+		}
+		return m, nil
+	case asErrMsg:
+		m.statusMsg = "Error: " + msg.err.Error()
+		return m, nil
 	}
 
 	keyMsg, ok := msg.(tea.KeyMsg)
@@ -111,6 +138,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateTunnelList(keyMsg)
 	case stateTunnelForm:
 		return m.updateTunnelForm(keyMsg)
+	case statePluginPicker:
+		return m.updatePluginPicker(keyMsg)
+	case statePluginList:
+		return m.updatePluginList(keyMsg)
+	case statePluginDetail:
+		return m.updatePluginDetail(keyMsg)
+	case stateAppServerList:
+		return m.updateAppServerList(keyMsg)
+	case stateAppServerForm:
+		return m.updateAppServerForm(keyMsg)
 	}
 	return m, nil
 }
@@ -229,6 +266,13 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 						m.state = stateConfirmDelete
 					}
 					return m, nil
+				case 'p':
+					if len(m.filtered) > 0 && m.pluginDir != "" {
+						m.pluginCursor = 0
+						m.state = statePluginPicker
+						return m, m.loadPluginsCmd()
+					}
+					return m, nil
 				}
 			}
 			m.statusMsg = ""
@@ -300,7 +344,7 @@ func (m Model) updateCommandPalette(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) executeCommand(trigger string) (tea.Model, tea.Cmd) {
 	m.statusMsg = ""
 	switch trigger {
-	case "/server":
+	case "/compute":
 		m.state = stateList
 		return m, nil
 	case "/gateway":
@@ -311,6 +355,74 @@ func (m Model) executeCommand(trigger string) (tea.Model, tea.Cmd) {
 		return m, m.loadHostsCmd()
 	case "/tunnel":
 		return m, m.loadTunnelsCmd()
+	case "/app-server":
+		return m, m.loadAppServersCmd()
+	case "/plugin":
+		return m, m.loadPluginListCmd()
+	}
+	return m, nil
+}
+
+func (m Model) updatePluginList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c", "q":
+		m.quitting = true
+		return m, tea.Quit
+	case "esc":
+		m.state = stateList
+		return m, nil
+	case "up", "k":
+		if m.pluginListCursor > 0 {
+			m.pluginListCursor--
+		}
+	case "down", "j":
+		if m.pluginListCursor < len(m.pluginList)-1 {
+			m.pluginListCursor++
+		}
+	case "enter":
+		if len(m.pluginList) > 0 {
+			m.pluginDetail = m.pluginList[m.pluginListCursor]
+			m.state = statePluginDetail
+			m.statusMsg = ""
+		}
+	}
+	return m, nil
+}
+
+func (m Model) updatePluginDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c", "q":
+		m.quitting = true
+		return m, tea.Quit
+	case "esc":
+		m.state = statePluginList
+		m.statusMsg = ""
+	case "e":
+		if m.pluginDetail == nil || m.pluginDir == "" {
+			return m, nil
+		}
+		editor := os.Getenv("EDITOR")
+		if editor == "" {
+			editor = os.Getenv("VISUAL")
+		}
+		if editor == "" {
+			m.statusMsg = "Set $EDITOR to enable editing (e.g. export EDITOR=vim)"
+			return m, nil
+		}
+		// FilePath is set by LoadFromFile — stable regardless of the name field inside the YAML.
+		filePath := m.pluginDetail.FilePath
+		dir := m.pluginDir
+		return m, tea.ExecProcess(
+			exec.Command(editor, filePath),
+			func(err error) tea.Msg {
+				if err != nil {
+					return pluginReloadedMsg{}
+				}
+				list, _ := pluginpkg.LoadDir(dir)
+				detail, _ := pluginpkg.LoadFromFile(filePath)
+				return pluginReloadedMsg{plugins: list, detail: detail}
+			},
+		)
 	}
 	return m, nil
 }
@@ -960,3 +1072,211 @@ func (m Model) updateTunnelForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // clFormPickerCursor clamp helper (used in render)
 var _ = strings.TrimSpace // keep import
+
+// ── plugin picker ─────────────────────────────────────────────────────────────
+
+// updatePluginPicker handles key events for the plugin picker overlay.
+func (m Model) updatePluginPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c", "q":
+		m.quitting = true
+		return m, tea.Quit
+	case "esc":
+		m.state = stateList
+		return m, nil
+	case "up", "k":
+		if m.pluginCursor > 0 {
+			m.pluginCursor--
+		}
+	case "down", "j":
+		if m.pluginCursor < len(m.plugins)-1 {
+			m.pluginCursor++
+		}
+	case "enter":
+		if len(m.plugins) == 0 {
+			return m, nil
+		}
+		if len(m.filtered) == 0 {
+			return m, nil
+		}
+		srv := m.filtered[m.cursor]
+		m.choice = &SelectedServer{
+			Server: srv,
+			User:   srv.User,
+			Plugin: m.plugins[m.pluginCursor],
+		}
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+// ── app-server list / form ────────────────────────────────────────────────────
+
+func (m Model) updateAppServerList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c", "q":
+		m.quitting = true
+		return m, tea.Quit
+	case "esc":
+		m.state = stateWelcome
+	case "up", "k":
+		if m.appServerCursor > 0 {
+			m.appServerCursor--
+		}
+	case "down", "j":
+		if m.appServerCursor < len(m.appServers)-1 {
+			m.appServerCursor++
+		}
+	case "a":
+		m.initAppServerForm(nil)
+	case "e":
+		if len(m.appServers) > 0 {
+			m.initAppServerForm(m.appServers[m.appServerCursor])
+		}
+	case "d":
+		if len(m.appServers) > 0 {
+			as := m.appServers[m.appServerCursor]
+			if m.appServerCursor >= len(m.appServers)-1 && m.appServerCursor > 0 {
+				m.appServerCursor--
+			}
+			return m, m.deleteAppServerCmd(as.ID)
+		}
+	case "enter":
+		// Connect via selected app-server binding
+		if len(m.appServers) > 0 {
+			as := m.appServers[m.appServerCursor]
+			srv := serverByID(m.servers, as.ServerID)
+			if srv == nil {
+				m.statusMsg = fmt.Sprintf("server id=%d not found", as.ServerID)
+				return m, nil
+			}
+			m.choice = &SelectedServer{
+				Server: srv,
+				User:   srv.User,
+				AutoGW: as.AutoGW,
+				Plugin: as.PluginName,
+			}
+			return m, tea.Quit
+		}
+	}
+	return m, nil
+}
+
+// asFormTabCount: 3 text fields (name, plugin, desc) + 1 server picker row + 1 auto_gw toggle = 5 stops
+const asFormTabCount = 5
+
+// asFormIdxServer and asFormIdxAutoGW are the tab-stop indices for the non-text-field rows.
+const (
+	asFormIdxServer = 3
+	asFormIdxAutoGW = 4
+)
+
+func (m Model) updateAppServerForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle server picker overlay first
+	if m.asFormPickerOpen {
+		switch msg.String() {
+		case "ctrl+c":
+			m.quitting = true
+			return m, tea.Quit
+		case "esc":
+			m.asFormPickerOpen = false
+		case "up", "k":
+			if m.asFormPickerCursor > 0 {
+				m.asFormPickerCursor--
+			}
+		case "down", "j":
+			if m.asFormPickerCursor < len(m.servers)-1 {
+				m.asFormPickerCursor++
+			}
+		case "enter":
+			if len(m.servers) > 0 {
+				m.asFormServerID = m.servers[m.asFormPickerCursor].ID
+			}
+			m.asFormPickerOpen = false
+		}
+		return m, nil
+	}
+
+	switch msg.String() {
+	case "ctrl+c":
+		m.quitting = true
+		return m, tea.Quit
+	case "esc":
+		m.state = stateAppServerList
+		return m, nil
+	case "ctrl+s":
+		return m, m.submitAppServerForm()
+	case "space":
+		if m.asFormFocus == asFormIdxAutoGW {
+			m.asFormAutoGW = !m.asFormAutoGW
+			return m, nil
+		}
+	case "enter":
+		if m.asFormFocus == asFormIdxServer {
+			m.asFormPickerOpen = true
+			m.asFormPickerCursor = 0
+			return m, nil
+		}
+		if m.asFormFocus == asFormIdxAutoGW {
+			m.asFormAutoGW = !m.asFormAutoGW
+			return m, nil
+		}
+		// Move to next field
+		if m.asFormFocus < len(m.asFormFields) {
+			m.asFormFields[m.asFormFocus].Blur()
+		}
+		m.asFormFocus = (m.asFormFocus + 1) % asFormTabCount
+		if m.asFormFocus < len(m.asFormFields) {
+			m.asFormFields[m.asFormFocus].Focus()
+		}
+		return m, nil
+	case "tab":
+		if m.asFormFocus < len(m.asFormFields) {
+			m.asFormFields[m.asFormFocus].Blur()
+		}
+		m.asFormFocus = (m.asFormFocus + 1) % asFormTabCount
+		if m.asFormFocus < len(m.asFormFields) {
+			m.asFormFields[m.asFormFocus].Focus()
+		}
+		return m, nil
+	case "shift+tab":
+		if m.asFormFocus < len(m.asFormFields) {
+			m.asFormFields[m.asFormFocus].Blur()
+		}
+		m.asFormFocus = (m.asFormFocus - 1 + asFormTabCount) % asFormTabCount
+		if m.asFormFocus < len(m.asFormFields) {
+			m.asFormFields[m.asFormFocus].Focus()
+		}
+		return m, nil
+	}
+
+	// Forward key to active text field
+	if m.asFormFocus < len(m.asFormFields) {
+		var cmd tea.Cmd
+		m.asFormFields[m.asFormFocus], cmd = m.asFormFields[m.asFormFocus].Update(msg)
+		return m, cmd
+	}
+	return m, nil
+}
+
+// loadPluginsCmd returns a tea.Cmd that reads plugin names from the plugins directory.
+func (m Model) loadPluginsCmd() tea.Cmd {
+	dir := m.pluginDir
+	return func() tea.Msg {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return pluginLoadedMsg{plugins: nil}
+		}
+		var names []string
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			name := e.Name()
+			if strings.HasSuffix(name, ".yaml") {
+				names = append(names, strings.TrimSuffix(name, ".yaml"))
+			}
+		}
+		return pluginLoadedMsg{plugins: names}
+	}
+}

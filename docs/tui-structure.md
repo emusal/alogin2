@@ -24,6 +24,9 @@ The TUI is a single `Model` with a `state` field that drives all rendering and k
 | `stateHostForm` | Add / edit local host |
 | `stateTunnelList` | Tunnel list with start/stop actions |
 | `stateTunnelForm` | Add / edit tunnel |
+| `statePluginPicker` | Plugin picker overlay (server list) |
+| `stateAppServerList` | App-server binding list |
+| `stateAppServerForm` | Add / edit app-server binding |
 
 ### StartAt values (from `tui.go`)
 
@@ -35,6 +38,7 @@ The TUI is a single `Model` with a `state` field that drives all rendering and k
 | `StartAtCluster` | Cluster list |
 | `StartAtHosts` | Local hosts list |
 | `StartAtTunnel` | Tunnel list |
+| `StartAtAppServer` | App-server list |
 
 ---
 
@@ -63,6 +67,7 @@ The TUI is a single `Model` with a `state` field that drives all rendering and k
 | `a` | Add server |
 | `e` | Edit selected server |
 | `d` | Delete selected server |
+| `p` | Open plugin picker overlay |
 
 ### Tunnel list extras
 | Key | Action |
@@ -76,11 +81,12 @@ The TUI is a single `Model` with a `state` field that drives all rendering and k
 ### Command palette (`/` prefix)
 | Command | Navigates to |
 |---------|-------------|
-| `/server` | Server list |
+| `/compute` | Server list |
 | `/gateway` | Gateway list |
 | `/cluster` | Cluster list |
 | `/hosts` | Local hosts list |
 | `/tunnel` | Tunnel list |
+| `/app-server` | App-server list |
 
 ### Forms (all)
 | Key | Action |
@@ -111,6 +117,14 @@ The TUI is a single `Model` with a `state` field that drives all rendering and k
 |-----|--------|
 | `space` | Toggle `auto_gw` |
 | `Ctrl+S` | Submit form |
+
+### App-server list extras
+| Key | Action |
+|-----|--------|
+| `a` | Add app-server binding |
+| `e` | Edit selected binding |
+| `d` | Delete selected binding |
+| `enter` | Connect and quit |
 
 ---
 
@@ -147,6 +161,16 @@ type Model struct {
 
     // Tunnel form
     tnFormAutoGW bool
+
+    // App-server form state
+    appServers      []*model.AppServer
+    appServerCursor int
+    asFormMode      formMode
+    asFormFields    []textinput.Model
+    asFormFocus     int
+    asFormAutoGW    bool
+    asFormServerID  int64
+    asFormTarget    *model.AppServer
 }
 ```
 

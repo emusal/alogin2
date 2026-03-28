@@ -150,6 +150,39 @@ alogin agent server-policy show <id>
 alogin agent server-prompt set <id> --text "Only run read-only commands."
 ```
 
+### [App-Server (Named Application Bindings)](https://github.com/emusal/alogin2#app-server--named-application-bindings)
+
+App-server bindings pair a compute server with an application plugin (DB client, container shell, etc.)
+so a single name launches the correct app with automatic credential injection.
+
+Canonical flow:
+
+```bash
+# 1. Add a binding
+alogin app-server add --name prod-mysql --server prod-db --app mariadb --auto-gw
+
+# 2. List all bindings
+alogin app-server list
+alogin app-server list --format json
+
+# 3. Connect (launches plugin with automatic credential injection)
+alogin app-server connect prod-mysql
+
+# 4. Non-interactive command via the plugin
+alogin app-server connect prod-mysql --cmd "SHOW DATABASES"
+
+# 5. Show or delete
+alogin app-server show prod-mysql
+alogin app-server delete prod-mysql
+
+# 6. List installed plugin definitions
+alogin app-server plugin list
+alogin app-server plugin list --format json
+```
+
+Plugin YAML files live in `~/.config/alogin/plugins/<name>.yaml`.
+Credentials are resolved from vault and injected via PTY automation (expect/send) — never exposed in command arguments or logs.
+
 ### JSON Output
 
 All list and show commands support `--format json` for machine-readable output:
@@ -169,6 +202,8 @@ All list and show commands support `--format json` for machine-readable output:
 | `access cluster <name> --cmd <cmd>` | array of `{host, output, exit_code, error}` |
 | `agent audit list` | array of audit entry objects |
 | `agent audit tail` | newline-delimited JSON stream |
+| `app-server list` | array of app-server binding objects |
+| `app-server show <name>` | single binding object |
 
 ```bash
 # Examples

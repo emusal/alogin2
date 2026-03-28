@@ -1,6 +1,27 @@
 package tui
 
-import "github.com/emusal/alogin2/internal/model"
+import (
+	"github.com/emusal/alogin2/internal/model"
+	pluginpkg "github.com/emusal/alogin2/internal/plugin"
+)
+
+type asDoneMsg struct {
+	appServers []*model.AppServer
+	msg        string
+}
+type asErrMsg struct{ err error }
+
+// pluginLoadedMsg is sent when the plugin list has been loaded from disk.
+type pluginLoadedMsg struct{ plugins []string }
+
+// pluginListLoadedMsg carries full Plugin objects for the /plugin browser.
+type pluginListLoadedMsg struct{ plugins []*pluginpkg.Plugin }
+
+// pluginReloadedMsg is sent after $EDITOR closes — reloads both the list and the detail.
+type pluginReloadedMsg struct {
+	plugins []*pluginpkg.Plugin
+	detail  *pluginpkg.Plugin // may be nil if file was deleted or parse failed
+}
 
 type formDoneMsg struct{ servers []*model.Server }
 type formErrMsg struct{ err error }

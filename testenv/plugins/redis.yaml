@@ -1,0 +1,39 @@
+# redis.yaml — Application-Aware Plugin for Redis CLI
+#
+# Usage:
+#   alogin connect target-redis --app redis
+#
+# Prerequisites:
+#   - Store the Redis password in the vault:
+#       alogin vault set testuser@target-redis
+#
+# How it works:
+#   1. Secret Injector fetches REDIS_PASS from the vault.
+#   2. Runtime Detector tries `docker ps` for a container named "redis",
+#      then falls back to `which redis-cli`.
+#   3. Orchestrator launches `redis-cli`, waits for "Authentication required"
+#      or sends AUTH command after connection.
+#
+# Note: redis-cli --no-auth-warning -a <pass> is used for the native strategy
+# to avoid interactive auth prompts. The Docker strategy uses the same approach.
+
+name: "redis"
+version: "1"
+
+auth:
+  provider: "vault"
+  mapping:
+    - var: "REDIS_PASS"
+      path: "testuser@target-redis"
+      expose: "arg"
+
+runtime:
+  strategies: ["docker", "native"]
+  environments:
+    native:
+      command: "redis-cli"
+      args: ["--no-auth-warning", "-a", "{{REDIS_PASS}}"]
+    docker:
+      container_match: "redis"
+      command: "redis-cli"
+      args: ["--no-auth-warning", "-a", "{{REDIS_PASS}}"]

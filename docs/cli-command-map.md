@@ -14,6 +14,7 @@ alogin access           Remote connectivity
 alogin auth             Credentials and routing
 alogin agent            AI/MCP tools
 alogin net              Network resource management
+alogin app-server       Named server+plugin bindings
 ```
 
 ---
@@ -57,6 +58,7 @@ alogin access ssh [user@]host... [flags]
 | `--cmd` | `-c` | Remote command to run |
 | `--local-forward` | `-L` | Local port forward spec |
 | `--remote-forward` | `-R` | Remote port forward spec |
+| `--app` | | Application plugin to launch after connecting |
 
 Port-forward spec: `PORT` | `LPORT:RPORT` | `LPORT:HOST:RPORT` | `LHOST:LPORT:RHOST:RPORT`
 
@@ -249,6 +251,33 @@ alogin net tunnel run    NAME               # [hidden] foreground forward (calle
 ```
 
 Tunnel directions: `L` (local forward, `-L LOCAL:REMOTE`) | `R` (reverse, `-R REMOTE:LOCAL`)
+
+---
+
+## app-server — Named server+plugin bindings
+
+File: `internal/cli/app_server.go`, `internal/cli/plugin.go`
+
+```
+alogin app-server list    [--format table|json]
+alogin app-server add     --name NAME --server HOST --app PLUGIN [--auto-gw] [--desc TEXT]
+alogin app-server show    NAME
+alogin app-server delete  NAME                   # aliases: rm, del
+alogin app-server connect NAME [--cmd COMMAND]
+alogin app-server plugin list  [--format table|json]
+```
+
+`app-server` binds a compute server with an application plugin so a single name launches the correct app (DB client, container shell, etc.) with automatic credential injection.
+
+| Flag | Description |
+|------|-------------|
+| `--name` | Unique binding name |
+| `--server` | Server hostname (must exist in compute registry) |
+| `--app` | Plugin name (matches `~/.config/alogin/plugins/<name>.yaml`) |
+| `--auto-gw` | Route through gateway when connecting |
+| `--desc` | Free-form description |
+| `--cmd` | (connect only) Non-interactive command to run via the plugin |
+| `--format` | `table` (default) or `json` |
 
 ---
 

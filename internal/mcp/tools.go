@@ -729,6 +729,16 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 			"matches":   matches,
 		})
 	})
+
+	// --- exec_app ---
+	srv.AddTool(mcpgo.NewTool("exec_app",
+		mcpgo.WithDescription("Execute a command within an application plugin context on a server. "+
+			"Resolves credentials from vault, auto-detects runtime (Docker/native), "+
+			"and injects secrets via Expect-Send PTY automation. "+
+			"Plugin YAML files must exist in the ConfigDir/plugins/ directory."),
+		mcpgo.WithString("server_id", mcpgo.Description("Server ID"), mcpgo.Required()),
+		mcpgo.WithString("app_name", mcpgo.Description("Plugin name (filename without .yaml, e.g. mariadb)"), mcpgo.Required()),
+	), handleExecApp(d))
 }
 
 // nodeHealth is the structured output of inspect_node.

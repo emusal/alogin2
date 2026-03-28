@@ -2,16 +2,20 @@
 package terminal
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/emusal/alogin2/internal/db"
 	"github.com/emusal/alogin2/internal/model"
+	"github.com/emusal/alogin2/internal/plugin"
 	internalssh "github.com/emusal/alogin2/internal/ssh"
 	"github.com/emusal/alogin2/internal/vault"
 	"github.com/go-chi/chi/v5"
@@ -21,13 +25,20 @@ import (
 
 // Handler handles WebSocket terminal connections.
 type Handler struct {
-	db  *db.DB
-	vlt vault.Vault
+	db        *db.DB
+	vlt       vault.Vault
+	pluginDir string
 }
 
 // NewHandler creates a terminal WebSocket handler.
 func NewHandler(database *db.DB, vlt vault.Vault) *Handler {
 	return &Handler{db: database, vlt: vlt}
+}
+
+// WithPluginDir sets the plugin directory for app-aware terminal sessions.
+func (h *Handler) WithPluginDir(dir string) *Handler {
+	h.pluginDir = dir
+	return h
 }
 
 var upgrader = websocket.Upgrader{
@@ -55,6 +66,7 @@ func (h *Handler) ServeWS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	autoGW := r.URL.Query().Get("auto_gw") == "true"
+	appName := r.URL.Query().Get("app")
 
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -62,13 +74,13 @@ func (h *Handler) ServeWS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer ws.Close()
 
-	if err := h.runSession(r.Context(), ws, serverID, autoGW); err != nil {
+	if err := h.runSession(r.Context(), ws, serverID, autoGW, appName); err != nil {
 		msg, _ := json.Marshal(wsMessage{Type: "data", Data: "\r\nError: " + err.Error() + "\r\n"})
 		ws.WriteMessage(websocket.TextMessage, msg)
 	}
 }
 
-func (h *Handler) runSession(ctx context.Context, ws *websocket.Conn, serverID int64, autoGW bool) error {
+func (h *Handler) runSession(ctx context.Context, ws *websocket.Conn, serverID int64, autoGW bool, appName string) error {
 	srv, err := h.db.Servers.GetByID(ctx, serverID)
 	if err != nil || srv == nil {
 		return fmt.Errorf("server %d not found", serverID)
@@ -114,22 +126,75 @@ func (h *Handler) runSession(ctx context.Context, ws *websocket.Conn, serverID i
 		return err
 	}
 
+	var ptyRules []plugin.PTYRule
+	if appName != "" && h.pluginDir != "" {
+		p, loadErr := plugin.LoadFromFile(filepath.Join(h.pluginDir, appName+".yaml"))
+		if loadErr == nil && p != nil && p.Runtime.Environments.Native != nil {
+			strategy := &plugin.Strategy{
+				Kind:    "native",
+				Command: p.Runtime.Environments.Native.Command,
+				Args:    p.Runtime.Environments.Native.Args,
+			}
+			if strategy.Command != "" {
+				// Resolve secrets and build PTY automation rules.
+				if secrets, sErr := plugin.ResolveSecrets(p, h.vlt); sErr == nil {
+					sess := &plugin.Session{Plugin: p, Strategy: strategy, Secrets: secrets}
+					ptyRules = sess.BuildPTYRules()
+				}
+				cmd := strategy.BuildCommand()
+				if err := sess.Start(cmd); err != nil {
+					return fmt.Errorf("start plugin %s: %w", appName, err)
+				}
+				goto sessionStarted
+			}
+		}
+		// Plugin load failed — fall through to shell with a notice
+		stdinPipe.Write([]byte("# plugin '" + appName + "' not loaded, opening shell\r\n"))
+	}
 	if err := sess.Shell(); err != nil {
 		return err
 	}
+sessionStarted:
 
 	var wg sync.WaitGroup
 
-	// SSH stdout → WebSocket
+	// SSH stdout → WebSocket (+ PTY rule automation)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		buf := make([]byte, 4096)
+		// pending holds unmatched output for expect scanning across reads.
+		var pending bytes.Buffer
 		for {
 			n, readErr := stdoutPipe.Read(buf)
 			if n > 0 {
-				msg, _ := json.Marshal(wsMessage{Type: "data", Data: string(buf[:n])})
+				chunk := buf[:n]
+				msg, _ := json.Marshal(wsMessage{Type: "data", Data: string(chunk)})
 				ws.WriteMessage(websocket.TextMessage, msg)
+
+				// Expect-Send automation: check pending+chunk for each rule.
+				if len(ptyRules) > 0 {
+					pending.Write(chunk)
+					combined := pending.String()
+					for i := range ptyRules {
+						r := &ptyRules[i]
+						if r.Pattern != "" && strings.Contains(combined, r.Pattern) {
+							send := r.Send
+							if r.SendNewline {
+								send += "\n"
+							}
+							stdinPipe.Write([]byte(send))
+							r.Pattern = "" // fire once
+							pending.Reset()
+						}
+					}
+					// Keep only the last 512 bytes to bound memory.
+					if pending.Len() > 512 {
+						tail := pending.Bytes()
+						pending.Reset()
+						pending.Write(tail[len(tail)-512:])
+					}
+				}
 			}
 			if readErr != nil {
 				return

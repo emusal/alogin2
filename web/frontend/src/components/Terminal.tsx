@@ -9,9 +9,10 @@ import './Terminal.css'
 interface Props {
   server: Server
   autoGW?: boolean
+  app?: string
 }
 
-export function Terminal({ server, autoGW = false }: Props) {
+export function Terminal({ server, autoGW = false, app }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<XTerm | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
@@ -59,7 +60,11 @@ export function Terminal({ server, autoGW = false }: Props) {
 
     // Connect WebSocket
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsURL = `${proto}//${window.location.host}/ws/terminal/${server.id}${autoGW ? '?auto_gw=true' : ''}`
+    const params = new URLSearchParams()
+    if (autoGW) params.set('auto_gw', 'true')
+    if (app) params.set('app', app)
+    const qs = params.toString() ? '?' + params.toString() : ''
+    const wsURL = `${proto}//${window.location.host}/ws/terminal/${server.id}${qs}`
     const ws = new WebSocket(wsURL)
     wsRef.current = ws
 

@@ -9,10 +9,10 @@ export interface PageInfo {
   lines: string[]
 }
 
-type PageKey = 'servers' | 'gateways' | 'clusters' | 'hosts' | 'tunnels' | 'terminal'
+type PageKey = 'compute' | 'gateways' | 'clusters' | 'hosts' | 'tunnels' | 'plugins' | 'app-servers' | 'terminal'
 
 const translations: Record<PageKey, { ko: PageInfo; en: PageInfo }> = {
-  servers: {
+  compute: {
     ko: {
       title: '서버 목록',
       lines: [
@@ -22,7 +22,7 @@ const translations: Record<PageKey, { ko: PageInfo; en: PageInfo }> = {
       ],
     },
     en: {
-      title: 'Servers',
+      title: 'Compute',
       lines: [
         'Browse and connect to registered SSH servers. Double-click a row or click Connect to open a session.',
         'Servers with a gateway show a GW button for bastion-routed connections.',
@@ -99,6 +99,42 @@ const translations: Record<PageKey, { ko: PageInfo; en: PageInfo }> = {
         'Save SSH port-forward configurations and maintain them as detached tmux sessions.',
         'Click Start to launch a tunnel — it runs in a named tmux session until you Stop it.',
         'Supports both -L (local forward) and -R (remote forward) directions.',
+      ],
+    },
+  },
+  plugins: {
+    ko: {
+      title: '앱 플러그인',
+      lines: [
+        '설치된 애플리케이션 플러그인 목록입니다. 플러그인은 ~/.config/alogin/plugins/*.yaml 에 위치합니다.',
+        'SSH 접속 시 --app <name> 플래그로 플러그인을 실행하면 자격증명이 자동 주입됩니다.',
+        '--cmd 옵션으로 비대화형 명령을 실행할 수 있습니다.',
+      ],
+    },
+    en: {
+      title: 'App Plugins',
+      lines: [
+        'Installed application plugins. Place *.yaml files in ~/.config/alogin/plugins/ to add plugins.',
+        'Use --app <name> when connecting via SSH to auto-inject credentials for the application.',
+        'Pass --cmd to run a non-interactive query instead of opening an interactive session.',
+      ],
+    },
+  },
+  'app-servers': {
+    ko: {
+      title: '앱 서버',
+      lines: [
+        '컴퓨트 서버와 애플리케이션 플러그인을 묶은 단축 바인딩을 관리합니다.',
+        'Connect 버튼으로 바인딩된 서버에 자동으로 플러그인을 실행하며 접속합니다.',
+        '등록해두면 --app 플래그 없이 이름 하나만으로 앱에 접속할 수 있습니다.',
+      ],
+    },
+    en: {
+      title: 'App Servers',
+      lines: [
+        'Manage named bindings that pair a compute server with an application plugin.',
+        'Click Connect to open a terminal session with the plugin launched automatically.',
+        'Once registered, connect by name without specifying --app each time.',
       ],
     },
   },

@@ -130,23 +130,43 @@ CREATE TABLE IF NOT EXISTS tunnels (
 CREATE INDEX IF NOT EXISTS idx_tunnels_name ON tunnels(name);
 
 -- ----------------------------------------------------------------
+-- app_servers: named compute-server + plugin bindings (v10)
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS app_servers (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT    NOT NULL UNIQUE,
+    server_id   INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    plugin_name TEXT    NOT NULL,
+    auto_gw     INTEGER NOT NULL DEFAULT 0,
+    description TEXT    NOT NULL DEFAULT '',
+    created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    updated_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_app_servers_name ON app_servers(name);
+
+-- ----------------------------------------------------------------
 -- audit_log: structured record of all MCP exec events (v7)
+-- plugin_name/plugin_vars/plugin_strategy added in v9
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS audit_log (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp     TEXT    NOT NULL,
-    event         TEXT    NOT NULL,
-    agent_id      TEXT    NOT NULL DEFAULT '',
-    server_id     INTEGER REFERENCES servers(id) ON DELETE SET NULL,
-    server_host   TEXT    NOT NULL DEFAULT '',
-    cluster_id    INTEGER REFERENCES clusters(id) ON DELETE SET NULL,
-    cluster_name  TEXT    NOT NULL DEFAULT '',
-    commands      TEXT    NOT NULL DEFAULT '[]',
-    intent        TEXT    NOT NULL DEFAULT '',
-    timeout_sec   INTEGER NOT NULL DEFAULT 0,
-    policy_action TEXT,
-    approved_by   TEXT,
-    created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp        TEXT    NOT NULL,
+    event            TEXT    NOT NULL,
+    agent_id         TEXT    NOT NULL DEFAULT '',
+    server_id        INTEGER REFERENCES servers(id) ON DELETE SET NULL,
+    server_host      TEXT    NOT NULL DEFAULT '',
+    cluster_id       INTEGER REFERENCES clusters(id) ON DELETE SET NULL,
+    cluster_name     TEXT    NOT NULL DEFAULT '',
+    commands         TEXT    NOT NULL DEFAULT '[]',
+    intent           TEXT    NOT NULL DEFAULT '',
+    timeout_sec      INTEGER NOT NULL DEFAULT 0,
+    policy_action    TEXT,
+    approved_by      TEXT,
+    created_at       TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    plugin_name      TEXT,
+    plugin_vars      TEXT,
+    plugin_strategy  TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_log_agent_id   ON audit_log(agent_id);
@@ -169,3 +189,5 @@ INSERT OR IGNORE INTO schema_migrations(version) VALUES (5);
 INSERT OR IGNORE INTO schema_migrations(version) VALUES (6);
 INSERT OR IGNORE INTO schema_migrations(version) VALUES (7);
 INSERT OR IGNORE INTO schema_migrations(version) VALUES (8);
+INSERT OR IGNORE INTO schema_migrations(version) VALUES (9);
+INSERT OR IGNORE INTO schema_migrations(version) VALUES (10);

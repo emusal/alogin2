@@ -67,6 +67,12 @@ _alogin_hosts_entries() {
   _describe 'hostname' hosts
 }
 
+_alogin_app_servers() {
+  local -a appservers
+  appservers=(${(f)"$(alogin app-server list 2>/dev/null | awk 'NR>2{print $1}')"})
+  _describe 'app-server' appservers
+}
+
 # ---------------------------------------------------------------------------
 # Subcommand completion helpers (reused by both canonical and legacy paths)
 # ---------------------------------------------------------------------------
@@ -257,6 +263,7 @@ _alogin() {
         'auth:Manage credentials and routing (gateways, aliases, vault)'
         'agent:AI/MCP tools: MCP server, setup, policy'
         'net:Manage network resources (hosts, tunnels)'
+        'app-server:Manage named server+plugin bindings'
         # ── Interactive UIs ───────────────────────────────────────────────
         'tui:Interactive fuzzy host selector'
         'web:Start the web UI server'
@@ -304,6 +311,7 @@ _alogin() {
                     '*--local-forward[local port forward]:spec:' \
                     '*-R[reverse port forward]:spec:' \
                     '*--remote-forward[reverse port forward]:spec:' \
+                    '--app[application plugin to launch after connecting]:plugin:' \
                     '1: :_alogin_hosts'
                   ;;
                 sftp)
@@ -404,6 +412,51 @@ _alogin() {
           esac
           ;;
 
+        # ── app-server ────────────────────────────────────────────────────
+        app-server)
+          local -a as_subcmds
+          as_subcmds=(
+            'list:List all app-server bindings'
+            'add:Add a new app-server binding'
+            'show:Show app-server binding details'
+            'delete:Remove an app-server binding'
+            'connect:Connect using an app-server binding'
+            'plugin:Manage application plugins'
+          )
+          _arguments -C '1: :->sub' '*:: :->sub_args'
+          case $state in
+            sub) _describe 'subcommand' as_subcmds ;;
+            sub_args)
+              case $words[1] in
+                show|delete|connect) _alogin_app_servers ;;
+                add)
+                  _arguments \
+                    '--name[binding name]:name:' \
+                    '--server[server hostname]:host:_alogin_hosts' \
+                    '--app[plugin name]:plugin:' \
+                    '--auto-gw[route through gateway]' \
+                    '--desc[description]:desc:'
+                  ;;
+                list) _arguments '--format[output format]:format:(table json)' ;;
+                connect) _arguments '--cmd[remote command]:command:' ;;
+                plugin)
+                  local -a plugin_subcmds
+                  plugin_subcmds=('list:List installed application plugins')
+                  _arguments -C '1: :->psub' '*:: :->psub_args'
+                  case $state in
+                    psub) _describe 'subcommand' plugin_subcmds ;;
+                    psub_args)
+                      case $words[1] in
+                        list) _arguments '--format[output format]:format:(table json)' ;;
+                      esac
+                      ;;
+                  esac
+                  ;;
+              esac
+              ;;
+          esac
+          ;;
+
         # ── Other root commands ───────────────────────────────────────────
         completion)
           local -a comp_subcmds
@@ -470,7 +523,7 @@ _alogin_completion() {
     cword=$COMP_CWORD
   }
 
-  local commands="compute access auth agent net tui web migrate db-migrate completion shell-init uninstall upgrade version"
+  local commands="compute access auth agent net app-server tui web migrate db-migrate completion shell-init uninstall upgrade version"
 
   # Helpers
   _alogin_hosts() {
@@ -490,6 +543,9 @@ _alogin_completion() {
   }
   _alogin_hosts_entries() {
     alogin net hosts list 2>/dev/null | awk 'NR>2{print $1}'
+  }
+  _alogin_app_servers() {
+    alogin app-server list 2>/dev/null | awk 'NR>2{print $1}'
   }
 
   local cmd="${words[1]}"
@@ -528,7 +584,7 @@ _alogin_completion() {
             if [[ "$cur" != -* ]]; then
               COMPREPLY=($(compgen -W "$(_alogin_hosts)" -- "$cur"))
             else
-              COMPREPLY=($(compgen -W "--auto-gw --dry-run --cmd -c -L --local-forward -R --remote-forward" -- "$cur"))
+              COMPREPLY=($(compgen -W "--auto-gw --dry-run --cmd -c -L --local-forward -R --remote-forward --app" -- "$cur"))
             fi
             ;;
           sftp|ftp|mount)
@@ -638,6 +694,27 @@ _alogin_completion() {
                 start|stop|status|edit|rm) COMPREPLY=($(compgen -W "$(_alogin_tunnels)" -- "$cur")) ;;
                 list) COMPREPLY=($(compgen -W "--format" -- "$cur")) ;;
               esac
+            fi
+            ;;
+        esac
+      fi
+      ;;
+
+    # ── app-server ──────────────────────────────────────────────────────────
+    app-server)
+      if [[ $cword -eq 2 ]]; then
+        COMPREPLY=($(compgen -W "list add show delete connect plugin" -- "$cur"))
+      elif [[ $cword -ge 3 ]]; then
+        case "$sub" in
+          show|delete|connect) COMPREPLY=($(compgen -W "$(_alogin_app_servers)" -- "$cur")) ;;
+          add)    COMPREPLY=($(compgen -W "--name --server --app --auto-gw --desc" -- "$cur")) ;;
+          list)   COMPREPLY=($(compgen -W "--format" -- "$cur")) ;;
+          connect) COMPREPLY=($(compgen -W "--cmd $(_alogin_app_servers)" -- "$cur")) ;;
+          plugin)
+            if [[ $cword -eq 3 ]]; then
+              COMPREPLY=($(compgen -W "list" -- "$cur"))
+            elif [[ $cword -ge 4 && "$sub2" == "list" ]]; then
+              COMPREPLY=($(compgen -W "--format" -- "$cur"))
             fi
             ;;
         esac

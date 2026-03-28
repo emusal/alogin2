@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/emusal/alogin2/internal/db"
 	"github.com/emusal/alogin2/internal/model"
+	pluginpkg "github.com/emusal/alogin2/internal/plugin"
 	tunnelpkg "github.com/emusal/alogin2/internal/tunnel"
 )
 
@@ -19,7 +20,8 @@ import (
 type SelectedServer struct {
 	Server *model.Server
 	User   string
-	AutoGW bool // true = connect via gateway (legacy 'r' behaviour)
+	AutoGW bool    // true = connect via gateway (legacy 'r' behaviour)
+	Plugin string  // non-empty = launch this plugin after connecting (plugin name)
 }
 
 // state tracks what the TUI is currently doing.
@@ -39,6 +41,11 @@ const (
 	stateHostForm                   // add/edit local host form
 	stateTunnelList                 // tunnel management list
 	stateTunnelForm                 // add/edit tunnel form
+	statePluginPicker               // application plugin picker (after server selection)
+	statePluginList                 // standalone plugin browser (/plugin)
+	statePluginDetail               // read-only detail view of one plugin
+	stateAppServerList              // app-server management list
+	stateAppServerForm              // add/edit app-server form
 )
 
 // StartAt specifies which section to open when launching the TUI.
@@ -51,6 +58,7 @@ const (
 	StartAtCluster                // jump to cluster management
 	StartAtHosts                  // jump to local hosts management
 	StartAtTunnel                 // jump to tunnel management
+	StartAtAppServer              // jump to app-server management
 )
 
 type formMode int
@@ -67,11 +75,13 @@ type tuiCommand struct {
 }
 
 var globalCommands = []tuiCommand{
-	{"/server", "Manage servers"},
+	{"/compute", "Manage servers"},
 	{"/gateway", "Manage gateways"},
 	{"/cluster", "Manage clusters"},
 	{"/hosts", "Manage local hostname mappings"},
 	{"/tunnel", "Manage SSH tunnels"},
+	{"/app-server", "Manage app-server bindings (server+plugin)"},
+	{"/plugin", "Browse installed application plugins"},
 }
 
 // memberEntry tracks one cluster member in the form.
@@ -183,6 +193,32 @@ type Model struct {
 	tnFormTarget  *model.Tunnel
 	tnFormServerID int64
 
+	// Plugin picker state (server selection overlay)
+	plugins      []string // plugin names loaded from plugins dir
+	pluginCursor int
+	pluginDir    string // path to ~/.config/alogin/plugins/
+
+	// Plugin list state (/plugin menu)
+	pluginList       []*pluginpkg.Plugin
+	pluginListCursor int
+
+	// Plugin detail state
+	pluginDetail *pluginpkg.Plugin // currently viewed plugin; FilePath field is the stable edit target
+
+	// App-server list
+	appServers      []*model.AppServer
+	appServerCursor int
+
+	// App-server form: [0]=name [1]=pluginName [2]=description
+	asFormMode         formMode
+	asFormFields       []textinput.Model
+	asFormFocus        int
+	asFormAutoGW       bool
+	asFormServerID     int64
+	asFormTarget       *model.AppServer
+	asFormPickerOpen   bool
+	asFormPickerCursor int
+
 	// Status/error message
 	statusMsg string
 
@@ -200,11 +236,13 @@ type Model struct {
 
 // NewModel creates a TUI model starting at the welcome screen.
 func NewModel(servers []*model.Server, database *db.DB, version string) Model {
-	return NewModelAt(servers, database, StartAtWelcome, version)
+	return NewModelAt(servers, database, StartAtWelcome, version, "")
 }
 
 // NewModelAt creates a TUI model starting at the given section.
-func NewModelAt(servers []*model.Server, database *db.DB, start StartAt, version string) Model {
+// pluginDir is the path to the plugins directory (e.g. ~/.config/alogin/plugins).
+// An empty string disables the plugin picker.
+func NewModelAt(servers []*model.Server, database *db.DB, start StartAt, version string, pluginDir string) Model {
 	initialState := stateWelcome
 	switch start {
 	case StartAtList:
@@ -217,15 +255,18 @@ func NewModelAt(servers []*model.Server, database *db.DB, start StartAt, version
 		initialState = stateHostList
 	case StartAtTunnel:
 		initialState = stateTunnelList
+	case StartAtAppServer:
+		initialState = stateAppServerList
 	}
 
 	m := Model{
-		servers:  servers,
-		filtered: servers,
-		db:       database,
-		startAt:  start,
-		state:    initialState,
-		version:  version,
+		servers:   servers,
+		filtered:  servers,
+		db:        database,
+		startAt:   start,
+		state:     initialState,
+		version:   version,
+		pluginDir: pluginDir,
 	}
 
 	m.titleStyle = lipgloss.NewStyle().
@@ -292,6 +333,8 @@ func (m Model) Init() tea.Cmd {
 		return m.loadHostsCmd()
 	case StartAtTunnel:
 		return m.loadTunnelsCmd()
+	case StartAtAppServer:
+		return m.loadAppServersCmd()
 	default:
 		return m.loadStatsCmd()
 	}
@@ -815,5 +858,107 @@ func (m Model) deleteTunnelCmd(id int64) tea.Cmd {
 		}
 		tunnels, _ := m.db.Tunnels.ListAll(context.Background())
 		return tnDoneMsg{tunnels, "Deleted."}
+	}
+}
+
+// ── app-server ────────────────────────────────────────────────────────────────
+
+func (m Model) loadAppServersCmd() tea.Cmd {
+	return func() tea.Msg {
+		list, err := m.db.AppServers.ListAll(context.Background())
+		if err != nil {
+			return asErrMsg{err}
+		}
+		return asDoneMsg{list, ""}
+	}
+}
+
+func (m *Model) initAppServerForm(as *model.AppServer) {
+	// fields: [0]=name [1]=pluginName [2]=description
+	fields := make([]textinput.Model, 3)
+	for i := range fields {
+		fields[i] = textinput.New()
+		fields[i].CharLimit = 256
+	}
+	fields[0].Placeholder = "binding name (unique)"
+	fields[1].Placeholder = "plugin name (e.g. mariadb)"
+	fields[2].Placeholder = "description (optional)"
+
+	if as != nil {
+		fields[0].SetValue(as.Name)
+		fields[1].SetValue(as.PluginName)
+		fields[2].SetValue(as.Description)
+		m.asFormTarget = as
+		m.asFormMode = fmEdit
+		m.asFormAutoGW = as.AutoGW
+		m.asFormServerID = as.ServerID
+	} else {
+		m.asFormTarget = nil
+		m.asFormMode = fmAdd
+		m.asFormAutoGW = false
+		m.asFormServerID = 0
+	}
+
+	fields[0].Focus()
+	m.asFormFields = fields
+	m.asFormFocus = 0
+	m.asFormPickerOpen = false
+	m.asFormPickerCursor = 0
+	m.state = stateAppServerForm
+	m.statusMsg = ""
+}
+
+func (m Model) submitAppServerForm() tea.Cmd {
+	return func() tea.Msg {
+		name := m.asFormFields[0].Value()
+		pluginName := m.asFormFields[1].Value()
+		description := m.asFormFields[2].Value()
+
+		if name == "" || pluginName == "" {
+			return asErrMsg{fmt.Errorf("name and plugin are required")}
+		}
+		if m.asFormServerID == 0 {
+			return asErrMsg{fmt.Errorf("server is required — press Enter on the Server field to pick one")}
+		}
+
+		ctx := context.Background()
+		as := &model.AppServer{
+			Name:        name,
+			ServerID:    m.asFormServerID,
+			PluginName:  pluginName,
+			AutoGW:      m.asFormAutoGW,
+			Description: description,
+		}
+
+		var opErr error
+		if m.asFormMode == fmAdd {
+			opErr = m.db.AppServers.Create(ctx, as)
+		} else {
+			as.ID = m.asFormTarget.ID
+			opErr = m.db.AppServers.Update(ctx, as)
+		}
+		if opErr != nil {
+			return asErrMsg{opErr}
+		}
+		list, _ := m.db.AppServers.ListAll(ctx)
+		return asDoneMsg{list, "Saved."}
+	}
+}
+
+func (m Model) deleteAppServerCmd(id int64) tea.Cmd {
+	return func() tea.Msg {
+		if err := m.db.AppServers.Delete(context.Background(), id); err != nil {
+			return asErrMsg{err}
+		}
+		list, _ := m.db.AppServers.ListAll(context.Background())
+		return asDoneMsg{list, "Deleted."}
+	}
+}
+
+func (m Model) loadPluginListCmd() tea.Cmd {
+	dir := m.pluginDir
+	return func() tea.Msg {
+		list, _ := pluginpkg.LoadDir(dir)
+		return pluginListLoadedMsg{plugins: list}
 	}
 }

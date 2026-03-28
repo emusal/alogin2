@@ -31,7 +31,7 @@ const emptyForm = (): ServerFormData => ({
   locale: '',
 })
 
-export function ServerFormModal({ initial, gateways, servers, onSave, onClose }: Props) {
+export function ComputeFormModal({ initial, gateways, servers, onSave, onClose }: Props) {
   const isEdit = initial !== null
   const [form, setForm] = useState<ServerFormData>(() =>
     isEdit
@@ -58,7 +58,7 @@ export function ServerFormModal({ initial, gateways, servers, onSave, onClose }:
     setSaving(true)
     setError(null)
     try {
-      const url = isEdit ? `/api/servers/${initial.id}` : '/api/servers'
+      const url = isEdit ? `/api/compute/${initial.id}` : '/api/compute'
       const method = isEdit ? 'PUT' : 'POST'
       const body = isEdit
         ? {

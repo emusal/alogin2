@@ -50,11 +50,12 @@ Manages SSH connections, port tunnels, cluster sessions, and server credentials
 with an encrypted vault and a full audit trail.
 
 Command groups:
-  compute   Manage servers (compute resources)
-  access    Connect to remote hosts (SSH, SFTP, FTP, SSHFS, cluster)
-  auth      Manage credentials and routing (gateways, aliases, vault)
-  agent     AI/MCP tools: run as MCP server, configure AI clients, manage policies
-  net       Manage network resources (hosts, tunnels)
+  compute     Manage servers (compute resources)
+  app-server  Named server+plugin bindings for one-command app access
+  access      Connect to remote hosts (SSH, SFTP, FTP, SSHFS, cluster)
+  auth        Manage credentials and routing (gateways, aliases, vault)
+  agent       AI/MCP tools: run as MCP server, configure AI clients, manage policies
+  net         Manage network resources (hosts, tunnels)
 
 Interactive UIs:
   tui       Terminal UI host selector
@@ -79,11 +80,12 @@ Run 'alogin agent setup' to configure Claude Desktop or other AI clients.`,
 
 	// ---- Canonical new hierarchy ----
 	root.AddCommand(
-		newComputeCmd(), // alogin compute  (alias: server)
-		newAccessCmd(),  // alogin access
-		newAuthCmd(),    // alogin auth
-		newAgentCmd(),   // alogin agent
-		newNetCmd(),     // alogin net
+		newComputeCmd(),    // alogin compute
+		newAppServerCmd(),  // alogin app-server
+		newAccessCmd(),     // alogin access
+		newAuthCmd(),       // alogin auth
+		newAgentCmd(),      // alogin agent
+		newNetCmd(),        // alogin net
 	)
 
 	// ---- Unchanged root-level commands ----
@@ -130,6 +132,16 @@ func initRuntime() error {
 	return nil
 }
 
+func initVaultOnly() error {
+	var err error
+	cfg, err = config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+	vlt = buildVault()
+	return nil
+}
+
 func buildVault() vault.Vault {
 	var backends []vault.Vault
 
@@ -145,8 +157,10 @@ func buildVault() vault.Vault {
 		}
 	}
 
-	// plaintext fallback (legacy compatibility)
-	backends = append(backends, vault.NewPlaintext(database.Raw()))
+	// plaintext fallback (legacy compatibility, requires DB)
+	if database != nil {
+		backends = append(backends, vault.NewPlaintext(database.Raw()))
+	}
 
 	return vault.NewChain(backends...)
 }

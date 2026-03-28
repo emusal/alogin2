@@ -39,7 +39,11 @@ func runTUIAtWithOpts(ctx context.Context, start tui.StartAt, opts *model.Connec
 		return err
 	}
 
-	m := tui.NewModelAt(servers, database, start, Version)
+	pluginDir := ""
+	if cfg != nil {
+		pluginDir = cfg.ConfigDir + "/plugins"
+	}
+	m := tui.NewModelAt(servers, database, start, Version, pluginDir)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	finalModel, err := p.Run()
 	if err != nil {
@@ -56,5 +60,8 @@ func runTUIAtWithOpts(ctx context.Context, start tui.StartAt, opts *model.Connec
 	}
 
 	opts.AutoGW = choice.AutoGW
+	if choice.Plugin != "" {
+		opts.AppName = choice.Plugin
+	}
 	return doConnect(ctx, choice.User, choice.Server.Host, opts)
 }

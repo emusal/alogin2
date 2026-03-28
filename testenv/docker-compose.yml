@@ -64,6 +64,62 @@ services:
       - back_net
     restart: always
 
+  # ── Plugin System Test Services ───────────────────────────────────────────
+  # target-mariadb: SSH target that runs a MariaDB server.
+  # Used for testing the mariadb plugin (--app mariadb).
+  target-mariadb:
+    build:
+      context: ./docker/mariadb
+    container_name: alogin_target_mariadb
+    hostname: target-mariadb
+    environment:
+      MARIADB_ROOT_PASSWORD: testuser
+      MARIADB_DATABASE: testdb
+    networks:
+      - back_net
+    restart: always
+
+  # target-redis: SSH target that runs a Redis server.
+  # Used for testing the redis plugin (--app redis).
+  target-redis:
+    build:
+      context: ./docker/redis
+    container_name: alogin_target_redis
+    hostname: target-redis
+    environment:
+      REDIS_PASSWORD: testuser
+    networks:
+      - back_net
+    restart: always
+
+  # target-postgres: SSH target that runs a PostgreSQL server.
+  # Used for testing the postgres plugin (--app postgres).
+  target-postgres:
+    build:
+      context: ./docker/postgres
+    container_name: alogin_target_postgres
+    hostname: target-postgres
+    environment:
+      POSTGRES_PASSWORD: testuser
+      POSTGRES_DB: testdb
+    networks:
+      - back_net
+    restart: always
+
+  # target-mongo: SSH target that runs a MongoDB server.
+  # Used for testing the mongo plugin (--app mongo).
+  target-mongo:
+    build:
+      context: ./docker/mongo
+    container_name: alogin_target_mongo
+    hostname: target-mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: testuser
+    networks:
+      - back_net
+    restart: always
+
 networks:
   front_net:
   back_net:

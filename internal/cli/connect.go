@@ -19,6 +19,7 @@ func newConnectCmd() *cobra.Command {
 		command string
 		tunnelL []string
 		tunnelR []string
+		appName string
 	)
 
 	cmd := &cobra.Command{
@@ -58,6 +59,7 @@ Other options:
 				DryRun:  dryRun,
 				TunnelL: tunnelL,
 				TunnelR: tunnelR,
+				AppName: appName,
 			}
 
 			// No host → launch TUI
@@ -81,6 +83,7 @@ Other options:
 	cmd.Flags().StringVarP(&command, "cmd", "c", "", "command to run after login")
 	cmd.Flags().StringArrayVarP(&tunnelL, "local-forward", "L", nil, "local port forward: PORT | LPORT:RPORT | LPORT:host:RPORT | lhost:LPORT:host:RPORT")
 	cmd.Flags().StringArrayVarP(&tunnelR, "remote-forward", "R", nil, "remote port forward (SSH -R): RPORT:lhost:LPORT | rhost:RPORT:lhost:LPORT")
+	cmd.Flags().StringVar(&appName, "app", "", "application plugin to launch after connecting (e.g. mariadb)")
 
 	return cmd
 }
@@ -173,6 +176,9 @@ func doConnect(ctx context.Context, user, host string, opts *model.ConnectOption
 		}
 	}
 
+	if opts.AppName != "" {
+		return runPlugin(ctx, opts.AppName, client, srv, opts.Command)
+	}
 	return client.Shell(shellOpts)
 }
 

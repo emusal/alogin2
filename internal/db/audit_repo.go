@@ -25,6 +25,10 @@ type AuditEntry struct {
 	PolicyAction string // "allow", "deny", "require_approval", or ""
 	ApprovedBy   string // approval token if HITL-approved, else ""
 	CreatedAt    time.Time
+	// Plugin execution fields (v9+); zero values indicate non-plugin exec.
+	PluginName     string   // plugin name, e.g. "mariadb"
+	PluginVars     []string // injected variable names only (never values)
+	PluginStrategy string   // "docker" | "native"
 }
 
 // AuditListOpts filters results from AuditRepo.List.
@@ -55,11 +59,16 @@ func (r *auditRepo) Insert(ctx context.Context, e AuditEntry) (int64, error) {
 	if ts == "" {
 		ts = time.Now().UTC().Format(time.RFC3339)
 	}
+	pluginVarsJSON, err := json.Marshal(e.PluginVars)
+	if err != nil || len(e.PluginVars) == 0 {
+		pluginVarsJSON = []byte("[]")
+	}
 	res, err := r.db.ExecContext(ctx,
 		`INSERT INTO audit_log
 			(timestamp, event, agent_id, server_id, server_host, cluster_id, cluster_name,
-			 commands, intent, timeout_sec, policy_action, approved_by)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 commands, intent, timeout_sec, policy_action, approved_by,
+			 plugin_name, plugin_vars, plugin_strategy)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		ts,
 		e.Event,
 		e.AgentID,
@@ -72,6 +81,9 @@ func (r *auditRepo) Insert(ctx context.Context, e AuditEntry) (int64, error) {
 		e.TimeoutSec,
 		nullString(e.PolicyAction),
 		nullString(e.ApprovedBy),
+		nullString(e.PluginName),
+		string(pluginVarsJSON),
+		nullString(e.PluginStrategy),
 	)
 	if err != nil {
 		return 0, fmt.Errorf("audit insert: %w", err)
@@ -102,7 +114,8 @@ func (r *auditRepo) List(ctx context.Context, opts AuditListOpts) ([]*AuditEntry
 	}
 
 	q := `SELECT id, timestamp, event, agent_id, server_id, server_host, cluster_id, cluster_name,
-	             commands, intent, timeout_sec, policy_action, approved_by, created_at
+	             commands, intent, timeout_sec, policy_action, approved_by, created_at,
+	             COALESCE(plugin_name,''), COALESCE(plugin_vars,'[]'), COALESCE(plugin_strategy,'')
 	      FROM audit_log`
 	if len(where) > 0 {
 		q += " WHERE " + strings.Join(where, " AND ")
@@ -145,6 +158,7 @@ func scanAuditRow(rows *sql.Rows) (*AuditEntry, error) {
 	var serverID, clusterID sql.NullInt64
 	var policyAction, approvedBy sql.NullString
 	var cmdsJSON, createdAt string
+	var pluginVarsJSON string
 
 	if err := rows.Scan(
 		&e.ID, &e.Timestamp, &e.Event, &e.AgentID,
@@ -153,6 +167,7 @@ func scanAuditRow(rows *sql.Rows) (*AuditEntry, error) {
 		&cmdsJSON, &e.Intent, &e.TimeoutSec,
 		&policyAction, &approvedBy,
 		&createdAt,
+		&e.PluginName, &pluginVarsJSON, &e.PluginStrategy,
 	); err != nil {
 		return nil, fmt.Errorf("scan audit row: %w", err)
 	}
@@ -172,6 +187,7 @@ func scanAuditRow(rows *sql.Rows) (*AuditEntry, error) {
 		e.ApprovedBy = approvedBy.String
 	}
 	_ = json.Unmarshal([]byte(cmdsJSON), &e.Commands)
+	_ = json.Unmarshal([]byte(pluginVarsJSON), &e.PluginVars)
 	e.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 	return e, nil
 }

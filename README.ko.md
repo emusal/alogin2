@@ -305,6 +305,7 @@ alogin access           원격 접속 (alias: connect, t, r)
 alogin auth             자격증명, 게이트웨이 경로, 호스트 별칭 관리
 alogin agent            AI MCP 서버, 클라이언트 설정 도구
 alogin net              호스트 정의, 백그라운드 SSH 터널
+alogin app-server       서버+플러그인 바인딩 (이름 하나로 앱 접속)
 ```
 
 **스크립트용 JSON 출력:** 모든 목록 명령에서 `--format=json` 지원.
@@ -314,6 +315,7 @@ alogin net              호스트 정의, 백그라운드 SSH 터널
 alogin access ssh gw-01 web-01                 # 명시적 2홉 경로
 alogin access ssh web-01 --auto-gw             # 등록된 게이트웨이 경유 자동 라우팅
 alogin access ssh web-01 --cmd "uptime"        # 명령 실행 후 종료
+alogin access ssh web-01 --app mariadb         # 접속 후 앱 플러그인 실행 (예: MariaDB 클라이언트)
 ```
 
 **터널:** tmux 백그라운드 세션으로 SSH 포트포워딩을 영구 유지합니다. 터미널이 종료되어도 살아있습니다.
@@ -321,6 +323,16 @@ alogin access ssh web-01 --cmd "uptime"        # 명령 실행 후 종료
 alogin net tunnel add web-local --server web-01 --local-port 8080 --remote-port 80
 alogin net tunnel start web-local
 ```
+
+### App-Server (이름 기반 앱 접속 바인딩)
+서버와 애플리케이션 플러그인을 한 이름으로 묶어, 이름 하나로 자격증명 자동 주입과 함께 앱을 실행합니다:
+```bash
+alogin app-server add --name prod-mysql --server prod-db --app mariadb --auto-gw
+alogin app-server connect prod-mysql          # SSH → MariaDB 클라이언트 실행 → 비밀번호 자동 입력
+alogin app-server connect prod-mysql --cmd "SHOW DATABASES"  # 비대화형 실행
+alogin app-server list --format json
+```
+플러그인 YAML 파일(`~/.config/alogin/plugins/<이름>.yaml`)에 실행 명령, 인수, PTY 자동화(expect/send) 설정을 정의합니다.
 
 ---
 

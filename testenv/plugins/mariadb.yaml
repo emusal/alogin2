@@ -1,0 +1,46 @@
+# mariadb.yaml — Application-Aware Plugin for MariaDB / MySQL client
+#
+# Usage:
+#   alogin connect target-mariadb --app mariadb
+#
+# Prerequisites:
+#   - Store the DB root password in the vault:
+#       alogin vault set testuser@target-mariadb
+#     (or use the static provider for testing)
+#   - MariaDB server must be running on the target host.
+#
+# How it works:
+#   1. Secret Injector fetches DB_PASS from the vault.
+#   2. Runtime Detector probes `docker ps` first (Docker strategy),
+#      then falls back to `which mysql` (native).
+#   3. Session Orchestrator launches `mysql -u root -p`, waits for
+#      "Enter password:", and auto-sends the password (no echo).
+
+name: "mariadb"
+version: "1"
+
+auth:
+  provider: "vault"
+  mapping:
+    - var: "DB_PASS"
+      # vault account key: the password stored for "testuser@target-mariadb"
+      path: "testuser@target-mariadb"
+      expose: "prompt"
+      automation:
+        expect: "Enter password:"
+        send: "{{DB_PASS}}"
+        send_newline: true
+
+runtime:
+  # Try Docker-in-Docker first (useful when target runs DB in a container),
+  # then fall back to the native mysql binary.
+  strategies: ["docker", "native"]
+  environments:
+    native:
+      command: "mysql"
+      args: ["-u", "root", "-p"]
+    docker:
+      # Match any running container whose name/image contains "mariadb" or "mysql"
+      container_match: "mariadb"
+      command: "mysql"
+      args: ["-u", "root", "-p"]

@@ -27,11 +27,18 @@ type Server struct {
 	vlt         vault.Vault
 	port        int
 	openBrowser bool
+	pluginDir   string
 }
 
 // NewServer creates a web server backed by the given DB and vault.
 func NewServer(database *db.DB, vlt vault.Vault, port int, openBrowser bool) *Server {
 	return &Server{database: database, vlt: vlt, port: port, openBrowser: openBrowser}
+}
+
+// WithPluginDir sets the plugin directory for the web server.
+func (s *Server) WithPluginDir(dir string) *Server {
+	s.pluginDir = dir
+	return s
 }
 
 // Run starts the HTTP server and blocks until ctx is cancelled.
@@ -42,11 +49,11 @@ func (s *Server) Run(ctx context.Context) error {
 
 	// REST API
 	binPath, _ := os.Executable()
-	apiHandler := api.NewHandlerWithBin(s.database, s.vlt, binPath)
+	apiHandler := api.NewHandlerWithBin(s.database, s.vlt, binPath).WithPluginDir(s.pluginDir)
 	r.Mount("/api", apiHandler.Router())
 
 	// WebSocket terminal
-	wsHandler := terminal.NewHandler(s.database, s.vlt)
+	wsHandler := terminal.NewHandler(s.database, s.vlt).WithPluginDir(s.pluginDir)
 	r.Get("/ws/terminal/{serverID}", wsHandler.ServeWS)
 
 	// Static frontend

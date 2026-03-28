@@ -54,6 +54,14 @@ export interface LocalHostFormData {
   description: string
 }
 
+export interface Plugin {
+  name: string
+  version: string
+  provider: string
+  strategies: string[]
+  cmd_flag: string
+}
+
 export interface Tunnel {
   id: number
   name: string
@@ -82,4 +90,23 @@ export interface TunnelFormData {
   remote_host: string
   remote_port: number
   auto_gw: boolean
+}
+
+export interface AppServer {
+  id: number
+  name: string
+  server_id: number
+  plugin_name: string
+  auto_gw: boolean
+  description: string
+  created_at: string
+  updated_at: string
+}
+
+export interface AppServerFormData {
+  name: string
+  server_id: number
+  plugin_name: string
+  auto_gw: boolean
+  description: string
 }
