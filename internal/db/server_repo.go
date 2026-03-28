@@ -18,12 +18,13 @@ type ServerRepo interface {
 	Search(ctx context.Context, query string) ([]*model.Server, error)
 	Update(ctx context.Context, s *model.Server, newPassword string) error
 	Delete(ctx context.Context, id int64) error
+	ClearPassword(ctx context.Context, id int64) error
 }
 
 type serverRepo struct{ db *sql.DB }
 
 func (r *serverRepo) Create(ctx context.Context, s *model.Server, password string) error {
-	_, err := r.db.ExecContext(ctx,
+	res, err := r.db.ExecContext(ctx,
 		`INSERT INTO servers (protocol, host, user, password, port, gateway_id, gateway_server_id, locale, device_type, note, policy_yaml, system_prompt)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		string(s.Protocol), s.Host, s.User, password, s.Port,
@@ -34,6 +35,11 @@ func (r *serverRepo) Create(ctx context.Context, s *model.Server, password strin
 	if err != nil {
 		return fmt.Errorf("create server: %w", err)
 	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("create server: last insert id: %w", err)
+	}
+	s.ID = id
 	return nil
 }
 
@@ -100,6 +106,11 @@ func (r *serverRepo) Update(ctx context.Context, s *model.Server, newPassword st
 
 func (r *serverRepo) Delete(ctx context.Context, id int64) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM servers WHERE id = ?`, id)
+	return err
+}
+
+func (r *serverRepo) ClearPassword(ctx context.Context, id int64) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE servers SET password = '_HIDDEN_' WHERE id = ?`, id)
 	return err
 }
 

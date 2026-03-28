@@ -185,13 +185,15 @@ type Model struct {
 	tunnelCursor int
 	tnStatuses   map[int64]bool // async running-state cache
 
-	// Tunnel form: [0]=name [1]=serverHost [2]=direction [3]=localHost [4]=localPort [5]=remoteHost [6]=remotePort
-	tnFormMode    formMode
-	tnFormFields  []textinput.Model
-	tnFormFocus   int
-	tnFormAutoGW  bool
-	tnFormTarget  *model.Tunnel
-	tnFormServerID int64
+	// Tunnel form: [0]=name [1]=direction [2]=localHost [3]=localPort [4]=remoteHost [5]=remotePort
+	tnFormMode         formMode
+	tnFormFields       []textinput.Model
+	tnFormFocus        int
+	tnFormAutoGW       bool
+	tnFormTarget       *model.Tunnel
+	tnFormServerID     int64
+	tnFormPickerOpen   bool
+	tnFormPickerCursor int
 
 	// Plugin picker state (server selection overlay)
 	plugins      []string // plugin names loaded from plugins dir
@@ -748,35 +750,29 @@ func (m Model) loadTunnelStatusCmd() tea.Cmd {
 }
 
 func (m *Model) initTunnelForm(t *model.Tunnel) {
-	// fields: [0]=name [1]=serverHost [2]=direction [3]=localHost [4]=localPort [5]=remoteHost [6]=remotePort
-	fields := make([]textinput.Model, 7)
+	// fields: [0]=name [1]=direction [2]=localHost [3]=localPort [4]=remoteHost [5]=remotePort
+	fields := make([]textinput.Model, 6)
 	for i := range fields {
 		fields[i] = textinput.New()
 		fields[i].CharLimit = 256
 	}
 	fields[0].Placeholder = "tunnel name (unique)"
-	fields[1].Placeholder = "server host (from registry)"
-	fields[2].Placeholder = "L or R"
-	fields[2].CharLimit = 1
-	fields[3].Placeholder = "127.0.0.1"
-	fields[4].Placeholder = "local port"
-	fields[4].CharLimit = 5
-	fields[5].Placeholder = "remote host"
-	fields[6].Placeholder = "remote port"
-	fields[6].CharLimit = 5
+	fields[1].Placeholder = "L or R"
+	fields[1].CharLimit = 1
+	fields[2].Placeholder = "127.0.0.1"
+	fields[3].Placeholder = "local port"
+	fields[3].CharLimit = 5
+	fields[4].Placeholder = "remote host"
+	fields[5].Placeholder = "remote port"
+	fields[5].CharLimit = 5
 
 	if t != nil {
 		fields[0].SetValue(t.Name)
-		// Resolve serverHost from ID
-		srv, _ := m.db.Servers.GetByID(context.Background(), t.ServerID)
-		if srv != nil {
-			fields[1].SetValue(srv.Host)
-		}
-		fields[2].SetValue(string(t.Direction))
-		fields[3].SetValue(t.LocalHost)
-		fields[4].SetValue(fmt.Sprintf("%d", t.LocalPort))
-		fields[5].SetValue(t.RemoteHost)
-		fields[6].SetValue(fmt.Sprintf("%d", t.RemotePort))
+		fields[1].SetValue(string(t.Direction))
+		fields[2].SetValue(t.LocalHost)
+		fields[3].SetValue(fmt.Sprintf("%d", t.LocalPort))
+		fields[4].SetValue(t.RemoteHost)
+		fields[5].SetValue(fmt.Sprintf("%d", t.RemotePort))
 		m.tnFormTarget = t
 		m.tnFormMode = fmEdit
 		m.tnFormAutoGW = t.AutoGW
@@ -786,13 +782,15 @@ func (m *Model) initTunnelForm(t *model.Tunnel) {
 		m.tnFormMode = fmAdd
 		m.tnFormAutoGW = false
 		m.tnFormServerID = 0
-		fields[2].SetValue("L")
-		fields[3].SetValue("127.0.0.1")
+		fields[1].SetValue("L")
+		fields[2].SetValue("127.0.0.1")
 	}
 
 	fields[0].Focus()
 	m.tnFormFields = fields
 	m.tnFormFocus = 0
+	m.tnFormPickerOpen = false
+	m.tnFormPickerCursor = 0
 	m.state = stateTunnelForm
 	m.statusMsg = ""
 }
@@ -800,15 +798,14 @@ func (m *Model) initTunnelForm(t *model.Tunnel) {
 func (m Model) submitTunnelForm() tea.Cmd {
 	return func() tea.Msg {
 		name := m.tnFormFields[0].Value()
-		serverHost := m.tnFormFields[1].Value()
-		dir := m.tnFormFields[2].Value()
-		localHost := m.tnFormFields[3].Value()
-		localPortStr := m.tnFormFields[4].Value()
-		remoteHost := m.tnFormFields[5].Value()
-		remotePortStr := m.tnFormFields[6].Value()
+		dir := m.tnFormFields[1].Value()
+		localHost := m.tnFormFields[2].Value()
+		localPortStr := m.tnFormFields[3].Value()
+		remoteHost := m.tnFormFields[4].Value()
+		remotePortStr := m.tnFormFields[5].Value()
 
-		if name == "" || serverHost == "" || dir == "" || localHost == "" || remoteHost == "" {
-			return tnErrMsg{fmt.Errorf("all fields are required")}
+		if name == "" || m.tnFormServerID == 0 || dir == "" || localHost == "" || remoteHost == "" {
+			return tnErrMsg{fmt.Errorf("all fields are required (server must be selected)")}
 		}
 		if dir != "L" && dir != "R" {
 			return tnErrMsg{fmt.Errorf("direction must be L or R")}
@@ -820,14 +817,9 @@ func (m Model) submitTunnelForm() tea.Cmd {
 		}
 
 		ctx := context.Background()
-		srv, err := m.db.Servers.GetByHost(ctx, serverHost, "")
-		if err != nil || srv == nil {
-			return tnErrMsg{fmt.Errorf("server %q not found in registry", serverHost)}
-		}
-
 		t := &model.Tunnel{
 			Name:       name,
-			ServerID:   srv.ID,
+			ServerID:   m.tnFormServerID,
 			Direction:  model.TunnelDirection(dir),
 			LocalHost:  localHost,
 			LocalPort:  localPort,

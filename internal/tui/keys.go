@@ -1011,10 +1011,38 @@ func (m Model) tunnelStopCmd(name string) tea.Cmd {
 	}
 }
 
-// tabCount for tunnel form: 7 text fields + 1 auto_gw toggle = 8 stops
+// tabCount for tunnel form: 6 text fields + 1 server picker + 1 auto_gw toggle = 8 stops
+// tab stop indices: [0]=name, [1]=server picker, [2..6]=text fields (direction..remotePort), [7]=auto_gw
 const tnFormTabCount = 8
+const tnFormIdxServer = 1
+const tnFormIdxAutoGW = 7
 
 func (m Model) updateTunnelForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle server picker overlay first
+	if m.tnFormPickerOpen {
+		switch msg.String() {
+		case "ctrl+c":
+			m.quitting = true
+			return m, tea.Quit
+		case "esc":
+			m.tnFormPickerOpen = false
+		case "up", "k":
+			if m.tnFormPickerCursor > 0 {
+				m.tnFormPickerCursor--
+			}
+		case "down", "j":
+			if m.tnFormPickerCursor < len(m.servers)-1 {
+				m.tnFormPickerCursor++
+			}
+		case "enter":
+			if len(m.servers) > 0 {
+				m.tnFormServerID = m.servers[m.tnFormPickerCursor].ID
+			}
+			m.tnFormPickerOpen = false
+		}
+		return m, nil
+	}
+
 	switch msg.String() {
 	case "ctrl+c":
 		m.quitting = true
@@ -1025,49 +1053,73 @@ func (m Model) updateTunnelForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+s":
 		return m, m.submitTunnelForm()
 	case "space":
-		// Toggle AutoGW when focused on last tab stop (index 7)
-		if m.tnFormFocus == tnFormTabCount-1 {
+		if m.tnFormFocus == tnFormIdxAutoGW {
 			m.tnFormAutoGW = !m.tnFormAutoGW
 			return m, nil
 		}
 	case "enter":
-		// Submit from last field
+		if m.tnFormFocus == tnFormIdxServer {
+			m.tnFormPickerOpen = true
+			m.tnFormPickerCursor = 0
+			return m, nil
+		}
+		if m.tnFormFocus == tnFormIdxAutoGW {
+			m.tnFormAutoGW = !m.tnFormAutoGW
+			return m, nil
+		}
+		// Submit from last tab stop
 		if m.tnFormFocus == tnFormTabCount-1 {
 			return m, m.submitTunnelForm()
 		}
 		// Otherwise move to next field
-		m.tnFormFields[m.tnFormFocus].Blur()
+		if fi := tnFieldIdx(m.tnFormFocus); fi >= 0 {
+			m.tnFormFields[fi].Blur()
+		}
 		m.tnFormFocus = (m.tnFormFocus + 1) % tnFormTabCount
-		if m.tnFormFocus < len(m.tnFormFields) {
-			m.tnFormFields[m.tnFormFocus].Focus()
+		if fi := tnFieldIdx(m.tnFormFocus); fi >= 0 {
+			m.tnFormFields[fi].Focus()
 		}
 		return m, nil
 	case "tab":
-		if m.tnFormFocus < len(m.tnFormFields) {
-			m.tnFormFields[m.tnFormFocus].Blur()
+		if fi := tnFieldIdx(m.tnFormFocus); fi >= 0 {
+			m.tnFormFields[fi].Blur()
 		}
 		m.tnFormFocus = (m.tnFormFocus + 1) % tnFormTabCount
-		if m.tnFormFocus < len(m.tnFormFields) {
-			m.tnFormFields[m.tnFormFocus].Focus()
+		if fi := tnFieldIdx(m.tnFormFocus); fi >= 0 {
+			m.tnFormFields[fi].Focus()
 		}
 		return m, nil
 	case "shift+tab":
-		if m.tnFormFocus < len(m.tnFormFields) {
-			m.tnFormFields[m.tnFormFocus].Blur()
+		if fi := tnFieldIdx(m.tnFormFocus); fi >= 0 {
+			m.tnFormFields[fi].Blur()
 		}
 		m.tnFormFocus = (m.tnFormFocus - 1 + tnFormTabCount) % tnFormTabCount
-		if m.tnFormFocus < len(m.tnFormFields) {
-			m.tnFormFields[m.tnFormFocus].Focus()
+		if fi := tnFieldIdx(m.tnFormFocus); fi >= 0 {
+			m.tnFormFields[fi].Focus()
 		}
 		return m, nil
 	}
 	// Forward key to active text field
-	if m.tnFormFocus < len(m.tnFormFields) {
+	if fi := tnFieldIdx(m.tnFormFocus); fi >= 0 {
 		var cmd tea.Cmd
-		m.tnFormFields[m.tnFormFocus], cmd = m.tnFormFields[m.tnFormFocus].Update(msg)
+		m.tnFormFields[fi], cmd = m.tnFormFields[fi].Update(msg)
 		return m, cmd
 	}
 	return m, nil
+}
+
+// tnFieldIdx maps a tunnel form tab stop index to a tnFormFields slice index.
+// Tab stops: [0]=Name(field 0), [1]=Server(picker), [2..6]=Direction..RemotePort(fields 1..5), [7]=AutoGW
+// Returns -1 for non-text tab stops (picker, AutoGW).
+func tnFieldIdx(tabStop int) int {
+	switch {
+	case tabStop == 0:
+		return 0
+	case tabStop >= 2 && tabStop <= 6:
+		return tabStop - 1
+	default:
+		return -1
+	}
 }
 
 // clFormPickerCursor clamp helper (used in render)

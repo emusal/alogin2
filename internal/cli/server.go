@@ -11,6 +11,7 @@ import (
 
 	"github.com/emusal/alogin2/internal/model"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 func newServerCmd() *cobra.Command {
@@ -93,9 +94,11 @@ Examples:
 				return fmt.Errorf("add server: %w", err)
 			}
 
-			// Store password in vault
-			if password != "" && cfg.KeychainUse {
-				_ = vlt.Set(vaultKey(srv), password)
+			// Store password in vault; mask DB column on success
+			if password != "" {
+				if err := vlt.Set(vaultKey(srv), password); err == nil {
+					_ = database.Servers.ClearPassword(ctx, srv.ID)
+				}
 			}
 
 			fmt.Printf("Added: %s@%s\n", user, host)
@@ -348,6 +351,8 @@ func newServerPasswdCmd() *cobra.Command {
 				// fallback: store in DB plaintext column
 				return database.Servers.Update(ctx, srv, newPwd)
 			}
+			// Vault write succeeded — mask any plaintext in the DB column.
+			_ = database.Servers.ClearPassword(ctx, srv.ID)
 			fmt.Println("Password updated.")
 			return nil
 		},
@@ -364,8 +369,13 @@ func prompt(r *bufio.Reader, label string) string {
 
 func promptSecret(label string) string {
 	fmt.Print(label)
-	// For Phase 1: simple stdin read (Phase 2: use term.ReadPassword)
-	r := bufio.NewReader(os.Stdin)
-	line, _ := r.ReadString('\n')
-	return strings.TrimRight(line, "\r\n")
+	b, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Println()
+	if err != nil {
+		// fallback for non-terminal (pipe, test)
+		r := bufio.NewReader(os.Stdin)
+		line, _ := r.ReadString('\n')
+		return strings.TrimRight(line, "\r\n")
+	}
+	return string(b)
 }

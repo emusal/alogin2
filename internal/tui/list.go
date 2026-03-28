@@ -734,10 +734,35 @@ func (m Model) renderTunnelForm() string {
 	sb.WriteString(m.titleStyle.Render("alogin — " + title))
 	sb.WriteString("\n\n")
 
-	labels := []string{"Name", "Server", "Direction (L/R)", "Local Host", "Local Port", "Remote Host", "Remote Port"}
-	for i, field := range m.tnFormFields {
-		label := labels[i]
-		sb.WriteString(fmt.Sprintf("  %-16s  %s\n", label, field.View()))
+	// Name field (tab stop 0)
+	sb.WriteString(fmt.Sprintf("  %-16s  %s\n", "Name", m.tnFormFields[0].View()))
+
+	// Server picker row (tab stop 1)
+	srvLabel := "(none — press Enter to pick)"
+	if m.tnFormServerID != 0 {
+		if srv := serverByID(m.servers, m.tnFormServerID); srv != nil {
+			srvLabel = fmt.Sprintf("%s@%s", srv.User, srv.Host)
+		} else {
+			srvLabel = fmt.Sprintf("id=%d", m.tnFormServerID)
+		}
+	}
+	srvRow := fmt.Sprintf("  %-16s  %s", "Server", srvLabel)
+	if m.tnFormFocus == tnFormIdxServer {
+		sb.WriteString(m.selectedStyle.Render("> " + strings.TrimPrefix(srvRow, "  ")))
+	} else {
+		sb.WriteString(m.dimStyle.Render(srvRow))
+	}
+	sb.WriteString("\n")
+
+	// Server picker overlay
+	if m.tnFormPickerOpen {
+		sb.WriteString(m.renderServerPicker(m.tnFormPickerCursor))
+	}
+
+	// Remaining text fields: [1]=direction [2]=localHost [3]=localPort [4]=remoteHost [5]=remotePort
+	labels := []string{"Direction (L/R)", "Local Host", "Local Port", "Remote Host", "Remote Port"}
+	for i, field := range m.tnFormFields[1:] {
+		sb.WriteString(fmt.Sprintf("  %-16s  %s\n", labels[i], field.View()))
 	}
 
 	// AutoGW toggle (tab stop index 7)
@@ -745,7 +770,7 @@ func (m Model) renderTunnelForm() string {
 	if m.tnFormAutoGW {
 		autoGWDisplay = "[x] Auto-GW"
 	}
-	if m.tnFormFocus == tnFormTabCount-1 {
+	if m.tnFormFocus == tnFormIdxAutoGW {
 		sb.WriteString(m.selectedStyle.Render("> " + autoGWDisplay))
 	} else {
 		sb.WriteString(m.dimStyle.Render("  " + autoGWDisplay))
