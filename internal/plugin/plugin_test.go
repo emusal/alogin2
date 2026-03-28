@@ -43,6 +43,10 @@ func (r *mockRunner) RunPTY(_ context.Context, cmd string, rules []plugin.PTYRul
 	return r.ptyOutput, nil
 }
 
+func (r *mockRunner) RunInteractive(_ context.Context, cmd string, rules []plugin.PTYRule, env map[string]string) error {
+	return nil
+}
+
 // ── sample YAML ───────────────────────────────────────────────────────────────
 
 const mariadbYAML = `
