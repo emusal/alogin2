@@ -181,10 +181,13 @@ graph LR
         centos6["target-centos6\nCentOS 6"]
         alpine["target-alpine\nAlpine Linux"]
         legacy["target-legacy-rsa\nLegacy RSA key"]
-        mariadb["target-mariadb\nMariaDB"]
-        redis["target-redis\nRedis"]
-        postgres["target-postgres\nPostgreSQL"]
-        mongo["target-mongo\nMongoDB"]
+
+        subgraph app_layer["app-server layer  (SSH + plugin)"]
+            mariadb["target-mariadb\nSSH ＋ MariaDB"]
+            redis["target-redis\nSSH ＋ Redis"]
+            postgres["target-postgres\nSSH ＋ PostgreSQL"]
+            mongo["target-mongo\nSSH ＋ MongoDB"]
+        end
     end
 
     alogin -- "SSH :2222" --> bastion
@@ -197,6 +200,11 @@ graph LR
     bastion -- "ProxyJump" --> redis
     bastion -- "ProxyJump" --> postgres
     bastion -- "ProxyJump" --> mongo
+
+    alogin -. "app-server\nplugin" .-> mariadb
+    alogin -. "app-server\nplugin" .-> redis
+    alogin -. "app-server\nplugin" .-> postgres
+    alogin -. "app-server\nplugin" .-> mongo
 ```
 
 **SSH targets:**
