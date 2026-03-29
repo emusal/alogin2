@@ -1,28 +1,28 @@
 class Alogin < Formula
   desc "Modern SSH connection manager with encrypted credential vault"
   homepage "https://github.com/emusal/alogin2"
-  version "2.3.0"
+  version "2.3.1"
   license "MIT"
 
   on_macos do
     on_arm do
-      url "https://github.com/emusal/alogin2/releases/download/v2.3.0/alogin-web-darwin-arm64"
-      sha256 "ae5f2af2e697066168a5862deb348ec0f2d0151f7d7d8caf569d689574b46922"
+      url "https://github.com/emusal/alogin2/releases/download/v2.3.1/alogin-web-darwin-arm64"
+      sha256 "2a25a14968d11cb3f8d74cfa83944eb60a6451570b30e0d1ccc077ed70183a89"
     end
     on_intel do
-      url "https://github.com/emusal/alogin2/releases/download/v2.3.0/alogin-web-darwin-amd64"
-      sha256 "947b015938c7b09a1c8e71bc3ad6682dd692395af583ffe3b0f2d37762691fa0"
+      url "https://github.com/emusal/alogin2/releases/download/v2.3.1/alogin-web-darwin-amd64"
+      sha256 "112809725d7853e0af0e483208df15aa7231b575dee5113466e5a18683e1f8ac"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/emusal/alogin2/releases/download/v2.3.0/alogin-web-linux-arm64"
-      sha256 "898c1b16a2ccc42ef54d3d7ac386a2195ad128033626a4127119a92a0c41f7d7"
+      url "https://github.com/emusal/alogin2/releases/download/v2.3.1/alogin-web-linux-arm64"
+      sha256 "3fd488b5724ebf5fe8d641097540445286971afd95b97db066202cbdd5139d8b"
     end
     on_intel do
-      url "https://github.com/emusal/alogin2/releases/download/v2.3.0/alogin-web-linux-amd64"
-      sha256 "13786e8932dc2d67cd3a268c00d4ead69496b808cd736a2bf5f40769710d06b1"
+      url "https://github.com/emusal/alogin2/releases/download/v2.3.1/alogin-web-linux-amd64"
+      sha256 "b52bf273baa89b4e5625adec6afc0f2ead4dc4280dc3119be8770ca35a804ac7"
     end
   end
 
@@ -39,6 +39,6 @@ class Alogin < Formula
   end
 
   test do
-    assert_match "alogin v2.3.0", shell_output("#{bin}/alogin version")
+    assert_match "alogin v2.3.1", shell_output("#{bin}/alogin version")
   end
 end
