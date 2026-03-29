@@ -79,6 +79,44 @@ INSTALLED_VERSION=$("$DEST" version 2>/dev/null | head -1)
 echo "Installed: ${INSTALLED_VERSION}"
 echo "Location : ${DEST}"
 
+# ── Install sample plugins ─────────────────────────────────────────────────────
+PLUGIN_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/alogin/plugins"
+
+if [ "${ALOGIN_NO_PLUGINS:-0}" != "1" ]; then
+  if [ -n "${ALOGIN_VERSION:-}" ]; then
+    PLUGINS_URL="https://github.com/${REPO}/releases/download/v${VERSION}/plugins.tar.gz"
+  else
+    PLUGINS_URL="https://github.com/${REPO}/releases/latest/download/plugins.tar.gz"
+  fi
+
+  TMP_PLUGINS=$(mktemp -d)
+  trap 'rm -rf "$TMP_PLUGINS"' EXIT
+
+  echo "Downloading sample plugins ..."
+  PLUGINS_OK=0
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$PLUGINS_URL" -o "$TMP_PLUGINS/plugins.tar.gz" && PLUGINS_OK=1
+  elif command -v wget >/dev/null 2>&1; then
+    wget -qO "$TMP_PLUGINS/plugins.tar.gz" "$PLUGINS_URL" && PLUGINS_OK=1
+  fi
+
+  if [ "$PLUGINS_OK" = "1" ]; then
+    mkdir -p "$PLUGIN_DIR"
+    tar -xzf "$TMP_PLUGINS/plugins.tar.gz" -C "$TMP_PLUGINS"
+    # Copy only files that don't already exist (don't overwrite user-modified plugins)
+    for f in "$TMP_PLUGINS/plugins/"*.yaml; do
+      [ -f "$f" ] || continue
+      name=$(basename "$f")
+      if [ ! -f "$PLUGIN_DIR/$name" ]; then
+        cp "$f" "$PLUGIN_DIR/$name"
+      fi
+    done
+    echo "Plugins   : ${PLUGIN_DIR}"
+  else
+    echo "Warning: could not download sample plugins (skipping)" >&2
+  fi
+fi
+
 # ── PATH check ─────────────────────────────────────────────────────────────────
 case ":${PATH}:" in
   *":${INSTALL_DIR}:"*) ;;

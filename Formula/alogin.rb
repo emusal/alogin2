@@ -26,8 +26,19 @@ class Alogin < Formula
     end
   end
 
+  resource "plugins" do
+    url "https://github.com/emusal/alogin2/releases/download/v2.3.1/plugins.tar.gz"
+    sha256 "" # filled in by update-formula
+  end
+
   def install
     bin.install Dir["alogin-web-*"].first => "alogin"
+
+    plugin_dir = etc/"alogin/plugins"
+    plugin_dir.mkpath
+    resource("plugins").stage do
+      (plugin_dir).install Dir["plugins/*.yaml"]
+    end
   end
 
   def caveats

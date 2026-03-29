@@ -89,9 +89,21 @@ jobs:
           name: binary-${{ matrix.suffix }}
           path: alogin-${{ matrix.suffix }}
 
+  # ── Job 2b: Package sample plugins ───────────────────────────────────────
+  package-plugins:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create plugins tarball
+        run: tar -czf plugins.tar.gz -C testenv plugins
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugins-tarball
+          path: plugins.tar.gz
+
   # ── Job 3: Create GitHub Release ──────────────────────────────────────────
   release:
-    needs: build
+    needs: [build, package-plugins]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -100,12 +112,16 @@ jobs:
         with:
           pattern: binary-*
           merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: plugins-tarball
       - name: Generate checksums
-        run: shasum -a 256 alogin-* > checksums.txt
+        run: shasum -a 256 alogin-* plugins.tar.gz > checksums.txt
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             alogin-*
+            plugins.tar.gz
             checksums.txt
           generate_release_notes: true
 
@@ -125,8 +141,11 @@ jobs:
         with:
           pattern: binary-*
           merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: plugins-tarball
       - name: Generate checksums
-        run: shasum -a 256 alogin-* > checksums.txt
+        run: shasum -a 256 alogin-* plugins.tar.gz > checksums.txt
       - name: Update Formula/alogin.rb
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
@@ -134,6 +153,7 @@ jobs:
           SHA_DARWIN_AMD64=$(grep 'alogin-web-darwin-amd64' checksums.txt | awk '{print $1}')
           SHA_LINUX_ARM64=$(grep  'alogin-web-linux-arm64'  checksums.txt | awk '{print $1}')
           SHA_LINUX_AMD64=$(grep  'alogin-web-linux-amd64'  checksums.txt | awk '{print $1}')
+          SHA_PLUGINS=$(grep       'plugins.tar.gz'          checksums.txt | awk '{print $1}')
 
           cat > Formula/alogin.rb << FORMULA
           class Alogin < Formula
@@ -164,8 +184,19 @@ jobs:
               end
             end
 
+            resource "plugins" do
+              url "https://github.com/emusal/alogin2/releases/download/v${VERSION}/plugins.tar.gz"
+              sha256 "${SHA_PLUGINS}"
+            end
+
             def install
               bin.install Dir["alogin-web-*"].first => "alogin"
+
+              plugin_dir = etc/"alogin/plugins"
+              plugin_dir.mkpath
+              resource("plugins").stage do
+                (plugin_dir).install Dir["plugins/*.yaml"]
+              end
             end
 
             def caveats

@@ -92,16 +92,17 @@ dist-web: frontend              ## Cross-compile all platforms with embedded Web
 	GOOS=darwin  GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -tags web -o $(BIN)-web-darwin-amd64 $(CMD)
 	GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -tags web -o $(BIN)-web-linux-amd64  $(CMD)
 	GOOS=linux   GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -tags web -o $(BIN)-web-linux-arm64  $(CMD)
+	tar -czf plugins.tar.gz -C testenv plugins
 
 .PHONY: checksums
 checksums:                      ## Generate SHA256 checksums for release binaries
-	shasum -a 256 $(BIN)-* > checksums.txt
+	shasum -a 256 $(BIN)-* plugins.tar.gz > checksums.txt
 
 # ── clean ─────────────────────────────────────────────────────────────────────
 
 .PHONY: clean
 clean:                          ## Remove built binaries
-	rm -f $(BIN) $(BIN)-darwin-arm64 $(BIN)-darwin-amd64 $(BIN)-linux-amd64 $(BIN)-linux-arm64 $(BIN)-web-darwin-arm64 $(BIN)-web-darwin-amd64 $(BIN)-web-linux-amd64 $(BIN)-web-linux-arm64 checksums.txt
+	rm -f $(BIN) $(BIN)-darwin-arm64 $(BIN)-darwin-amd64 $(BIN)-linux-amd64 $(BIN)-linux-arm64 $(BIN)-web-darwin-arm64 $(BIN)-web-darwin-amd64 $(BIN)-web-linux-amd64 $(BIN)-web-linux-arm64 checksums.txt plugins.tar.gz
 
 .PHONY: clean-all
 clean-all: clean                ## Remove binaries + frontend build artifacts
