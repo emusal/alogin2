@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useImperativeHandle, forwardRef } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
@@ -6,16 +6,47 @@ import type { Server } from '../types'
 import '@xterm/xterm/css/xterm.css'
 import './Terminal.css'
 
+export interface TerminalHandle {
+  sendData: (text: string) => void
+  /** The root DOM element of this terminal — move it to attach to a new container */
+  getElement: () => HTMLElement | null
+  /** Re-fit xterm to current container size after DOM move */
+  fit: () => void
+}
+
 interface Props {
   server: Server
   autoGW?: boolean
   app?: string
+  onStatusChange?: (status: 'connecting' | 'connected' | 'disconnected' | 'error') => void
+  compact?: boolean
 }
 
-export function Terminal({ server, autoGW = false, app }: Props) {
+export const Terminal = forwardRef<TerminalHandle, Props>(function Terminal(
+  { server, autoGW = false, app, onStatusChange, compact },
+  ref
+) {
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<XTerm | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
+  const fitAddonRef = useRef<FitAddon | null>(null)
+  const onStatusChangeRef = useRef(onStatusChange)
+  onStatusChangeRef.current = onStatusChange
+
+  useImperativeHandle(ref, () => ({
+    sendData(text: string) {
+      const ws = wsRef.current
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'data', data: text }))
+      }
+    },
+    getElement() {
+      return containerRef.current?.parentElement ?? null
+    },
+    fit() {
+      fitAddonRef.current?.fit()
+    },
+  }))
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -45,12 +76,13 @@ export function Terminal({ server, autoGW = false, app }: Props) {
         brightWhite: '#ffffff',
       },
       fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-      fontSize: 14,
+      fontSize: compact ? 11 : 14,
       lineHeight: 1.3,
       cursorBlink: true,
     })
 
     const fitAddon = new FitAddon()
+    fitAddonRef.current = fitAddon
     const webLinksAddon = new WebLinksAddon()
     term.loadAddon(fitAddon)
     term.loadAddon(webLinksAddon)
@@ -71,6 +103,7 @@ export function Terminal({ server, autoGW = false, app }: Props) {
     ws.onopen = () => {
       const gwLabel = autoGW ? ' (via GW)' : ''
       term.write('\x1b[32mConnecting to ' + server.user + '@' + server.host + gwLabel + '...\x1b[0m\r\n')
+      onStatusChangeRef.current?.('connected')
     }
 
     ws.onmessage = (event) => {
@@ -86,10 +119,12 @@ export function Terminal({ server, autoGW = false, app }: Props) {
 
     ws.onclose = () => {
       term.write('\r\n\x1b[33m[Connection closed]\x1b[0m\r\n')
+      onStatusChangeRef.current?.('disconnected')
     }
 
     ws.onerror = () => {
       term.write('\r\n\x1b[31m[WebSocket error]\x1b[0m\r\n')
+      onStatusChangeRef.current?.('error')
     }
 
     // Terminal input → WebSocket
@@ -121,13 +156,15 @@ export function Terminal({ server, autoGW = false, app }: Props) {
 
   return (
     <div className="terminal-container">
-      <div className="terminal-header">
-        <span className="terminal-title">
-          {server.user}@{server.host}
-          {server.port > 0 ? `:${server.port}` : ''}
-        </span>
-      </div>
+      {!compact && (
+        <div className="terminal-header">
+          <span className="terminal-title">
+            {server.user}@{server.host}
+            {server.port > 0 ? `:${server.port}` : ''}
+          </span>
+        </div>
+      )}
       <div ref={containerRef} className="terminal-body" />
     </div>
   )
-}
+})

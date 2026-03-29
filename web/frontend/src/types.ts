@@ -110,3 +110,30 @@ export interface AppServerFormData {
   auto_gw: boolean
   description: string
 }
+
+// Cluster Dashboard types
+export type NodeStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error' | 'sending' | 'done' | 'cmd-error'
+
+export interface ClusterNodeState {
+  serverId: number
+  host: string
+  user: string
+  status: NodeStatus
+  errorMsg?: string
+}
+
+export interface ClusterExecResult {
+  server_id: number
+  host: string
+  user: string
+  output: string
+  exit_code: number
+  error: string
+}
+
+export interface BroadcastSummary {
+  total: number
+  ok: number
+  failed: number
+  failedDetails: { host: string; error: string }[]
+}

@@ -5,14 +5,16 @@ import './ClusterList.css'
 
 interface Props {
   servers: Server[]
+  onOpenDashboard: (cluster: Cluster, autoGW: boolean) => void
 }
 
-export function ClusterList({ servers }: Props) {
+export function ClusterList({ servers, onOpenDashboard }: Props) {
   const [clusters, setClusters] = useState<Cluster[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [modalMode, setModalMode] = useState<'add' | 'edit' | null>(null)
   const [editingCluster, setEditingCluster] = useState<Cluster | null>(null)
+  const [dashConfirm, setDashConfirm] = useState<{ cluster: Cluster; autoGW: boolean } | null>(null)
 
   useEffect(() => {
     fetch('/api/clusters')
@@ -97,6 +99,11 @@ export function ClusterList({ servers }: Props) {
                 <td><span className="host">{c.name}</span></td>
                 <td><span className="dim">{membersSummary(c)}</span></td>
                 <td className="actions-cell">
+                  {c.members.length >= 5 && (
+                    <button className="connect-btn" onClick={() => setDashConfirm({ cluster: c, autoGW: false })}>
+                      Dashboard
+                    </button>
+                  )}
                   <button
                     className="action-btn"
                     onClick={() => { setEditingCluster(c); setModalMode('edit') }}
@@ -120,6 +127,43 @@ export function ClusterList({ servers }: Props) {
           onSave={handleSave}
           onClose={() => { setModalMode(null); setEditingCluster(null) }}
         />
+      )}
+
+      {dashConfirm && (
+        <div className="modal-overlay" onClick={() => setDashConfirm(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 360 }}>
+            <div className="modal-header">
+              <span>Open Dashboard — {dashConfirm.cluster.name}</span>
+              <button className="modal-close" onClick={() => setDashConfirm(null)}>×</button>
+            </div>
+            <div className="modal-body" style={{ padding: '1.25rem 1.5rem' }}>
+              <p style={{ margin: '0 0 1.25rem', color: 'var(--dim)', fontSize: '0.88rem' }}>
+                {dashConfirm.cluster.members.length} nodes will be connected automatically.
+              </p>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', fontSize: '0.9rem', color: 'var(--text)' }}>
+                <input
+                  type="checkbox"
+                  checked={dashConfirm.autoGW}
+                  onChange={e => setDashConfirm(d => d ? { ...d, autoGW: e.target.checked } : null)}
+                  style={{ accentColor: 'var(--accent2)', width: 16, height: 16 }}
+                />
+                Connect via gateway (--auto-gw)
+              </label>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setDashConfirm(null)}>Cancel</button>
+              <button
+                className="btn-primary"
+                onClick={() => {
+                  onOpenDashboard(dashConfirm.cluster, dashConfirm.autoGW)
+                  setDashConfirm(null)
+                }}
+              >
+                Open
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

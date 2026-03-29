@@ -63,6 +63,7 @@ func (h *Handler) Router() http.Handler {
 	r.Get("/clusters/{id}", h.getCluster)
 	r.Put("/clusters/{id}", h.updateCluster)
 	r.Delete("/clusters/{id}", h.deleteCluster)
+	r.Post("/clusters/{id}/exec", h.execCluster)
 
 	// Aliases
 	r.Get("/aliases", h.listAliases)
