@@ -69,10 +69,23 @@ type DockerEnv struct {
 	Args           []string `yaml:"args"`
 }
 
+// DockerComposeEnv describes execution inside a Docker Compose service.
+type DockerComposeEnv struct {
+	// ComposeDir is the directory on the remote host that contains the compose file.
+	ComposeDir string `yaml:"compose_dir"`
+	// ComposeFile is the compose file name inside ComposeDir (default: docker-compose.yml).
+	// May also be an absolute path when ComposeDir is empty.
+	ComposeFile  string   `yaml:"compose_file,omitempty"`
+	ServiceMatch string   `yaml:"service_match"` // substring matched against service names in `docker compose ps`
+	Command      string   `yaml:"command"`
+	Args         []string `yaml:"args"`
+}
+
 // RuntimeEnvironments holds strategy-specific execution configurations.
 type RuntimeEnvironments struct {
-	Native *NativeEnv `yaml:"native,omitempty"`
-	Docker *DockerEnv `yaml:"docker,omitempty"`
+	Native        *NativeEnv        `yaml:"native,omitempty"`
+	Docker        *DockerEnv        `yaml:"docker,omitempty"`
+	DockerCompose *DockerComposeEnv `yaml:"docker_compose,omitempty"`
 }
 
 // RuntimeSpec describes how the application is launched on the remote host.

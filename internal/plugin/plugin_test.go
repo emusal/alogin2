@@ -74,6 +74,32 @@ runtime:
       args: ["-u", "root", "-p"]
 `
 
+const mariadbComposeYAML = `
+name: "mariadb-compose"
+version: "1"
+auth:
+  provider: "vault"
+  mapping:
+    - var: "DB_PASS"
+      path: "root@dbhost:db_password"
+      expose: "prompt"
+      automation:
+        expect: "Enter password:"
+        send: "{{DB_PASS}}"
+        send_newline: true
+runtime:
+  strategies: ["docker-compose", "native"]
+  environments:
+    native:
+      command: "mysql"
+      args: ["-u", "root", "-p"]
+    docker_compose:
+      compose_dir: "/opt/myapp"
+      service_match: "db"
+      command: "mysql"
+      args: ["-u", "root", "-p"]
+`
+
 func writeYAML(t *testing.T, content string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -254,7 +280,8 @@ func TestDetectStrategy_DockerFirst(t *testing.T) {
 	p, _ := plugin.LoadFromFile(writeYAML(t, mariadbYAML))
 	runner := &mockRunner{
 		runOutputs: map[string]string{
-			"docker ps": "abc123 mariadb:10.6 mariadb-prod\n",
+			"docker --version": "Docker version 24.0.0\n",
+			"docker ps":        "abc123 mariadb:10.6 mariadb-prod\n",
 		},
 	}
 	s, err := plugin.DetectStrategy(context.Background(), p, runner)
@@ -267,14 +294,18 @@ func TestDetectStrategy_DockerFirst(t *testing.T) {
 	if s.ContainerID != "abc123" {
 		t.Errorf("containerID = %q, want abc123", s.ContainerID)
 	}
+	if s.DockerCmd != "docker" {
+		t.Errorf("dockerCmd = %q, want docker", s.DockerCmd)
+	}
 }
 
 func TestDetectStrategy_DockerMiss_NativeHit(t *testing.T) {
 	p, _ := plugin.LoadFromFile(writeYAML(t, mariadbYAML))
 	runner := &mockRunner{
 		runOutputs: map[string]string{
-			"docker ps": "xyz789 nginx nginx\n", // no mariadb match
-			"which":     "/usr/bin/mysql\n",
+			"docker --version": "Docker version 24.0.0\n",
+			"docker ps":        "xyz789 nginx nginx\n", // no mariadb match
+			"which":            "/usr/bin/mysql\n",
 		},
 	}
 	s, err := plugin.DetectStrategy(context.Background(), p, runner)
@@ -297,15 +328,169 @@ func TestDetectStrategy_NoneFound(t *testing.T) {
 	}
 }
 
+func TestLoadFromFile_DockerCompose(t *testing.T) {
+	p, err := plugin.LoadFromFile(writeYAML(t, mariadbComposeYAML))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	dc := p.Runtime.Environments.DockerCompose
+	if dc == nil {
+		t.Fatal("docker_compose env is nil")
+	}
+	if dc.ComposeDir != "/opt/myapp" {
+		t.Errorf("compose_dir = %q, want /opt/myapp", dc.ComposeDir)
+	}
+	if dc.ComposeFile != "" {
+		t.Errorf("compose_file = %q, want empty (default)", dc.ComposeFile)
+	}
+	if dc.ServiceMatch != "db" {
+		t.Errorf("service_match = %q, want db", dc.ServiceMatch)
+	}
+	if dc.Command != "mysql" {
+		t.Errorf("command = %q, want mysql", dc.Command)
+	}
+}
+
+func TestDetectStrategy_DockerCompose(t *testing.T) {
+	p, _ := plugin.LoadFromFile(writeYAML(t, mariadbComposeYAML))
+	runner := &mockRunner{
+		runOutputs: map[string]string{
+			"docker --version": "Docker version 24.0.0\n",
+			"docker compose -f /opt/myapp/docker-compose.yml ps": "db running(1)\nweb running(1)\n",
+		},
+	}
+	s, err := plugin.DetectStrategy(context.Background(), p, runner)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if s.Kind != "docker-compose" {
+		t.Errorf("kind = %q, want docker-compose", s.Kind)
+	}
+	if s.ServiceName != "db" {
+		t.Errorf("serviceName = %q, want db", s.ServiceName)
+	}
+	if s.ComposeFile != "/opt/myapp/docker-compose.yml" {
+		t.Errorf("composeFile = %q, want /opt/myapp/docker-compose.yml", s.ComposeFile)
+	}
+	if s.DockerCmd != "docker" {
+		t.Errorf("dockerCmd = %q, want docker", s.DockerCmd)
+	}
+}
+
+// TestDetectStrategy_DockerCompose_AbsPath simulates a host where docker is not
+// in PATH (non-interactive SSH session) but exists at a known absolute path.
+func TestDetectStrategy_DockerCompose_AbsPath(t *testing.T) {
+	p, _ := plugin.LoadFromFile(writeYAML(t, mariadbComposeYAML))
+	runner := &mockRunner{
+		runOutputs: map[string]string{
+			// docker not in PATH — resolveDockerBinary falls back to absolute path
+			"test -x /usr/local/bin/docker": "",
+			"/usr/local/bin/docker compose -f /opt/myapp/docker-compose.yml ps": "db running(1)\n",
+		},
+	}
+	s, err := plugin.DetectStrategy(context.Background(), p, runner)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if s.Kind != "docker-compose" {
+		t.Errorf("kind = %q, want docker-compose", s.Kind)
+	}
+	if s.DockerCmd != "/usr/local/bin/docker" {
+		t.Errorf("dockerCmd = %q, want /usr/local/bin/docker", s.DockerCmd)
+	}
+}
+
+func TestDetectStrategy_DockerComposeMiss_NativeHit(t *testing.T) {
+	p, _ := plugin.LoadFromFile(writeYAML(t, mariadbComposeYAML))
+	runner := &mockRunner{
+		runOutputs: map[string]string{
+			"docker --version": "Docker version 24.0.0\n",
+			"docker compose -f /opt/myapp/docker-compose.yml ps": "cache running(1)\nweb running(1)\n", // no "db"
+			"which": "/usr/bin/mysql\n",
+		},
+	}
+	s, err := plugin.DetectStrategy(context.Background(), p, runner)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if s.Kind != "native" {
+		t.Errorf("kind = %q, want native", s.Kind)
+	}
+}
+
+func TestBuildCommand_DockerCompose(t *testing.T) {
+	s := &plugin.Strategy{
+		Kind:        "docker-compose",
+		DockerCmd:   "docker",
+		ServiceName: "db",
+		ComposeFile: "/opt/myapp/docker-compose.yml",
+		Command:     "mysql",
+		Args:        []string{"-u", "root", "-p"},
+	}
+	got := s.BuildCommand()
+	want := "docker compose -f /opt/myapp/docker-compose.yml exec db mysql -u root -p"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestBuildCommand_DockerCompose_AbsPath(t *testing.T) {
+	s := &plugin.Strategy{
+		Kind:        "docker-compose",
+		DockerCmd:   "/usr/local/bin/docker",
+		ServiceName: "db",
+		ComposeFile: "/opt/myapp/docker-compose.yml",
+		Command:     "mysql",
+		Args:        []string{"-u", "root", "-p"},
+	}
+	got := s.BuildCommand()
+	want := "/usr/local/bin/docker compose -f /opt/myapp/docker-compose.yml exec db mysql -u root -p"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestBuildCommand_DockerCompose_ExtraArgs(t *testing.T) {
+	s := &plugin.Strategy{
+		Kind:        "docker-compose",
+		DockerCmd:   "docker",
+		ServiceName: "db",
+		ComposeFile: "/opt/myapp/docker-compose.yml",
+		Command:     "mysql",
+		Args:        []string{"-u", "root", "-p"},
+	}
+	got := s.BuildCommand("-e", "SHOW DATABASES;")
+	want := "docker compose -f /opt/myapp/docker-compose.yml exec db mysql -u root -p -e 'SHOW DATABASES;'"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 func TestBuildCommand_Docker(t *testing.T) {
 	s := &plugin.Strategy{
 		Kind:        "docker",
+		DockerCmd:   "docker",
 		ContainerID: "abc123",
 		Command:     "mysql",
 		Args:        []string{"-u", "root", "-p"},
 	}
 	got := s.BuildCommand()
 	want := "docker exec -it abc123 mysql -u root -p"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestBuildCommand_Docker_AbsPath(t *testing.T) {
+	s := &plugin.Strategy{
+		Kind:        "docker",
+		DockerCmd:   "/usr/local/bin/docker",
+		ContainerID: "abc123",
+		Command:     "mysql",
+		Args:        []string{"-u", "root", "-p"},
+	}
+	got := s.BuildCommand()
+	want := "/usr/local/bin/docker exec -it abc123 mysql -u root -p"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -401,7 +586,8 @@ func TestPrepare(t *testing.T) {
 	vlt := &mockVault{data: map[string]string{"root@dbhost:db_password": "s3cret"}}
 	runner := &mockRunner{
 		runOutputs: map[string]string{
-			"docker ps": "abc123 mariadb:10.6 mariadb-prod\n",
+			"docker --version": "Docker version 24.0.0\n",
+			"docker ps":        "abc123 mariadb:10.6 mariadb-prod\n",
 		},
 	}
 	sess, err := plugin.Prepare(context.Background(), p, vlt, runner)

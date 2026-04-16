@@ -1,0 +1,52 @@
+# mariadb-compose.yaml — docker-compose strategy example for MariaDB
+#
+# Usage:
+#   alogin connect target-host --app mariadb-compose
+#
+# Prerequisites:
+#   - Store the DB root password in the vault:
+#       alogin vault set testuser@target-host
+#   - MariaDB must be running as a docker-compose service on the target host.
+#
+# How it works:
+#   1. Secret Injector fetches DB_PASS from the vault.
+#   2. Runtime Detector runs `docker compose -f /opt/myapp/docker-compose.yml ps`
+#      and looks for a service whose name contains "db".
+#   3. Orchestrator launches `docker compose exec db mysql -u root -p`,
+#      waits for "Enter password:", and auto-sends the password (no echo).
+#   4. Falls back to docker (standalone container) or native mysql if compose
+#      detection fails.
+
+name: "mariadb-compose"
+version: "1"
+
+auth:
+  provider: "vault"
+  mapping:
+    - var: "DB_PASS"
+      path: "testuser@target-host"
+      expose: "prompt"
+      automation:
+        expect: "Enter password:"
+        send: "{{DB_PASS}}"
+        send_newline: true
+
+runtime:
+  # Try docker-compose first, fall back to standalone docker, then native binary.
+  strategies: ["docker-compose", "docker", "native"]
+  environments:
+    native:
+      command: "mysql"
+      args: ["-u", "root", "-p"]
+    docker:
+      container_match: "mariadb"
+      command: "mysql"
+      args: ["-u", "root", "-p"]
+    docker_compose:
+      # Directory on the remote host that contains the compose file.
+      compose_dir: "/opt/myapp"
+      # compose_file defaults to docker-compose.yml when omitted.
+      # compose_file: "compose.yaml"
+      service_match: "db"
+      command: "mysql"
+      args: ["-u", "root", "-p"]
