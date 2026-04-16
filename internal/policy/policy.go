@@ -20,6 +20,7 @@ type PolicyFile struct {
 	Version        int    `yaml:"version"`
 	DefaultAction  string `yaml:"default_action"`   // "allow" | "deny" | "require_approval"
 	HITLTimeoutSec int    `yaml:"hitl_timeout_sec"` // 0 = use default (120)
+	CLICmdPolicy   string `yaml:"cli_cmd_policy"`   // "enforce" (default) | "skip"
 	Rules          []Rule `yaml:"rules"`
 }
 
@@ -113,6 +114,13 @@ func (e *Engine) HITLTimeout() time.Duration {
 		return time.Duration(e.file.HITLTimeoutSec) * time.Second
 	}
 	return 120 * time.Second
+}
+
+// ShouldEnforceCLICmd reports whether the policy should be applied to
+// commands run via "alogin access ssh --cmd". Returns true unless
+// cli_cmd_policy is explicitly set to "skip".
+func (e *Engine) ShouldEnforceCLICmd() bool {
+	return e.file.CLICmdPolicy != "skip"
 }
 
 // matchesRule returns true when all specified conditions in the rule's MatchSpec are satisfied.
@@ -277,4 +285,42 @@ func getDestructivePatterns() []*regexp.Regexp {
 // destructive pattern. Used when no Engine (no policy file) is loaded.
 func IsDestructive(commands []string) bool {
 	return anyCommandMatchesAnyPattern(commands, getDestructivePatterns())
+}
+
+// EnforceCLICmd reports whether the engine should apply policy to CLI --cmd
+// invocations. When eng is nil (no policy file), the built-in destructive
+// patterns are always enforced (returns true).
+func EnforceCLICmd(eng *Engine) bool {
+	if eng == nil {
+		return true
+	}
+	return eng.ShouldEnforceCLICmd()
+}
+
+// EvalPolicy evaluates the policy engine for a request, applying the built-in
+// destructive-command floor when no explicit rule matches.
+// When eng is nil only the built-in patterns are checked.
+func EvalPolicy(eng *Engine, req CheckRequest) CheckResult {
+	if eng != nil {
+		result := eng.Check(req)
+		if result.RuleName != "" {
+			return result
+		}
+		if IsDestructive(req.Commands) {
+			return CheckResult{Action: "require_approval", RuleName: "built-in destructive patterns"}
+		}
+		return result
+	}
+	if IsDestructive(req.Commands) {
+		return CheckResult{Action: "require_approval", RuleName: "built-in destructive patterns"}
+	}
+	return CheckResult{Action: "allow"}
+}
+
+// HITLTimeoutFor returns the HITL timeout for eng, or 120s when eng is nil.
+func HITLTimeoutFor(eng *Engine) time.Duration {
+	if eng != nil {
+		return eng.HITLTimeout()
+	}
+	return 120 * time.Second
 }

@@ -5,10 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/emusal/alogin2/internal/model"
+	"github.com/emusal/alogin2/internal/policy"
 	internalssh "github.com/emusal/alogin2/internal/ssh"
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 )
 
@@ -113,6 +116,13 @@ func doConnect(ctx context.Context, user, host string, opts *model.ConnectOption
 	}
 	if user == "" {
 		user = srv.User
+	}
+
+	// Policy check for --cmd: apply the same HITL/deny rules as the MCP exec_command tool.
+	if opts.Command != "" {
+		if err := checkCLIPolicy(ctx, srv.ID, srv.PolicyYAML, []string{opts.Command}); err != nil {
+			return err
+		}
 	}
 
 	// Build hop chain
@@ -418,6 +428,63 @@ func parseUserHost(arg string) (user, host string) {
 //	localPort:remotePort          → 127.0.0.1:LPORT → defaultRemoteHost:RPORT
 //	localPort:remoteHost:remotePort
 //	localHost:localPort:remoteHost:remotePort
+// checkCLIPolicy loads the global agent-policy.yaml (falling back to built-in
+// destructive-command patterns when the file is absent) and enforces it for
+// commands run via "alogin access ssh --cmd".
+//
+// When cli_cmd_policy is "skip" the check is bypassed entirely.
+// When the policy result is require_approval the call blocks until the operator
+// runs "alogin agent approve <token>" or the timeout elapses.
+func checkCLIPolicy(ctx context.Context, serverID int64, serverPolicyYAML string, commands []string) error {
+	policyFile := filepath.Join(cfg.ConfigDir, "agent-policy.yaml")
+	eng, err := policy.LoadFile(policyFile)
+	if err != nil {
+		return fmt.Errorf("load policy: %w", err)
+	}
+
+	if !policy.EnforceCLICmd(eng) {
+		return nil
+	}
+
+	// Resolve per-server policy override (falls back to global when empty).
+	eng, err = policy.ResolveFor(eng, serverPolicyYAML)
+	if err != nil {
+		return fmt.Errorf("per-server policy: %w", err)
+	}
+
+	result := policy.EvalPolicy(eng, policy.CheckRequest{
+		Commands: commands,
+		ServerID: serverID,
+	})
+
+	switch result.Action {
+	case "deny":
+		msg := "policy denied"
+		if result.RuleName != "" {
+			msg += fmt.Sprintf(": rule %q", result.RuleName)
+		}
+		return fmt.Errorf("%s", msg)
+	case "require_approval":
+		token := uuid.New().String()
+		pending := policy.PendingRequest{
+			Token:    token,
+			ServerID: serverID,
+			Commands: commands,
+		}
+		timeout := policy.HITLTimeoutFor(eng)
+		outcome, err := policy.RequestApproval(ctx, cfg.ConfigDir, pending, timeout)
+		if err != nil {
+			return fmt.Errorf("HITL error: %w", err)
+		}
+		if outcome != policy.OutcomeApproved {
+			return fmt.Errorf("HITL: %s (token: %s)", outcome, token)
+		}
+		return nil
+	default:
+		return nil
+	}
+}
+
 func parseTunnelSpecs(specs []string, defaultRemoteHost string) []internalssh.TunnelSpec {
 	var result []internalssh.TunnelSpec
 	for _, spec := range specs {
