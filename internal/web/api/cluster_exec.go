@@ -13,7 +13,6 @@ import (
 type clusterExecRequest struct {
 	Command    string  `json:"command"`
 	ServerIDs  []int64 `json:"server_ids"` // empty = all members
-	AutoGW     bool    `json:"auto_gw"`
 	TimeoutSec int     `json:"timeout_sec"`
 }
 
@@ -104,7 +103,6 @@ func (h *Handler) execCluster(w http.ResponseWriter, r *http.Request) {
 			cmdResults, execErr := mcp.ExecOnServer(r.Context(), h.db, h.vlt, mcp.ExecRequest{
 				ServerID:   tgt.serverID,
 				Commands:   []string{req.Command},
-				AutoGW:     req.AutoGW,
 				TimeoutSec: req.TimeoutSec,
 			})
 			if execErr != nil {

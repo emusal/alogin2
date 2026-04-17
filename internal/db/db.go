@@ -15,7 +15,7 @@ var schemaSQL string
 
 // CurrentSchemaVersion is the schema version this binary expects.
 // Increment when adding a new migration.
-const CurrentSchemaVersion = 10
+const CurrentSchemaVersion = 12
 
 // migrationDescriptions maps each migration version to a human-readable summary.
 var migrationDescriptions = map[int]string{
@@ -28,6 +28,8 @@ var migrationDescriptions = map[int]string{
 	8: "servers.policy_yaml, servers.system_prompt columns (per-server policy and LLM prompt override)",
 	9:  "audit_log.plugin_name, plugin_vars, plugin_strategy columns (plugin execution audit)",
 	10: "app_servers table (named server+plugin bindings)",
+	11: "profiles table (network context profiles replacing per-server gateway_id and auto_gw)",
+	12: "servers.gateway_route_id column (per-server internal gateway route, applied after profile gateway)",
 }
 
 // MigrationDescription returns a human-readable description for a schema version.
@@ -48,6 +50,7 @@ type DB struct {
 	Tunnels    TunnelRepo
 	AppServers AppServerRepo
 	AuditLog   AuditRepo
+	Profiles   ProfileRepo
 
 	// AppliedMigrations holds the schema versions that were actually applied
 	// during this Open() call (i.e. were pending before the call).
@@ -85,6 +88,7 @@ func Open(path string) (*DB, error) {
 	db.Tunnels = &tunnelRepo{db: sqlDB}
 	db.AppServers = &appServerRepo{db: sqlDB}
 	db.AuditLog = &auditRepo{db: sqlDB}
+	db.Profiles = &profileRepo{db: sqlDB}
 	return db, nil
 }
 
@@ -93,6 +97,11 @@ func (d *DB) SchemaVersion(ctx context.Context) int {
 	var v int
 	_ = d.sql.QueryRowContext(ctx, `SELECT COALESCE(MAX(version),0) FROM schema_migrations`).Scan(&v)
 	return v
+}
+
+// CurrentVersion returns the schema version this binary was compiled against.
+func (d *DB) CurrentVersion() int {
+	return CurrentSchemaVersion
 }
 
 // Close closes the underlying database connection.
@@ -373,6 +382,61 @@ func applyMigrations(db *sql.DB) ([]int, error) {
 		}
 		_, _ = db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version) VALUES (10)`)
 		applied = append(applied, 10)
+	}
+
+	if version < 11 {
+		_, err := db.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS profiles (
+				id          INTEGER PRIMARY KEY AUTOINCREMENT,
+				name        TEXT    NOT NULL UNIQUE,
+				description TEXT    NOT NULL DEFAULT '',
+				is_active   INTEGER NOT NULL DEFAULT 0,
+				created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+				updated_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+			)
+		`)
+		if err != nil && !strings.Contains(err.Error(), "already exists") {
+			return applied, fmt.Errorf("migration v11 profiles: %w", err)
+		}
+		_, err = db.ExecContext(ctx,
+			`CREATE INDEX IF NOT EXISTS idx_profiles_is_active ON profiles(is_active)`)
+		if err != nil && !strings.Contains(err.Error(), "already exists") {
+			return applied, fmt.Errorf("migration v11 profiles index: %w", err)
+		}
+
+		_, err = db.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS profile_gateways (
+				id         INTEGER PRIMARY KEY AUTOINCREMENT,
+				profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+				route_id   INTEGER NOT NULL REFERENCES gateway_routes(id) ON DELETE CASCADE,
+				UNIQUE(profile_id)
+			)
+		`)
+		if err != nil && !strings.Contains(err.Error(), "already exists") {
+			return applied, fmt.Errorf("migration v11 profile_gateways: %w", err)
+		}
+		_, err = db.ExecContext(ctx,
+			`CREATE INDEX IF NOT EXISTS idx_profile_gateways_profile ON profile_gateways(profile_id)`)
+		if err != nil && !strings.Contains(err.Error(), "already exists") {
+			return applied, fmt.Errorf("migration v11 profile_gateways index: %w", err)
+		}
+
+		// servers.gateway_id, servers.gateway_server_id, tunnels.auto_gw, and
+		// app_servers.auto_gw are legacy columns kept in the DB for backwards
+		// compatibility but are no longer used by the codebase.
+
+		_, _ = db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version) VALUES (11)`)
+		applied = append(applied, 11)
+	}
+
+	if version < 12 || !columnExists(db, ctx, "servers", "gateway_route_id") {
+		_, err := db.ExecContext(ctx,
+			`ALTER TABLE servers ADD COLUMN gateway_route_id INTEGER REFERENCES gateway_routes(id) ON DELETE SET NULL`)
+		if err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			return applied, fmt.Errorf("migration v12: %w", err)
+		}
+		_, _ = db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version) VALUES (12)`)
+		applied = append(applied, 12)
 	}
 
 	return applied, nil

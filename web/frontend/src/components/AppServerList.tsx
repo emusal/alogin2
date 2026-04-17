@@ -4,7 +4,7 @@ import { AppServerFormModal } from './AppServerFormModal'
 
 interface Props {
   servers: Server[]
-  onConnect: (serverId: number, autoGW: boolean, app: string) => void
+  onConnect: (serverId: number, app: string) => void
 }
 
 export function AppServerList({ servers, onConnect }: Props) {
@@ -66,7 +66,6 @@ export function AppServerList({ servers, onConnect }: Props) {
               <th>Name</th>
               <th>Server</th>
               <th>Plugin</th>
-              <th>Auto-GW</th>
               <th>Description</th>
               <th></th>
             </tr>
@@ -77,12 +76,11 @@ export function AppServerList({ servers, onConnect }: Props) {
                 <td><strong>{as.name}</strong></td>
                 <td>{serverLabel(as.server_id)}</td>
                 <td><code>{as.plugin_name}</code></td>
-                <td>{as.auto_gw ? 'yes' : 'no'}</td>
                 <td className="dim">{as.description || '—'}</td>
                 <td className="actions-cell">
                   <button
                     className="connect-btn"
-                    onClick={() => onConnect(as.server_id, as.auto_gw, as.plugin_name)}
+                    onClick={() => onConnect(as.server_id, as.plugin_name)}
                   >
                     Connect
                   </button>

@@ -217,7 +217,7 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		if m.query == "" && len(m.filtered) > 0 {
 			srv := m.filtered[m.cursor]
-			m.choice = &SelectedServer{Server: srv, User: srv.User, AutoGW: true}
+			m.choice = &SelectedServer{Server: srv, User: srv.User}
 			return m, tea.Quit
 		}
 		// fall through to default (append 'r' to search)
@@ -443,7 +443,7 @@ func (m Model) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		if len(m.filtered) > 0 {
 			srv := m.filtered[m.cursor]
-			m.choice = &SelectedServer{Server: srv, User: srv.User, AutoGW: true}
+			m.choice = &SelectedServer{Server: srv, User: srv.User}
 			return m, tea.Quit
 		}
 	case "e":
@@ -1011,11 +1011,10 @@ func (m Model) tunnelStopCmd(name string) tea.Cmd {
 	}
 }
 
-// tabCount for tunnel form: 6 text fields + 1 server picker + 1 auto_gw toggle = 8 stops
-// tab stop indices: [0]=name, [1]=server picker, [2..6]=text fields (direction..remotePort), [7]=auto_gw
-const tnFormTabCount = 8
+// tabCount for tunnel form: 6 text fields + 1 server picker = 7 stops
+// tab stop indices: [0]=name, [1]=server picker, [2..6]=text fields (direction..remotePort)
+const tnFormTabCount = 7
 const tnFormIdxServer = 1
-const tnFormIdxAutoGW = 7
 
 func (m Model) updateTunnelForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Handle server picker overlay first
@@ -1052,19 +1051,10 @@ func (m Model) updateTunnelForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "ctrl+s":
 		return m, m.submitTunnelForm()
-	case "space":
-		if m.tnFormFocus == tnFormIdxAutoGW {
-			m.tnFormAutoGW = !m.tnFormAutoGW
-			return m, nil
-		}
 	case "enter":
 		if m.tnFormFocus == tnFormIdxServer {
 			m.tnFormPickerOpen = true
 			m.tnFormPickerCursor = 0
-			return m, nil
-		}
-		if m.tnFormFocus == tnFormIdxAutoGW {
-			m.tnFormAutoGW = !m.tnFormAutoGW
 			return m, nil
 		}
 		// Submit from last tab stop
@@ -1109,8 +1099,8 @@ func (m Model) updateTunnelForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // tnFieldIdx maps a tunnel form tab stop index to a tnFormFields slice index.
-// Tab stops: [0]=Name(field 0), [1]=Server(picker), [2..6]=Direction..RemotePort(fields 1..5), [7]=AutoGW
-// Returns -1 for non-text tab stops (picker, AutoGW).
+// Tab stops: [0]=Name(field 0), [1]=Server(picker), [2..6]=Direction..RemotePort(fields 1..5)
+// Returns -1 for non-text tab stops (picker).
 func tnFieldIdx(tabStop int) int {
 	switch {
 	case tabStop == 0:
@@ -1205,7 +1195,6 @@ func (m Model) updateAppServerList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.choice = &SelectedServer{
 				Server: srv,
 				User:   srv.User,
-				AutoGW: as.AutoGW,
 				Plugin: as.PluginName,
 			}
 			return m, tea.Quit
@@ -1214,14 +1203,11 @@ func (m Model) updateAppServerList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// asFormTabCount: 3 text fields (name, plugin, desc) + 1 server picker row + 1 auto_gw toggle = 5 stops
-const asFormTabCount = 5
+// asFormTabCount: 3 text fields (name, plugin, desc) + 1 server picker row = 4 stops
+const asFormTabCount = 4
 
-// asFormIdxServer and asFormIdxAutoGW are the tab-stop indices for the non-text-field rows.
-const (
-	asFormIdxServer = 3
-	asFormIdxAutoGW = 4
-)
+// asFormIdxServer is the tab-stop index for the server picker row.
+const asFormIdxServer = 3
 
 func (m Model) updateAppServerForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Handle server picker overlay first
@@ -1258,19 +1244,10 @@ func (m Model) updateAppServerForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "ctrl+s":
 		return m, m.submitAppServerForm()
-	case "space":
-		if m.asFormFocus == asFormIdxAutoGW {
-			m.asFormAutoGW = !m.asFormAutoGW
-			return m, nil
-		}
 	case "enter":
 		if m.asFormFocus == asFormIdxServer {
 			m.asFormPickerOpen = true
 			m.asFormPickerCursor = 0
-			return m, nil
-		}
-		if m.asFormFocus == asFormIdxAutoGW {
-			m.asFormAutoGW = !m.asFormAutoGW
 			return m, nil
 		}
 		// Move to next field

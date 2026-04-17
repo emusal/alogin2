@@ -13,7 +13,6 @@ const emptyForm = (): AppServerFormData => ({
   name: '',
   server_id: 0,
   plugin_name: '',
-  auto_gw: false,
   description: '',
 })
 
@@ -25,7 +24,6 @@ export function AppServerFormModal({ initial, servers, onSave, onClose }: Props)
           name: initial.name,
           server_id: initial.server_id,
           plugin_name: initial.plugin_name,
-          auto_gw: initial.auto_gw,
           description: initial.description,
         }
       : emptyForm()
@@ -104,15 +102,6 @@ export function AppServerFormModal({ initial, servers, onSave, onClose }: Props)
               placeholder="e.g. mariadb"
               required
             />
-          </div>
-          <div className="form-row">
-            <label>Auto-GW</label>
-            <input
-              type="checkbox"
-              checked={form.auto_gw}
-              onChange={e => set('auto_gw', e.target.checked)}
-            />
-            <span className="form-hint">Connect via gateway by default</span>
           </div>
           <div className="form-row">
             <label>Description</label>

@@ -69,7 +69,6 @@ func newTunnelListCmd() *cobra.Command {
 					LocalPort  int    `json:"local_port"`
 					RemoteHost string `json:"remote_host"`
 					RemotePort int    `json:"remote_port"`
-					AutoGW     bool   `json:"auto_gw"`
 					Running    bool   `json:"running"`
 				}
 				out := make([]tunnelJSON, 0, len(tunnels))
@@ -84,7 +83,6 @@ func newTunnelListCmd() *cobra.Command {
 						Direction:  string(t.Direction),
 						LocalHost:  t.LocalHost, LocalPort: t.LocalPort,
 						RemoteHost: t.RemoteHost, RemotePort: t.RemotePort,
-						AutoGW:  t.AutoGW,
 						Running: tunnel.IsRunning(t.Name),
 					})
 				}
@@ -129,7 +127,6 @@ func newTunnelAddCmd() *cobra.Command {
 		localPort  int
 		remoteHost string
 		remotePort int
-		autoGW     bool
 	)
 	cmd := &cobra.Command{
 		Use:   "add <name>",
@@ -156,7 +153,6 @@ func newTunnelAddCmd() *cobra.Command {
 				LocalPort:  localPort,
 				RemoteHost: remoteHost,
 				RemotePort: remotePort,
-				AutoGW:     autoGW,
 			}
 			if err := database.Tunnels.Create(ctx, t); err != nil {
 				return fmt.Errorf("create tunnel: %w", err)
@@ -171,7 +167,6 @@ func newTunnelAddCmd() *cobra.Command {
 	cmd.Flags().IntVar(&localPort, "local-port", 0, "Local port (required)")
 	cmd.Flags().StringVar(&remoteHost, "remote-host", "", "Remote host (required)")
 	cmd.Flags().IntVar(&remotePort, "remote-port", 0, "Remote port (required)")
-	cmd.Flags().BoolVar(&autoGW, "auto-gw", false, "Follow gateway chain from server registry")
 	_ = cmd.MarkFlagRequired("server")
 	_ = cmd.MarkFlagRequired("local-port")
 	_ = cmd.MarkFlagRequired("remote-host")
@@ -187,7 +182,6 @@ func newTunnelEditCmd() *cobra.Command {
 		localPort  int
 		remoteHost string
 		remotePort int
-		autoGW     bool
 	)
 	cmd := &cobra.Command{
 		Use:   "edit <name>",
@@ -224,9 +218,6 @@ func newTunnelEditCmd() *cobra.Command {
 			if cmd.Flags().Changed("remote-port") {
 				t.RemotePort = remotePort
 			}
-			if cmd.Flags().Changed("auto-gw") {
-				t.AutoGW = autoGW
-			}
 			if err := database.Tunnels.Update(ctx, t); err != nil {
 				return fmt.Errorf("update tunnel: %w", err)
 			}
@@ -240,7 +231,6 @@ func newTunnelEditCmd() *cobra.Command {
 	cmd.Flags().IntVar(&localPort, "local-port", 0, "Local port")
 	cmd.Flags().StringVar(&remoteHost, "remote-host", "", "Remote host")
 	cmd.Flags().IntVar(&remotePort, "remote-port", 0, "Remote port")
-	cmd.Flags().BoolVar(&autoGW, "auto-gw", false, "Follow gateway chain")
 	return cmd
 }
 
@@ -361,7 +351,7 @@ func newTunnelRunCmd() *cobra.Command {
 				return fmt.Errorf("server id=%d not found", t.ServerID)
 			}
 
-			hops, err := buildHopChain(ctx, srv, srv.User, t.AutoGW)
+			hops, err := buildHopChain(ctx, srv, srv.User, "")
 			if err != nil {
 				return fmt.Errorf("build hop chain: %w", err)
 			}

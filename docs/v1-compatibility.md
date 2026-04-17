@@ -4,7 +4,7 @@ The shell shim `completions/alogin.zsh` provides backward-compatible functions:
 
 ```
 t            → alogin access
-r            → alogin access --auto-gw
+r            → alogin access ssh (gateway via active profile)
 s            → alogin sftp
 f            → alogin ftp
 m            → alogin mount

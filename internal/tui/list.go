@@ -181,11 +181,7 @@ func (m Model) renderMainList() string {
 	}
 	for i := viewStart; i < viewEnd; i++ {
 		s := m.filtered[i]
-		gw := ""
-		if s.GatewayID != nil {
-			gw = " [gw]"
-		}
-		line := fmt.Sprintf("%-28s  %-16s  %-8s%s", s.Host, s.User, string(s.Protocol), gw)
+		line := fmt.Sprintf("%-28s  %-16s  %-8s", s.Host, s.User, string(s.Protocol))
 		if i == m.cursor {
 			sb.WriteString(m.selectedStyle.Render("> " + line))
 		} else {
@@ -253,16 +249,18 @@ func (m Model) renderDetail(s *model.Server) string {
 	if s.Locale != "" && s.Locale != "-" {
 		sb.WriteString(fmt.Sprintf("Locale:   %s\n", s.Locale))
 	}
-	if s.GatewayID != nil {
+	if s.GatewayRouteID != nil {
+		gwLabel := fmt.Sprintf("(route id: %d)", *s.GatewayRouteID)
 		for _, gw := range m.gateways {
-			if gw.ID == *s.GatewayID {
-				sb.WriteString(fmt.Sprintf("Gateway:  %s\n", gw.Name))
+			if gw.ID == *s.GatewayRouteID {
+				gwLabel = gw.Name
 				break
 			}
 		}
+		sb.WriteString(fmt.Sprintf("Gateway:  %s\n", gwLabel))
 	}
 	sb.WriteString("\n")
-	sb.WriteString("[Enter] connect  [r] via-gw  [e] edit  [d] delete  [Tab/Esc] back")
+	sb.WriteString("[Enter] connect  [e] edit  [d] delete  [Tab/Esc] back")
 	return m.detailStyle.Render(sb.String())
 }
 
@@ -696,14 +694,9 @@ func (m Model) renderTunnelList() string {
 		if running {
 			statusTag = lipgloss.NewStyle().Foreground(lipgloss.Color("82")).Render("[running]")
 		}
-		autoGWTag := ""
-		if t.AutoGW {
-			autoGWTag = " gw"
-		}
-		line := fmt.Sprintf("%-18s  %-16s  %s  %s:%d → %s:%d%s",
+		line := fmt.Sprintf("%-18s  %-16s  %s  %s:%d → %s:%d",
 			t.Name, srvLabel, string(t.Direction),
 			t.LocalHost, t.LocalPort, t.RemoteHost, t.RemotePort,
-			autoGWTag,
 		)
 		if i == m.tunnelCursor {
 			sb.WriteString(m.selectedStyle.Render("> "+line) + "  " + statusTag)
@@ -765,18 +758,8 @@ func (m Model) renderTunnelForm() string {
 		sb.WriteString(fmt.Sprintf("  %-16s  %s\n", labels[i], field.View()))
 	}
 
-	// AutoGW toggle (tab stop index 7)
-	autoGWDisplay := "[ ] Auto-GW"
-	if m.tnFormAutoGW {
-		autoGWDisplay = "[x] Auto-GW"
-	}
-	if m.tnFormFocus == tnFormIdxAutoGW {
-		sb.WriteString(m.selectedStyle.Render("> " + autoGWDisplay))
-	} else {
-		sb.WriteString(m.dimStyle.Render("  " + autoGWDisplay))
-	}
-	sb.WriteString("\n\n")
-	sb.WriteString(m.dimStyle.Render("  [Tab] next  [Shift+Tab] prev  [Space] toggle AutoGW  [Ctrl+S] save  [Esc] cancel"))
+	sb.WriteString("\n")
+	sb.WriteString(m.dimStyle.Render("  [Tab] next  [Shift+Tab] prev  [Ctrl+S] save  [Esc] cancel"))
 	if m.statusMsg != "" {
 		sb.WriteString("\n")
 		sb.WriteString(m.dimStyle.Render("  " + m.statusMsg))
@@ -879,16 +862,12 @@ func (m Model) renderAppServerList() string {
 		if srv := serverByID(m.servers, as.ServerID); srv != nil {
 			srvLabel = srv.Host
 		}
-		gwTag := ""
-		if as.AutoGW {
-			gwTag = " [gw]"
-		}
 		desc := ""
 		if as.Description != "" {
 			desc = "  " + as.Description
 		}
-		line := fmt.Sprintf("%-20s  %-16s  %-12s%s%s",
-			as.Name, srvLabel, as.PluginName, gwTag, desc)
+		line := fmt.Sprintf("%-20s  %-16s  %-12s%s",
+			as.Name, srvLabel, as.PluginName, desc)
 		if i == m.appServerCursor {
 			sb.WriteString(m.selectedStyle.Render("> " + line))
 		} else {
@@ -946,18 +925,8 @@ func (m Model) renderAppServerForm() string {
 		sb.WriteString(m.renderServerPicker(m.asFormPickerCursor))
 	}
 
-	// AutoGW toggle (tab stop index 4)
-	autoGWDisplay := "[ ] Auto-GW"
-	if m.asFormAutoGW {
-		autoGWDisplay = "[x] Auto-GW"
-	}
-	if m.asFormFocus == asFormIdxAutoGW {
-		sb.WriteString(m.selectedStyle.Render("> " + autoGWDisplay))
-	} else {
-		sb.WriteString(m.dimStyle.Render("  " + autoGWDisplay))
-	}
-	sb.WriteString("\n\n")
-	sb.WriteString(m.dimStyle.Render("  [Tab] next  [Shift+Tab] prev  [Enter] toggle AutoGW  [Ctrl+S] save  [Esc] cancel"))
+	sb.WriteString("\n")
+	sb.WriteString(m.dimStyle.Render("  [Tab] next  [Shift+Tab] prev  [Ctrl+S] save  [Esc] cancel"))
 	if m.statusMsg != "" {
 		sb.WriteString("\n")
 		sb.WriteString(m.dimStyle.Render("  " + m.statusMsg))

@@ -37,7 +37,7 @@ Examples:
 				user = srv.User
 			}
 
-			hops, err := buildHopChain(ctx, srv, user, false)
+			hops, err := buildHopChain(ctx, srv, user, "")
 			if err != nil {
 				return err
 			}

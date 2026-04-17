@@ -22,14 +22,10 @@ type AppServerRepo interface {
 type appServerRepo struct{ db *sql.DB }
 
 func (r *appServerRepo) Create(ctx context.Context, as *model.AppServer) error {
-	autoGW := 0
-	if as.AutoGW {
-		autoGW = 1
-	}
 	res, err := r.db.ExecContext(ctx,
-		`INSERT INTO app_servers (name, server_id, plugin_name, auto_gw, description)
-		 VALUES (?, ?, ?, ?, ?)`,
-		as.Name, as.ServerID, as.PluginName, autoGW, as.Description,
+		`INSERT INTO app_servers (name, server_id, plugin_name, description)
+		 VALUES (?, ?, ?, ?)`,
+		as.Name, as.ServerID, as.PluginName, as.Description,
 	)
 	if err != nil {
 		return fmt.Errorf("create app_server: %w", err)
@@ -73,14 +69,10 @@ func (r *appServerRepo) ListAll(ctx context.Context) ([]*model.AppServer, error)
 }
 
 func (r *appServerRepo) Update(ctx context.Context, as *model.AppServer) error {
-	autoGW := 0
-	if as.AutoGW {
-		autoGW = 1
-	}
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE app_servers SET name=?, server_id=?, plugin_name=?, auto_gw=?, description=?, updated_at=?
+		`UPDATE app_servers SET name=?, server_id=?, plugin_name=?, description=?, updated_at=?
 		 WHERE id=?`,
-		as.Name, as.ServerID, as.PluginName, autoGW, as.Description,
+		as.Name, as.ServerID, as.PluginName, as.Description,
 		time.Now().UTC().Format(time.RFC3339), as.ID,
 	)
 	return err
@@ -95,7 +87,7 @@ func (r *appServerRepo) Delete(ctx context.Context, id int64) error {
 
 func scanAppServer(row *sql.Row) (*model.AppServer, error) {
 	as := &model.AppServer{}
-	var autoGW int
+	var autoGW int // legacy column kept in DB; scanned into dummy variable
 	var createdAt, updatedAt string
 	err := row.Scan(&as.ID, &as.Name, &as.ServerID, &as.PluginName, &autoGW, &as.Description, &createdAt, &updatedAt)
 	if err == sql.ErrNoRows {
@@ -104,7 +96,6 @@ func scanAppServer(row *sql.Row) (*model.AppServer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("scan app_server: %w", err)
 	}
-	as.AutoGW = autoGW != 0
 	as.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 	as.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
 	return as, nil
@@ -112,12 +103,11 @@ func scanAppServer(row *sql.Row) (*model.AppServer, error) {
 
 func scanAppServerRow(rows *sql.Rows) (*model.AppServer, error) {
 	as := &model.AppServer{}
-	var autoGW int
+	var autoGW int // legacy column kept in DB; scanned into dummy variable
 	var createdAt, updatedAt string
 	if err := rows.Scan(&as.ID, &as.Name, &as.ServerID, &as.PluginName, &autoGW, &as.Description, &createdAt, &updatedAt); err != nil {
 		return nil, err
 	}
-	as.AutoGW = autoGW != 0
 	as.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 	as.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
 	return as, nil

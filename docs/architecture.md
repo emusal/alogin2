@@ -34,6 +34,12 @@ alogin access [host]
 
 7. **MCP server** (`internal/mcp/`): Model Context Protocol server over stdio, exposes 10 tools for LLM integration (list_servers, exec_command, tunnel lifecycle, cluster ops).
 
+8. **Two-level network routing** (`internal/cli/connect.go`, `buildHopChain`):
+   - **Profile gateway** (level 1): activated once with `alogin auth profile use <name>`. All connections automatically route through the profile's gateway route. Analogous to switching VPN. Per-command override: `--profile <name>|none`.
+   - **Server gateway** (level 2): set per-server via `alogin compute add --gateway <route>`. Applied *after* the profile gateway for servers that require an additional internal jump (e.g., internal jump server inside the corporate network).
+   - **Full hop chain**: `profile.gateway_hops → server.gateway_hops → [destination]`
+   - **Loop prevention**: if the destination server is itself one of the profile gateway hops, the profile gateway is skipped (direct connection). Same logic applies for server gateway hops.
+
 ## Layer overview
 
 ```

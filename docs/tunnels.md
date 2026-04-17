@@ -25,7 +25,7 @@ Examples:
 ```bash
 alogin access db.prod -L 5432:5432           # local:5432 → db.prod:5432
 alogin access web-01 -L 8080:localhost:80    # local:8080 → web-01's localhost:80
-alogin access web-01 --auto-gw -L 2222:22   # through gateway + local:2222 → web-01:22
+alogin access web-01 -L 2222:22              # through active profile gateway + local:2222 → web-01:22
 ```
 
 ### `-R` Reverse / remote forward (remote → your machine)
@@ -78,7 +78,6 @@ alogin tunnel status <name>           # running / stopped
 | `--local-port` | _(required)_ | Local port |
 | `--remote-host` | _(required)_ | Remote host |
 | `--remote-port` | _(required)_ | Remote port |
-| `--auto-gw` | `false` | Follow gateway chain from server registry |
 
 ### Common examples
 
@@ -90,10 +89,6 @@ alogin tunnel add db-prod \
 # Forward local:8080 → web-01's localhost:80 (web app)
 alogin tunnel add web-local \
   --server web-01 --local-port 8080 --remote-host localhost --remote-port 80
-
-# Same but route through web-01's registered gateway
-alogin tunnel add web-gw \
-  --server web-01 --local-port 8080 --remote-host localhost --remote-port 80 --auto-gw
 
 # Start all tunnels
 alogin tunnel list | awk 'NR>1 {print $1}' | xargs -I{} alogin tunnel start {}

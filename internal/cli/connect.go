@@ -17,12 +17,12 @@ import (
 
 func newConnectCmd() *cobra.Command {
 	var (
-		autoGW  bool
-		dryRun  bool
-		command string
-		tunnelL []string
-		tunnelR []string
-		appName string
+		profileOverride string
+		dryRun          bool
+		command         string
+		tunnelL         []string
+		tunnelR         []string
+		appName         string
 	)
 
 	cmd := &cobra.Command{
@@ -33,36 +33,38 @@ func newConnectCmd() *cobra.Command {
 
 If no host is provided, opens the interactive TUI host selector.
 
-Single host (t — direct, ignores gateway setting):
-  alogin access sshweb-01
-  alogin access ssh admin@web-01
+Single host via active profile gateway (default):
+  alogin ssh connect web-01
 
-Single host via gateway (r — follows the gateway defined in the registry):
-  alogin access ssh web-01 --auto-gw
+Single host bypassing gateway (direct connection):
+  alogin ssh connect web-01 --profile none
+
+Single host via a named profile:
+  alogin ssh connect web-01 --profile home
 
 Explicit multi-hop (each host is an SSH jump, resolved from the registry):
-  alogin access ssh gw-01 web-01
-  alogin access ssh gw-01 gw-02 web-01
+  alogin ssh connect gw-01 web-01
+  alogin ssh connect gw-01 gw-02 web-01
 
 Port forwarding (-L local, -R remote):
-  alogin access ssh web-01 -L 8080:localhost:80       # full spec
-  alogin access ssh web-01 -L 2222:22                 # shorthand: local:2222 → dest:22
-  alogin access ssh web-01 --auto-gw -L 2222:22       # works through gateway too
-  alogin access ssh web-01 -R 2222:127.0.0.1:22       # remote→local reverse tunnel
+  alogin ssh connect web-01 -L 8080:localhost:80       # full spec
+  alogin ssh connect web-01 -L 2222:22                 # shorthand: local:2222 → dest:22
+  alogin ssh connect web-01 -L 2222:22 --profile home  # works through profile gateway too
+  alogin ssh connect web-01 -R 2222:127.0.0.1:22       # remote→local reverse tunnel
 
 Other options:
-  alogin access ssh web-01 --cmd "tail -f /var/log/app.log"`,
+  alogin ssh connect web-01 --cmd "tail -f /var/log/app.log"`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 
 			opts := &model.ConnectOptions{
-				Command: command,
-				AutoGW:  autoGW,
-				DryRun:  dryRun,
-				TunnelL: tunnelL,
-				TunnelR: tunnelR,
-				AppName: appName,
+				Command:         command,
+				ProfileOverride: profileOverride,
+				DryRun:          dryRun,
+				TunnelL:         tunnelL,
+				TunnelR:         tunnelR,
+				AppName:         appName,
 			}
 
 			// No host → launch TUI
@@ -81,7 +83,8 @@ Other options:
 		},
 	}
 
-	cmd.Flags().BoolVar(&autoGW, "auto-gw", false, "auto-detect gateway route (like legacy 'r' command)")
+	cmd.Flags().StringVar(&profileOverride, "profile", "",
+		`network profile override: named profile, "none" for direct connection, or empty to use active profile`)
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print connection route without connecting")
 	cmd.Flags().StringVarP(&command, "cmd", "c", "", "command to run after login")
 	cmd.Flags().StringArrayVarP(&tunnelL, "local-forward", "L", nil, "local port forward: PORT | LPORT:RPORT | LPORT:host:RPORT | lhost:LPORT:host:RPORT")
@@ -118,15 +121,15 @@ func doConnect(ctx context.Context, user, host string, opts *model.ConnectOption
 		user = srv.User
 	}
 
-	// Policy check for --cmd: apply the same HITL/deny rules as the MCP exec_command tool.
+	// Policy check for --cmd
 	if opts.Command != "" {
 		if err := checkCLIPolicy(ctx, srv.ID, srv.PolicyYAML, []string{opts.Command}); err != nil {
 			return err
 		}
 	}
 
-	// Build hop chain
-	hops, err := buildHopChain(ctx, srv, user, opts.AutoGW)
+	// Build hop chain via active profile
+	hops, err := buildHopChain(ctx, srv, user, opts.ProfileOverride)
 	if err != nil {
 		return err
 	}
@@ -150,10 +153,6 @@ func doConnect(ctx context.Context, user, host string, opts *model.ConnectOption
 		Env:     env,
 	}
 
-	// Single-hop or multi-hop: try direct-tcpip (ProxyJump) first.
-	// If an intermediate hop refuses TCP forwarding, fall back to the v1
-	// shell-chain method (runs "ssh" inside the shell of each hop — no
-	// AllowTcpForwarding required on proxy servers).
 	chain, err := internalssh.DialChain(hops)
 	if err != nil {
 		var eofErr *internalssh.ErrDialViaEOF
@@ -171,10 +170,6 @@ func doConnect(ctx context.Context, user, host string, opts *model.ConnectOption
 	client := chain.Terminal()
 	targetHost := hops[len(hops)-1].Host
 
-	// Set up port tunnels (non-blocking).
-	// Works for both single-hop and multi-hop (gateway) chains — the tunnel
-	// is established on the terminal client, which already carries the full
-	// ProxyJump chain internally.
 	for _, spec := range parseTunnelSpecs(opts.TunnelL, targetHost) {
 		if err := client.ForwardLocal(ctx, spec); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: tunnel -L failed: %v\n", err)
@@ -192,43 +187,97 @@ func doConnect(ctx context.Context, user, host string, opts *model.ConnectOption
 	return client.Shell(shellOpts)
 }
 
-// buildHopChain constructs the SSH hop chain for a single destination.
+// buildHopChain constructs the SSH hop chain for a single destination using
+// the active network profile (or a profile override).
 //
-//   - autoGW=false (t): connect directly, ignoring any gateway stored in the registry.
-//   - autoGW=true  (r): follow the gateway chain stored in the registry, mirroring v1
-//     get_gateway_list semantics:
-//     1. gateway_id set  → named route from gateway_routes (mirrors gateway_list)
-//     2. gateway_server_id set → recursive server chain (mirrors server_list.gateway)
-func buildHopChain(ctx context.Context, srv *model.Server, user string, autoGW bool) ([]internalssh.HopConfig, error) {
+// Profile resolution order:
+//  1. profileOverride == "none"   → direct connection, no gateway
+//  2. profileOverride == "<name>" → use that named profile's gateway route
+//  3. profileOverride == ""       → use the currently active profile's gateway route
+//
+// Loop prevention: if the destination server IS one of the gateway hop servers,
+// connect directly without prepending the gateway chain.
+func buildHopChain(ctx context.Context, srv *model.Server, user string, profileOverride string) ([]internalssh.HopConfig, error) {
 	var hops []internalssh.HopConfig
+	var activeProfile *model.Profile
 
-	if autoGW {
-		// Case 1: named gateway route (mirrors v1 gateway_list lookup).
-		if srv.GatewayID != nil {
-			gwHops, err := database.Gateways.HopsFor(ctx, srv.ID)
+	if profileOverride != "none" {
+		var err error
+
+		if profileOverride != "" {
+			activeProfile, err = database.Profiles.GetByName(ctx, profileOverride)
 			if err != nil {
-				return nil, fmt.Errorf("gateway hops: %w", err)
+				return nil, fmt.Errorf("profile %q: %w", profileOverride, err)
 			}
-			for _, h := range gwHops {
-				hopSrv, err := database.Servers.GetByID(ctx, h.ServerID)
-				if err != nil || hopSrv == nil {
-					return nil, fmt.Errorf("gateway hop server %d not found", h.ServerID)
+			if activeProfile == nil {
+				return nil, fmt.Errorf("profile %q not found", profileOverride)
+			}
+		} else {
+			activeProfile, err = database.Profiles.GetActive(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("get active profile: %w", err)
+			}
+		}
+
+		if activeProfile != nil && activeProfile.GatewayRouteID != nil {
+			gw, err := database.Gateways.GetByID(ctx, *activeProfile.GatewayRouteID)
+			if err != nil || gw == nil {
+				return nil, fmt.Errorf("profile gateway route not found: %w", err)
+			}
+
+			// Loop prevention: if destination is one of the gateway hops, connect directly.
+			isGWHop := false
+			for _, h := range gw.Hops {
+				if h.ServerID == srv.ID {
+					isGWHop = true
+					break
 				}
-				pwd, _ := vlt.Get(vaultKey(hopSrv))
-				hops = append(hops, internalssh.HopConfig{
-					Host:     resolveHost(ctx, hopSrv.Host),
-					Port:     hopSrv.EffectivePort(),
-					User:     hopSrv.User,
-					Password: pwd,
-				})
 			}
-		} else if srv.GatewayServerID != nil {
-			// Case 2: recursive server chain (mirrors v1 server_list.gateway).
-			chain, err := resolveGatewayChain(ctx, srv)
-			if err != nil {
-				return nil, err
+
+			if !isGWHop {
+				for _, h := range gw.Hops {
+					hopSrv, err := database.Servers.GetByID(ctx, h.ServerID)
+					if err != nil || hopSrv == nil {
+						return nil, fmt.Errorf("gateway hop server %d not found", h.ServerID)
+					}
+					pwd, _ := vlt.Get(vaultKey(hopSrv))
+					hops = append(hops, internalssh.HopConfig{
+						Host:     resolveHost(ctx, hopSrv.Host),
+						Port:     hopSrv.EffectivePort(),
+						User:     hopSrv.User,
+						Password: pwd,
+					})
+				}
 			}
-			hops = append(hops, chain...)
+		}
+	}
+
+	// Server-level internal gateway hops (applied after profile gateway, before destination).
+	// Full path: profile.gateway_hops → server.gateway_route_hops → server
+	// Dedup: if server gateway is the same route as the profile gateway, skip it.
+	if srv.GatewayRouteID != nil && (activeProfile == nil ||
+		activeProfile.GatewayRouteID == nil ||
+		*srv.GatewayRouteID != *activeProfile.GatewayRouteID) {
+		srvGW, err := database.Gateways.GetByID(ctx, *srv.GatewayRouteID)
+		if err != nil || srvGW == nil {
+			return nil, fmt.Errorf("server gateway route %d not found", *srv.GatewayRouteID)
+		}
+		for _, h := range srvGW.Hops {
+			// Loop prevention: skip if this hop IS the destination server.
+			if h.ServerID == srv.ID {
+				continue
+			}
+			hopSrv, err := database.Servers.GetByID(ctx, h.ServerID)
+			if err != nil || hopSrv == nil {
+				return nil, fmt.Errorf("server gateway hop %d not found", h.ServerID)
+			}
+			pwd, _ := vlt.Get(vaultKey(hopSrv))
+			hops = append(hops, internalssh.HopConfig{
+				Host:     resolveHost(ctx, hopSrv.Host),
+				Port:     hopSrv.EffectivePort(),
+				User:     hopSrv.User,
+				Password: pwd,
+			})
 		}
 	}
 
@@ -244,68 +293,8 @@ func buildHopChain(ctx context.Context, srv *model.Server, user string, autoGW b
 	return hops, nil
 }
 
-// resolveGatewayChain follows gateway_server_id links recursively to build the hop
-// prefix, mirroring v1's get_gateway_list behaviour.
-// Returns hops in order [outermost-gw ... innermost-gw] (destination is appended by caller).
-func resolveGatewayChain(ctx context.Context, dest *model.Server) ([]internalssh.HopConfig, error) {
-	var chain []internalssh.HopConfig
-	visited := map[int64]bool{dest.ID: true}
-
-	cur := dest
-	for cur.GatewayServerID != nil {
-		gwSrv, err := database.Servers.GetByID(ctx, *cur.GatewayServerID)
-		if err != nil || gwSrv == nil {
-			return nil, fmt.Errorf("gateway server %d not found", *cur.GatewayServerID)
-		}
-		if visited[gwSrv.ID] {
-			return nil, fmt.Errorf("gateway loop detected at server %s", gwSrv.Host)
-		}
-		visited[gwSrv.ID] = true
-
-		pwd, _ := vlt.Get(vaultKey(gwSrv))
-		// Prepend so the outermost gateway is first.
-		chain = append([]internalssh.HopConfig{{
-			Host:     resolveHost(ctx, gwSrv.Host),
-			Port:     gwSrv.EffectivePort(),
-			User:     gwSrv.User,
-			Password: pwd,
-		}}, chain...)
-
-		cur = gwSrv
-	}
-
-	// If the outermost server in the GatewayServerID chain itself has a named
-	// gateway route (GatewayID), prepend those hops so the full path is resolved.
-	// Example: deep-target →(GatewayServerID) middle →(GatewayID) bastion_gw
-	//   produces: [bastion_host, middle, deep-target]
-	if cur.GatewayID != nil {
-		gwHops, err := database.Gateways.HopsFor(ctx, cur.ID)
-		if err != nil {
-			return nil, fmt.Errorf("gateway hops for %s: %w", cur.Host, err)
-		}
-		var prefix []internalssh.HopConfig
-		for _, h := range gwHops {
-			hopSrv, err := database.Servers.GetByID(ctx, h.ServerID)
-			if err != nil || hopSrv == nil {
-				return nil, fmt.Errorf("gateway hop server %d not found", h.ServerID)
-			}
-			pwd, _ := vlt.Get(vaultKey(hopSrv))
-			prefix = append(prefix, internalssh.HopConfig{
-				Host:     resolveHost(ctx, hopSrv.Host),
-				Port:     hopSrv.EffectivePort(),
-				User:     hopSrv.User,
-				Password: pwd,
-			})
-		}
-		chain = append(prefix, chain...)
-	}
-
-	return chain, nil
-}
-
-// doConnectChain handles explicit multi-hop: `t gw1 gw2 dest`.
-// Each argument is looked up in the registry in order; together they form the
-// ProxyJump chain — identical to v1 `t host1 host2 dest` behaviour.
+// doConnectChain handles explicit multi-hop: `ssh gw1 gw2 dest`.
+// Each argument is looked up in the registry in order.
 func doConnectChain(ctx context.Context, hostArgs []string, opts *model.ConnectOptions) error {
 	var hops []internalssh.HopConfig
 
@@ -327,7 +316,6 @@ func doConnectChain(ctx context.Context, hostArgs []string, opts *model.ConnectO
 
 		srv, err := database.Servers.GetByHost(ctx, host, user)
 		if err != nil || srv == nil {
-			// Not in registry — use bare credentials (key auth, system user)
 			if user == "" {
 				user = os.Getenv("USER")
 			}
@@ -401,8 +389,6 @@ func printRoute(hops []internalssh.HopConfig) {
 }
 
 // resolveHost checks the local hosts table before falling back to DNS.
-// It is called when constructing HopConfig.Host values so that custom
-// hostname→IP mappings are applied transparently at connection time.
 func resolveHost(ctx context.Context, hostname string) string {
 	if database == nil {
 		return hostname
@@ -421,21 +407,7 @@ func parseUserHost(arg string) (user, host string) {
 	return "", arg
 }
 
-// parseTunnelSpecs parses port-forward specs with defaultRemoteHost used when
-// the remote host is not explicit. Supported formats:
-//
-//	PORT                          → 127.0.0.1:PORT → defaultRemoteHost:PORT
-//	localPort:remotePort          → 127.0.0.1:LPORT → defaultRemoteHost:RPORT
-//	localPort:remoteHost:remotePort
-//	localHost:localPort:remoteHost:remotePort
-//
-// checkCLIPolicy loads the global agent-policy.yaml (falling back to built-in
-// destructive-command patterns when the file is absent) and enforces it for
-// commands run via "alogin access ssh --cmd".
-//
-// When cli_cmd_policy is "skip" the check is bypassed entirely.
-// When the policy result is require_approval the call blocks until the operator
-// runs "alogin agent approve <token>" or the timeout elapses.
+// checkCLIPolicy enforces agent-policy.yaml for commands run via "alogin ssh connect --cmd".
 func checkCLIPolicy(ctx context.Context, serverID int64, serverPolicyYAML string, commands []string) error {
 	policyFile := filepath.Join(cfg.ConfigDir, "agent-policy.yaml")
 	eng, err := policy.LoadFile(policyFile)
@@ -447,7 +419,6 @@ func checkCLIPolicy(ctx context.Context, serverID int64, serverPolicyYAML string
 		return nil
 	}
 
-	// Resolve per-server policy override (falls back to global when empty).
 	eng, err = policy.ResolveFor(eng, serverPolicyYAML)
 	if err != nil {
 		return fmt.Errorf("per-server policy: %w", err)
@@ -492,22 +463,22 @@ func parseTunnelSpecs(specs []string, defaultRemoteHost string) []internalssh.Tu
 		parts := strings.Split(spec, ":")
 		var ts internalssh.TunnelSpec
 		switch len(parts) {
-		case 1: // PORT — same port on both sides, remote host = destination
+		case 1:
 			fmt.Sscan(parts[0], &ts.LocalPort)
 			ts.LocalHost = "127.0.0.1"
 			ts.RemoteHost = defaultRemoteHost
 			ts.RemotePort = ts.LocalPort
-		case 2: // localPort:remotePort — remote host = destination
+		case 2:
 			fmt.Sscan(parts[0], &ts.LocalPort)
 			ts.LocalHost = "127.0.0.1"
 			ts.RemoteHost = defaultRemoteHost
 			fmt.Sscan(parts[1], &ts.RemotePort)
-		case 3: // localPort:remoteHost:remotePort
+		case 3:
 			fmt.Sscan(parts[0], &ts.LocalPort)
 			ts.LocalHost = "127.0.0.1"
 			ts.RemoteHost = parts[1]
 			fmt.Sscan(parts[2], &ts.RemotePort)
-		case 4: // localHost:localPort:remoteHost:remotePort
+		case 4:
 			ts.LocalHost = parts[0]
 			fmt.Sscan(parts[1], &ts.LocalPort)
 			ts.RemoteHost = parts[2]

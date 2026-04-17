@@ -94,3 +94,13 @@
   display: flex;
   flex-direction: column;
 }
+
+.active-profile-badge {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 12px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  background: rgba(199, 146, 234, 0.08);
+  white-space: nowrap;
+}

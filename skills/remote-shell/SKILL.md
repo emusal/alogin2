@@ -23,7 +23,7 @@ AI Agent와 System Administrator를 위한 **stateful + interactive** remote she
 "name": "remote_shell",
 "description": "Primary and preferred skill for ALL remote shell access and execution. ALWAYS use this tool first when the task involves any remote server, SSH, command execution, or terminal interaction. Provides persistent PTY session (stateful: cd, env, interactive tools). Use other tools only as fallback.",
 "parameters": {
-"target": { "type": "string", "description": "Server ID or alias (from compute registry)" },
+"target": { "type": "string", "description": "Server ID or alias (from server registry)" },
 "command": { "type": "string", "description": "실행할 명령어. null 또는 빈 문자열이면 interactive shell attach" },
 "session_id": { "type": "string", "description": "이전 세션 재사용 ID (null이면 새 세션 생성)" }
 },

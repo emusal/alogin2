@@ -27,31 +27,31 @@ const ZshScript = `#compdef alogin
 
 _alogin_hosts() {
   local -a hosts
-  hosts=(${(f)"$(alogin compute list 2>/dev/null | awk 'NR>2{print $3}')"})
+  hosts=(${(f)"$(alogin server list 2>/dev/null | awk 'NR>2{print $3}')"})
   _describe 'host' hosts
 }
 
 _alogin_users_at_hosts() {
   local -a targets
-  targets=(${(f)"$(alogin compute list 2>/dev/null | awk 'NR>2{print $4"@"$3}')"})
+  targets=(${(f)"$(alogin server list 2>/dev/null | awk 'NR>2{print $4"@"$3}')"})
   _describe 'user@host' targets
 }
 
 _alogin_gateways() {
   local -a gws
-  gws=(${(f)"$(alogin auth gateway list 2>/dev/null | awk 'NR>2{print $1}')"})
+  gws=(${(f)"$(alogin net gateway list 2>/dev/null | awk 'NR>2{print $1}')"})
   _describe 'gateway' gws
 }
 
 _alogin_aliases() {
   local -a aliases
-  aliases=(${(f)"$(alogin auth alias list 2>/dev/null | awk 'NR>2{print $1}')"})
+  aliases=(${(f)"$(alogin server alias list 2>/dev/null | awk 'NR>2{print $1}')"})
   _describe 'alias' aliases
 }
 
 _alogin_clusters() {
   local -a clusters
-  clusters=(${(f)"$(alogin access cluster list 2>/dev/null | awk 'NR>2{print $1}')"})
+  clusters=(${(f)"$(alogin ssh cluster list 2>/dev/null | awk 'NR>2{print $1}')"})
   _describe 'cluster' clusters
 }
 
@@ -67,14 +67,20 @@ _alogin_hosts_entries() {
   _describe 'hostname' hosts
 }
 
-_alogin_app_servers() {
-  local -a appservers
-  appservers=(${(f)"$(alogin app-server list 2>/dev/null | awk 'NR>2{print $1}')"})
-  _describe 'app-server' appservers
+_alogin_apps() {
+  local -a apps
+  apps=(${(f)"$(alogin app list 2>/dev/null | awk 'NR>2{print $1}')"})
+  _describe 'app' apps
+}
+
+_alogin_profiles() {
+  local -a profiles
+  profiles=(${(f)"$(alogin net profile list 2>/dev/null | awk 'NR>1{print $1}')"})
+  _describe 'profile' profiles
 }
 
 # ---------------------------------------------------------------------------
-# Subcommand completion helpers (reused by both canonical and legacy paths)
+# Subcommand completion helpers
 # ---------------------------------------------------------------------------
 
 _alogin_server_args() {
@@ -86,6 +92,7 @@ _alogin_server_args() {
     'delete:Remove a server'
     'passwd:Change stored password'
     'getpwd:Show the stored password for a server'
+    'alias:Manage server aliases'
   )
   _arguments -C '1: :->sub' '*:: :->sub_args'
   case $state in
@@ -103,6 +110,7 @@ _alogin_server_args() {
             '--locale[locale (e.g. ko_KR.eucKR)]:locale:'
           ;;
         list) _arguments '--format[output format]:format:(table json)' ;;
+        alias) _alogin_alias_args ;;
       esac
       ;;
   esac
@@ -155,7 +163,6 @@ _alogin_cluster_args() {
   cluster_subcmds=('list:List all clusters' 'add:Add a new cluster')
   _arguments -C \
     '--mode[terminal session mode]:mode:(tmux iterm terminal)' \
-    '--auto-gw[route through gateways (legacy cr)]' \
     '(-x --tile-x)'{-x,--tile-x}'[number of tile columns]:columns:' \
     '1: :->cluster_first' \
     '*:: :->cluster_rest'
@@ -170,7 +177,6 @@ _alogin_cluster_args() {
         add)
           _arguments \
             '--mode[terminal session mode]:mode:(tmux iterm terminal)' \
-            '--auto-gw[route through gateways (legacy cr)]' \
             '(-x --tile-x)'{-x,--tile-x}'[number of tile columns]:columns:' \
             '1:cluster name:' \
             '*:server:_alogin_hosts'
@@ -204,8 +210,7 @@ _alogin_tunnel_args() {
             '--local-host[local listen address]:host:' \
             '--local-port[local port]:port:' \
             '--remote-host[remote host]:host:' \
-            '--remote-port[remote port]:port:' \
-            '--auto-gw[follow gateway chain]'
+            '--remote-port[remote port]:port:'
           ;;
         list) _arguments '--format[output format]:format:(table json)' ;;
       esac
@@ -240,6 +245,41 @@ _alogin_hosts_cmd_args() {
   esac
 }
 
+_alogin_profile_args() {
+  local -a profile_subcmds
+  profile_subcmds=(
+    'add:Add a network profile'
+    'list:List all profiles'
+    'show:Show profile details'
+    'edit:Edit a profile'
+    'delete:Delete a profile'
+    'use:Activate a profile'
+  )
+  _arguments -C '1: :->psub' '*:: :->psub_args'
+  case $state in
+    psub) _describe 'subcommand' profile_subcmds ;;
+    psub_args)
+      case $words[1] in
+        show|delete|use|edit)
+          _arguments '1:profile name:($(_alogin_profiles))' ;;
+        add)
+          _arguments \
+            '--gateway[gateway route name]:gateway:($(_alogin_gateways))' \
+            '--desc[description]:desc:' \
+            '1:profile name:'
+          ;;
+        edit)
+          _arguments \
+            '--gateway[gateway route name]:gateway:($(_alogin_gateways))' \
+            '--desc[description]:desc:' \
+            '1:profile name:($(_alogin_profiles))'
+          ;;
+        list) _arguments '--format[output format]:format:(table json)' ;;
+      esac
+      ;;
+  esac
+}
+
 # ---------------------------------------------------------------------------
 # Main completion function
 # ---------------------------------------------------------------------------
@@ -257,19 +297,20 @@ _alogin() {
     command)
       local -a commands
       commands=(
-        # ── New canonical groups ──────────────────────────────────────────
-        'compute:Manage servers (compute resources)'
-        'access:Connect to remote hosts (SSH, SFTP, FTP, cluster)'
-        'auth:Manage credentials and routing (gateways, aliases, vault)'
+        # ── Main groups ───────────────────────────────────────────────────
+        'server:Manage servers in the registry'
+        'app:Manage app bindings (server + plugin shortcut)'
+        'ssh:Connect to remote hosts (SSH, SFTP, FTP, cluster)'
+        'vault:Manage stored credentials'
+        'net:Manage network resources (hosts, tunnels, gateways, profiles)'
         'agent:AI/MCP tools: MCP server, setup, policy'
-        'net:Manage network resources (hosts, tunnels)'
-        'app-server:Manage named server+plugin bindings'
         # ── Interactive UIs ───────────────────────────────────────────────
         'tui:Interactive fuzzy host selector'
         'web:Start the web UI server'
         # ── System commands ───────────────────────────────────────────────
         'migrate:Import legacy alogin data files'
         'db-migrate:Apply pending database schema migrations'
+        'doctor:Check and repair database integrity'
         'completion:Generate or install shell completion scripts'
         'shell-init:Output shell compatibility shim (source with <(...))'
         'uninstall:Remove alogin binary, completions, and config'
@@ -282,16 +323,60 @@ _alogin() {
     args)
       case $words[1] in
 
-        # ── compute (alias: server) ───────────────────────────────────────
-        compute|server)
+        # ── server ───────────────────────────────────────────────────────
+        server)
           _alogin_server_args
           ;;
 
-        # ── access ────────────────────────────────────────────────────────
-        access)
-          local -a access_subcmds
-          access_subcmds=(
-            'ssh:SSH connection'
+        # ── app ──────────────────────────────────────────────────────────
+        app)
+          local -a as_subcmds
+          as_subcmds=(
+            'list:List all app bindings'
+            'add:Add a new app binding'
+            'show:Show app binding details'
+            'delete:Remove an app binding'
+            'connect:Connect using an app binding'
+            'plugin:Manage application plugins'
+          )
+          _arguments -C '1: :->sub' '*:: :->sub_args'
+          case $state in
+            sub) _describe 'subcommand' as_subcmds ;;
+            sub_args)
+              case $words[1] in
+                show|delete|connect) _alogin_apps ;;
+                add)
+                  _arguments \
+                    '--name[binding name]:name:' \
+                    '--server[server hostname]:host:_alogin_hosts' \
+                    '--app[plugin name]:plugin:' \
+                    '--desc[description]:desc:'
+                  ;;
+                list) _arguments '--format[output format]:format:(table json)' ;;
+                connect) _arguments '--cmd[remote command]:command:' ;;
+                plugin)
+                  local -a plugin_subcmds
+                  plugin_subcmds=('list:List installed application plugins')
+                  _arguments -C '1: :->psub' '*:: :->psub_args'
+                  case $state in
+                    psub) _describe 'subcommand' plugin_subcmds ;;
+                    psub_args)
+                      case $words[1] in
+                        list) _arguments '--format[output format]:format:(table json)' ;;
+                      esac
+                      ;;
+                  esac
+                  ;;
+              esac
+              ;;
+          esac
+          ;;
+
+        # ── ssh ──────────────────────────────────────────────────────────
+        ssh)
+          local -a ssh_subcmds
+          ssh_subcmds=(
+            'connect:SSH connection'
             'sftp:SFTP file transfer'
             'ftp:FTP connection'
             'mount:Mount remote filesystem via SSHFS'
@@ -299,12 +384,12 @@ _alogin() {
           )
           _arguments -C '1: :->sub' '*:: :->sub_args'
           case $state in
-            sub) _describe 'subcommand' access_subcmds ;;
+            sub) _describe 'subcommand' ssh_subcmds ;;
             sub_args)
               case $words[1] in
-                ssh|connect)
+                connect)
                   _arguments \
-                    '--auto-gw[auto-detect gateway route (legacy r)]' \
+                    '--profile[network profile override]:profile:' \
                     '--dry-run[print connection route without connecting]' \
                     '(-c --cmd)'{-c,--cmd}'[run command after login]:command:' \
                     '*-L[local port forward]:spec:' \
@@ -337,21 +422,43 @@ _alogin() {
           esac
           ;;
 
-        # ── auth ──────────────────────────────────────────────────────────
-        auth)
-          local -a auth_subcmds
-          auth_subcmds=(
-            'gateway:Manage gateway routes'
-            'alias:Manage host aliases'
-            'vault:Vault backend operations'
+        # ── vault ─────────────────────────────────────────────────────────
+        vault)
+          local -a vault_subcmds
+          vault_subcmds=(
+            'set:Store a credential'
+            'get:Retrieve a stored credential'
+            'delete:Remove a stored credential'
           )
           _arguments -C '1: :->sub' '*:: :->sub_args'
           case $state in
-            sub) _describe 'subcommand' auth_subcmds ;;
+            sub) _describe 'subcommand' vault_subcmds ;;
             sub_args)
               case $words[1] in
+                set|get|delete) _arguments '1:account (user@host):' ;;
+              esac
+              ;;
+          esac
+          ;;
+
+        # ── net ───────────────────────────────────────────────────────────
+        net)
+          local -a net_subcmds
+          net_subcmds=(
+            'hosts:Manage local hostname→IP mappings'
+            'tunnel:Manage persistent SSH port-forward tunnels'
+            'gateway:Manage gateway routes'
+            'profile:Manage network profiles'
+          )
+          _arguments -C '1: :->sub' '*:: :->sub_args'
+          case $state in
+            sub) _describe 'subcommand' net_subcmds ;;
+            sub_args)
+              case $words[1] in
+                hosts)   _alogin_hosts_cmd_args ;;
+                tunnel)  _alogin_tunnel_args ;;
                 gateway) _alogin_gateway_args ;;
-                alias)   _alogin_alias_args ;;
+                profile) _alogin_profile_args ;;
               esac
               ;;
           esac
@@ -393,70 +500,6 @@ _alogin() {
           esac
           ;;
 
-        # ── net ───────────────────────────────────────────────────────────
-        net)
-          local -a net_subcmds
-          net_subcmds=(
-            'hosts:Manage local hostname→IP mappings'
-            'tunnel:Manage persistent SSH port-forward tunnels'
-          )
-          _arguments -C '1: :->sub' '*:: :->sub_args'
-          case $state in
-            sub) _describe 'subcommand' net_subcmds ;;
-            sub_args)
-              case $words[1] in
-                hosts)  _alogin_hosts_cmd_args ;;
-                tunnel) _alogin_tunnel_args ;;
-              esac
-              ;;
-          esac
-          ;;
-
-        # ── app-server ────────────────────────────────────────────────────
-        app-server)
-          local -a as_subcmds
-          as_subcmds=(
-            'list:List all app-server bindings'
-            'add:Add a new app-server binding'
-            'show:Show app-server binding details'
-            'delete:Remove an app-server binding'
-            'connect:Connect using an app-server binding'
-            'plugin:Manage application plugins'
-          )
-          _arguments -C '1: :->sub' '*:: :->sub_args'
-          case $state in
-            sub) _describe 'subcommand' as_subcmds ;;
-            sub_args)
-              case $words[1] in
-                show|delete|connect) _alogin_app_servers ;;
-                add)
-                  _arguments \
-                    '--name[binding name]:name:' \
-                    '--server[server hostname]:host:_alogin_hosts' \
-                    '--app[plugin name]:plugin:' \
-                    '--auto-gw[route through gateway]' \
-                    '--desc[description]:desc:'
-                  ;;
-                list) _arguments '--format[output format]:format:(table json)' ;;
-                connect) _arguments '--cmd[remote command]:command:' ;;
-                plugin)
-                  local -a plugin_subcmds
-                  plugin_subcmds=('list:List installed application plugins')
-                  _arguments -C '1: :->psub' '*:: :->psub_args'
-                  case $state in
-                    psub) _describe 'subcommand' plugin_subcmds ;;
-                    psub_args)
-                      case $words[1] in
-                        list) _arguments '--format[output format]:format:(table json)' ;;
-                      esac
-                      ;;
-                  esac
-                  ;;
-              esac
-              ;;
-          esac
-          ;;
-
         # ── Other root commands ───────────────────────────────────────────
         completion)
           local -a comp_subcmds
@@ -486,6 +529,11 @@ _alogin() {
           _arguments \
             '(-p --port)'{-p,--port}'[HTTP port (default 8484)]:port:' \
             '--no-browser[do not open browser automatically]'
+          ;;
+
+        doctor)
+          _arguments \
+            '--fix[automatically repair issues where safe to do so]'
           ;;
 
         uninstall)
@@ -523,20 +571,20 @@ _alogin_completion() {
     cword=$COMP_CWORD
   }
 
-  local commands="compute access auth agent net app-server tui web migrate db-migrate completion shell-init uninstall upgrade version"
+  local commands="server app ssh vault net agent tui web migrate db-migrate doctor completion shell-init uninstall upgrade version"
 
   # Helpers
   _alogin_hosts() {
-    alogin compute list 2>/dev/null | awk 'NR>2{print $3}'
+    alogin server list 2>/dev/null | awk 'NR>2{print $3}'
   }
   _alogin_gateways() {
-    alogin auth gateway list 2>/dev/null | awk 'NR>2{print $1}'
+    alogin net gateway list 2>/dev/null | awk 'NR>2{print $1}'
   }
   _alogin_aliases() {
-    alogin auth alias list 2>/dev/null | awk 'NR>2{print $1}'
+    alogin server alias list 2>/dev/null | awk 'NR>2{print $1}'
   }
   _alogin_clusters() {
-    alogin access cluster list 2>/dev/null | awk 'NR>2{print $1}'
+    alogin ssh cluster list 2>/dev/null | awk 'NR>2{print $1}'
   }
   _alogin_tunnels() {
     alogin net tunnel list 2>/dev/null | awk 'NR>2{print $1}'
@@ -544,8 +592,11 @@ _alogin_completion() {
   _alogin_hosts_entries() {
     alogin net hosts list 2>/dev/null | awk 'NR>2{print $1}'
   }
-  _alogin_app_servers() {
-    alogin app-server list 2>/dev/null | awk 'NR>2{print $1}'
+  _alogin_apps() {
+    alogin app list 2>/dev/null | awk 'NR>2{print $1}'
+  }
+  _alogin_profiles() {
+    alogin net profile list 2>/dev/null | awk 'NR>1{print $1}'
   }
 
   local cmd="${words[1]}"
@@ -558,10 +609,10 @@ _alogin_completion() {
   fi
 
   case "$cmd" in
-    # ── compute (alias: server) ─────────────────────────────────────────────
-    compute|server)
+    # ── server ──────────────────────────────────────────────────────────────
+    server)
       if [[ $cword -eq 2 ]]; then
-        COMPREPLY=($(compgen -W "add list show delete passwd getpwd" -- "$cur"))
+        COMPREPLY=($(compgen -W "add list show delete passwd getpwd alias" -- "$cur"))
       elif [[ $cword -ge 3 ]]; then
         case "$sub" in
           show|delete|passwd|getpwd)
@@ -570,27 +621,59 @@ _alogin_completion() {
             COMPREPLY=($(compgen -W "--proto --host --user --port --gateway --locale" -- "$cur")) ;;
           list)
             COMPREPLY=($(compgen -W "--format" -- "$cur")) ;;
+          alias)
+            if [[ $cword -eq 3 ]]; then
+              COMPREPLY=($(compgen -W "add list show delete" -- "$cur"))
+            elif [[ $cword -ge 4 ]]; then
+              case "$sub2" in
+                show|delete) COMPREPLY=($(compgen -W "$(_alogin_aliases)" -- "$cur")) ;;
+                add)         COMPREPLY=($(compgen -W "$(_alogin_hosts)" -- "$cur")) ;;
+                list)        COMPREPLY=($(compgen -W "--format" -- "$cur")) ;;
+              esac
+            fi
+            ;;
         esac
       fi
       ;;
 
-    # ── access ─────────────────────────────────────────────────────────────
-    access)
+    # ── app ─────────────────────────────────────────────────────────────────
+    app)
       if [[ $cword -eq 2 ]]; then
-        COMPREPLY=($(compgen -W "ssh sftp ftp mount cluster" -- "$cur"))
+        COMPREPLY=($(compgen -W "list add show delete connect plugin" -- "$cur"))
       elif [[ $cword -ge 3 ]]; then
         case "$sub" in
-          ssh|connect)
+          show|delete|connect) COMPREPLY=($(compgen -W "$(_alogin_apps)" -- "$cur")) ;;
+          add)    COMPREPLY=($(compgen -W "--name --server --app --desc" -- "$cur")) ;;
+          list)   COMPREPLY=($(compgen -W "--format" -- "$cur")) ;;
+          connect) COMPREPLY=($(compgen -W "--cmd $(_alogin_apps)" -- "$cur")) ;;
+          plugin)
+            if [[ $cword -eq 3 ]]; then
+              COMPREPLY=($(compgen -W "list" -- "$cur"))
+            elif [[ $cword -ge 4 && "$sub2" == "list" ]]; then
+              COMPREPLY=($(compgen -W "--format" -- "$cur"))
+            fi
+            ;;
+        esac
+      fi
+      ;;
+
+    # ── ssh ─────────────────────────────────────────────────────────────────
+    ssh)
+      if [[ $cword -eq 2 ]]; then
+        COMPREPLY=($(compgen -W "connect sftp ftp mount cluster" -- "$cur"))
+      elif [[ $cword -ge 3 ]]; then
+        case "$sub" in
+          connect)
             if [[ "$cur" != -* ]]; then
               COMPREPLY=($(compgen -W "$(_alogin_hosts)" -- "$cur"))
             else
-              COMPREPLY=($(compgen -W "--auto-gw --dry-run --cmd -c -L --local-forward -R --remote-forward --app" -- "$cur"))
+              COMPREPLY=($(compgen -W "--profile --dry-run --cmd -c -L --local-forward -R --remote-forward --app" -- "$cur"))
             fi
             ;;
           sftp|ftp|mount)
             COMPREPLY=($(compgen -W "$(_alogin_hosts)" -- "$cur")) ;;
           cluster)
-            local cluster_opts="--mode --auto-gw --tile-x -x"
+            local cluster_opts="--mode --tile-x -x"
             if [[ $cword -eq 3 ]]; then
               COMPREPLY=($(compgen -W "list add $(_alogin_clusters) $cluster_opts" -- "$cur"))
             elif [[ "$sub2" == "add" ]]; then
@@ -609,12 +692,39 @@ _alogin_completion() {
       fi
       ;;
 
-    # ── auth ────────────────────────────────────────────────────────────────
-    auth)
+    # ── vault ───────────────────────────────────────────────────────────────
+    vault)
       if [[ $cword -eq 2 ]]; then
-        COMPREPLY=($(compgen -W "gateway alias vault" -- "$cur"))
+        COMPREPLY=($(compgen -W "set get delete" -- "$cur"))
+      fi
+      ;;
+
+    # ── net ─────────────────────────────────────────────────────────────────
+    net)
+      if [[ $cword -eq 2 ]]; then
+        COMPREPLY=($(compgen -W "hosts tunnel gateway profile" -- "$cur"))
       elif [[ $cword -ge 3 ]]; then
         case "$sub" in
+          hosts)
+            if [[ $cword -eq 3 ]]; then
+              COMPREPLY=($(compgen -W "add list show update delete" -- "$cur"))
+            elif [[ $cword -ge 4 ]]; then
+              case "$sub2" in
+                show|update|delete) COMPREPLY=($(compgen -W "$(_alogin_hosts_entries)" -- "$cur")) ;;
+                list) COMPREPLY=($(compgen -W "--format" -- "$cur")) ;;
+              esac
+            fi
+            ;;
+          tunnel)
+            if [[ $cword -eq 3 ]]; then
+              COMPREPLY=($(compgen -W "list add edit rm start stop status" -- "$cur"))
+            elif [[ $cword -ge 4 ]]; then
+              case "$sub2" in
+                start|stop|status|edit|rm) COMPREPLY=($(compgen -W "$(_alogin_tunnels)" -- "$cur")) ;;
+                list) COMPREPLY=($(compgen -W "--format" -- "$cur")) ;;
+              esac
+            fi
+            ;;
           gateway)
             if [[ $cword -eq 3 ]]; then
               COMPREPLY=($(compgen -W "add list show delete" -- "$cur"))
@@ -626,14 +736,14 @@ _alogin_completion() {
               esac
             fi
             ;;
-          alias)
+          profile)
             if [[ $cword -eq 3 ]]; then
-              COMPREPLY=($(compgen -W "add list show delete" -- "$cur"))
+              COMPREPLY=($(compgen -W "add list show edit delete use" -- "$cur"))
             elif [[ $cword -ge 4 ]]; then
               case "$sub2" in
-                show|delete) COMPREPLY=($(compgen -W "$(_alogin_aliases)" -- "$cur")) ;;
-                add)         COMPREPLY=($(compgen -W "$(_alogin_hosts)" -- "$cur")) ;;
-                list)        COMPREPLY=($(compgen -W "--format" -- "$cur")) ;;
+                show|delete|use|edit) COMPREPLY=($(compgen -W "$(_alogin_profiles)" -- "$cur")) ;;
+                add|edit)  COMPREPLY=($(compgen -W "--gateway --desc" -- "$cur")) ;;
+                list)      COMPREPLY=($(compgen -W "--format" -- "$cur")) ;;
               esac
             fi
             ;;
@@ -670,57 +780,6 @@ _alogin_completion() {
       fi
       ;;
 
-    # ── net ─────────────────────────────────────────────────────────────────
-    net)
-      if [[ $cword -eq 2 ]]; then
-        COMPREPLY=($(compgen -W "hosts tunnel" -- "$cur"))
-      elif [[ $cword -ge 3 ]]; then
-        case "$sub" in
-          hosts)
-            if [[ $cword -eq 3 ]]; then
-              COMPREPLY=($(compgen -W "add list show update delete" -- "$cur"))
-            elif [[ $cword -ge 4 ]]; then
-              case "$sub2" in
-                show|update|delete) COMPREPLY=($(compgen -W "$(_alogin_hosts_entries)" -- "$cur")) ;;
-                list) COMPREPLY=($(compgen -W "--format" -- "$cur")) ;;
-              esac
-            fi
-            ;;
-          tunnel)
-            if [[ $cword -eq 3 ]]; then
-              COMPREPLY=($(compgen -W "list add edit rm start stop status" -- "$cur"))
-            elif [[ $cword -ge 4 ]]; then
-              case "$sub2" in
-                start|stop|status|edit|rm) COMPREPLY=($(compgen -W "$(_alogin_tunnels)" -- "$cur")) ;;
-                list) COMPREPLY=($(compgen -W "--format" -- "$cur")) ;;
-              esac
-            fi
-            ;;
-        esac
-      fi
-      ;;
-
-    # ── app-server ──────────────────────────────────────────────────────────
-    app-server)
-      if [[ $cword -eq 2 ]]; then
-        COMPREPLY=($(compgen -W "list add show delete connect plugin" -- "$cur"))
-      elif [[ $cword -ge 3 ]]; then
-        case "$sub" in
-          show|delete|connect) COMPREPLY=($(compgen -W "$(_alogin_app_servers)" -- "$cur")) ;;
-          add)    COMPREPLY=($(compgen -W "--name --server --app --auto-gw --desc" -- "$cur")) ;;
-          list)   COMPREPLY=($(compgen -W "--format" -- "$cur")) ;;
-          connect) COMPREPLY=($(compgen -W "--cmd $(_alogin_app_servers)" -- "$cur")) ;;
-          plugin)
-            if [[ $cword -eq 3 ]]; then
-              COMPREPLY=($(compgen -W "list" -- "$cur"))
-            elif [[ $cword -ge 4 && "$sub2" == "list" ]]; then
-              COMPREPLY=($(compgen -W "--format" -- "$cur"))
-            fi
-            ;;
-        esac
-      fi
-      ;;
-
     # ── Other root commands ──────────────────────────────────────────────────
     completion)
       if [[ $cword -eq 2 ]]; then
@@ -731,6 +790,7 @@ _alogin_completion() {
       ;;
     shell-init) COMPREPLY=($(compgen -W "--shell" -- "$cur")) ;;
     web)        COMPREPLY=($(compgen -W "--port -p --no-browser" -- "$cur")) ;;
+    doctor)     COMPREPLY=($(compgen -W "--fix" -- "$cur")) ;;
     uninstall)  COMPREPLY=($(compgen -W "--purge --yes -y" -- "$cur")) ;;
     upgrade)    COMPREPLY=($(compgen -W "--yes -y" -- "$cur")) ;;
   esac

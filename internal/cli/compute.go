@@ -2,19 +2,19 @@ package cli
 
 import "github.com/spf13/cobra"
 
-// newComputeCmd returns the "compute" group command.
+// newServerGroupCmd returns the "server" group command.
 // This is the canonical location for server registry management.
-func newComputeCmd() *cobra.Command {
+func newServerGroupCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "compute",
-		Short: "Manage servers (compute resources)",
+		Use:   "server",
+		Short: "Manage servers in the registry",
 		Long: `Manage the server registry: list, add, show, delete, and manage credentials.
 
 Examples:
-  alogin compute list
-  alogin compute add --host web-01 --user admin
-  alogin compute show admin@web-01
-  alogin compute delete admin@web-01`,
+  alogin server list
+  alogin server add --host web-01 --user admin
+  alogin server show admin@web-01
+  alogin server delete admin@web-01`,
 	}
 	cmd.AddCommand(
 		newServerAddCmd(),
@@ -23,6 +23,7 @@ Examples:
 		newServerDeleteCmd(),
 		newServerPasswdCmd(),
 		newServerGetPwdCmd(),
+		newAliasCmd(),
 	)
 	return cmd
 }

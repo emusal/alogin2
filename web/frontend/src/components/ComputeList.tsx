@@ -4,7 +4,7 @@ import { ComputeFormModal } from './ComputeFormModal'
 import './ComputeList.css'
 
 interface Props {
-  onConnect: (server: Server, autoGW?: boolean) => void
+  onConnect: (server: Server) => void
 }
 
 export function ComputeList({ onConnect }: Props) {
@@ -43,15 +43,9 @@ export function ComputeList({ onConnect }: Props) {
   )
 
   const gwLabel = (server: Server) => {
-    if (server.gateway_id) {
-      const gw = gateways.find(g => g.id === server.gateway_id)
-      return gw ? `[gw] ${gw.name}` : null
-    }
-    if (server.gateway_server_id) {
-      const s = servers.find(x => x.id === server.gateway_server_id)
-      return s ? `[srv] ${s.user}@${s.host}` : null
-    }
-    return null
+    if (!server.gateway_route_id) return null
+    const gw = gateways.find(g => g.id === server.gateway_route_id)
+    return gw ? gw.name : `#${server.gateway_route_id}`
   }
 
   const handleDelete = async (server: Server) => {
@@ -118,9 +112,6 @@ export function ComputeList({ onConnect }: Props) {
                 <td><span className="dim">{server.locale || '—'}</span></td>
                 <td className="actions-cell">
                   <button className="connect-btn" onClick={() => onConnect(server)}>Connect</button>
-                  {(server.gateway_id || server.gateway_server_id) && (
-                    <button className="connect-btn gw" onClick={() => onConnect(server, true)} title="Connect via gateway">GW</button>
-                  )}
                   <button className="action-btn" onClick={() => { setEditingServer(server); setModalMode('edit') }}>Edit</button>
                   <button className="action-btn danger" onClick={() => handleDelete(server)}>Delete</button>
                 </td>

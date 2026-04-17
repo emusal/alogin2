@@ -90,7 +90,7 @@ Base path: `/api`
 | `GET` | `/api/app-servers/{id}` | Get binding by ID |
 | `PUT` | `/api/app-servers/{id}` | Update binding |
 | `DELETE` | `/api/app-servers/{id}` | Delete binding |
-| `POST` | `/api/app-servers/{id}/connect` | Return `{server_id, auto_gw, app}` for WebSocket terminal |
+| `POST` | `/api/app-servers/{id}/connect` | Return `{server_id, app}` for WebSocket terminal |
 
 ---
 
@@ -100,7 +100,7 @@ Base path: `/api`
 |------|-------------|
 | `GET /ws/terminal/{serverID}` | PTY terminal — bridges `ws_pty.go` ↔ SSH PTY session |
 
-Query parameters: `?auto_gw=true` (route via gateway), `?app=<plugin>` (launch plugin after SSH, with PTY automation)
+Query parameters: `?app=<plugin>` (launch plugin after SSH, with PTY automation). Gateway routing follows the active profile automatically.
 
 Protocol: xterm.js ↔ WebSocket ↔ `ws_pty.go` ↔ `internal/ssh/session.go`
 

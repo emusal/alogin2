@@ -9,7 +9,7 @@ export interface PageInfo {
   lines: string[]
 }
 
-type PageKey = 'compute' | 'gateways' | 'clusters' | 'hosts' | 'tunnels' | 'plugins' | 'app-servers' | 'terminal'
+type PageKey = 'compute' | 'gateways' | 'profiles' | 'clusters' | 'hosts' | 'tunnels' | 'plugins' | 'app-servers' | 'terminal'
 
 const translations: Record<PageKey, { ko: PageInfo; en: PageInfo }> = {
   compute: {
@@ -45,6 +45,24 @@ const translations: Record<PageKey, { ko: PageInfo; en: PageInfo }> = {
         'Manage multi-hop SSH routes via bastion hosts.',
         'Assigning a gateway to a server enables the GW button in the server list for automatic routing.',
         'Supports ordered ProxyJump chains across multiple gateway servers.',
+      ],
+    },
+  },
+  profiles: {
+    ko: {
+      title: '프로파일',
+      lines: [
+        '네트워크 컨텍스트(집, 회사, VPN 등)를 프로파일로 관리합니다.',
+        '프로파일을 활성화하면 이후 모든 SSH 접속이 해당 게이트웨이를 자동 경유합니다.',
+        '비활성화(none)하면 모든 서버에 직접 접속합니다.',
+      ],
+    },
+    en: {
+      title: 'Profiles',
+      lines: [
+        'Manage network contexts (home, office, VPN, etc.) as named profiles.',
+        'Activating a profile routes all subsequent SSH connections through that profile\'s gateway.',
+        'Set to none to connect directly without any gateway routing.',
       ],
     },
   },

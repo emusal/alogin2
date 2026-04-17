@@ -22,14 +22,10 @@ type TunnelRepo interface {
 type tunnelRepo struct{ db *sql.DB }
 
 func (r *tunnelRepo) Create(ctx context.Context, t *model.Tunnel) error {
-	autoGW := 0
-	if t.AutoGW {
-		autoGW = 1
-	}
 	res, err := r.db.ExecContext(ctx,
-		`INSERT INTO tunnels (name, server_id, direction, local_host, local_port, remote_host, remote_port, auto_gw)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		t.Name, t.ServerID, string(t.Direction), t.LocalHost, t.LocalPort, t.RemoteHost, t.RemotePort, autoGW,
+		`INSERT INTO tunnels (name, server_id, direction, local_host, local_port, remote_host, remote_port)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		t.Name, t.ServerID, string(t.Direction), t.LocalHost, t.LocalPort, t.RemoteHost, t.RemotePort,
 	)
 	if err != nil {
 		return fmt.Errorf("create tunnel: %w", err)
@@ -73,14 +69,10 @@ func (r *tunnelRepo) ListAll(ctx context.Context) ([]*model.Tunnel, error) {
 }
 
 func (r *tunnelRepo) Update(ctx context.Context, t *model.Tunnel) error {
-	autoGW := 0
-	if t.AutoGW {
-		autoGW = 1
-	}
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE tunnels SET name=?, server_id=?, direction=?, local_host=?, local_port=?, remote_host=?, remote_port=?, auto_gw=?, updated_at=?
+		`UPDATE tunnels SET name=?, server_id=?, direction=?, local_host=?, local_port=?, remote_host=?, remote_port=?, updated_at=?
 		 WHERE id=?`,
-		t.Name, t.ServerID, string(t.Direction), t.LocalHost, t.LocalPort, t.RemoteHost, t.RemotePort, autoGW,
+		t.Name, t.ServerID, string(t.Direction), t.LocalHost, t.LocalPort, t.RemoteHost, t.RemotePort,
 		time.Now().UTC().Format(time.RFC3339), t.ID,
 	)
 	return err
@@ -96,7 +88,7 @@ func (r *tunnelRepo) Delete(ctx context.Context, id int64) error {
 func scanTunnel(row *sql.Row) (*model.Tunnel, error) {
 	t := &model.Tunnel{}
 	var dir string
-	var autoGW int
+	var autoGW int // legacy column kept in DB; scanned into dummy variable
 	var createdAt, updatedAt string
 	err := row.Scan(&t.ID, &t.Name, &t.ServerID, &dir, &t.LocalHost, &t.LocalPort, &t.RemoteHost, &t.RemotePort, &autoGW, &createdAt, &updatedAt)
 	if err == sql.ErrNoRows {
@@ -106,7 +98,6 @@ func scanTunnel(row *sql.Row) (*model.Tunnel, error) {
 		return nil, fmt.Errorf("scan tunnel: %w", err)
 	}
 	t.Direction = model.TunnelDirection(dir)
-	t.AutoGW = autoGW != 0
 	t.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 	t.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
 	return t, nil
@@ -115,13 +106,12 @@ func scanTunnel(row *sql.Row) (*model.Tunnel, error) {
 func scanTunnelRow(rows *sql.Rows) (*model.Tunnel, error) {
 	t := &model.Tunnel{}
 	var dir string
-	var autoGW int
+	var autoGW int // legacy column kept in DB; scanned into dummy variable
 	var createdAt, updatedAt string
 	if err := rows.Scan(&t.ID, &t.Name, &t.ServerID, &dir, &t.LocalHost, &t.LocalPort, &t.RemoteHost, &t.RemotePort, &autoGW, &createdAt, &updatedAt); err != nil {
 		return nil, err
 	}
 	t.Direction = model.TunnelDirection(dir)
-	t.AutoGW = autoGW != 0
 	t.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 	t.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
 	return t, nil

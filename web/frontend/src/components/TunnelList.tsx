@@ -148,7 +148,6 @@ export function TunnelList({ servers }: Props) {
                 <td>
                   <span className="dim">
                     {t.local_host}:{t.local_port} → {t.remote_host}:{t.remote_port}
-                    {t.auto_gw ? ' [GW]' : ''}
                   </span>
                 </td>
                 <td><span className="dim">{serverLabel(t.server_id)}</span></td>

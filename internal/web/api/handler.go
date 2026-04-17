@@ -88,6 +88,15 @@ func (h *Handler) Router() http.Handler {
 	r.Post("/tunnels/{id}/stop", h.stopTunnel)
 	r.Get("/tunnels/{id}/status", h.tunnelStatus)
 
+	// Profiles
+	r.Get("/profiles", h.listProfiles)
+	r.Post("/profiles", h.createProfile)
+	r.Get("/profiles/{id}", h.getProfile)
+	r.Put("/profiles/{id}", h.updateProfile)
+	r.Delete("/profiles/{id}", h.deleteProfile)
+	r.Post("/profiles/{id}/activate", h.activateProfile)
+	r.Post("/profiles/deactivate", h.deactivateProfile)
+
 	// App-servers
 	r.Get("/app-servers", h.listAppServers)
 	r.Post("/app-servers", h.createAppServer)
@@ -140,7 +149,6 @@ func (h *Handler) createTunnel(w http.ResponseWriter, r *http.Request) {
 		LocalPort  int    `json:"local_port"`
 		RemoteHost string `json:"remote_host"`
 		RemotePort int    `json:"remote_port"`
-		AutoGW     bool   `json:"auto_gw"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid JSON", http.StatusBadRequest)
@@ -169,7 +177,6 @@ func (h *Handler) createTunnel(w http.ResponseWriter, r *http.Request) {
 		LocalPort:  req.LocalPort,
 		RemoteHost: req.RemoteHost,
 		RemotePort: req.RemotePort,
-		AutoGW:     req.AutoGW,
 	}
 	if err := h.db.Tunnels.Create(r.Context(), t); err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
@@ -202,7 +209,6 @@ func (h *Handler) updateTunnel(w http.ResponseWriter, r *http.Request) {
 		LocalPort  int    `json:"local_port"`
 		RemoteHost string `json:"remote_host"`
 		RemotePort int    `json:"remote_port"`
-		AutoGW     bool   `json:"auto_gw"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid JSON", http.StatusBadRequest)
@@ -229,7 +235,6 @@ func (h *Handler) updateTunnel(w http.ResponseWriter, r *http.Request) {
 	if req.RemotePort > 0 {
 		existing.RemotePort = req.RemotePort
 	}
-	existing.AutoGW = req.AutoGW
 	if err := h.db.Tunnels.Update(r.Context(), existing); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -331,31 +336,29 @@ func (h *Handler) getServer(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) createServer(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Protocol        string `json:"protocol"`
-		Host            string `json:"host"`
-		User            string `json:"user"`
-		Password        string `json:"password"`
-		Port            int    `json:"port"`
-		GatewayID       *int64 `json:"gateway_id"`
-		GatewayServerID *int64 `json:"gateway_server_id"`
-		Locale          string `json:"locale"`
-		DeviceType      string `json:"device_type"`
-		Note            string `json:"note"`
+		Protocol       string `json:"protocol"`
+		Host           string `json:"host"`
+		User           string `json:"user"`
+		Password       string `json:"password"`
+		Port           int    `json:"port"`
+		Locale         string `json:"locale"`
+		DeviceType     string `json:"device_type"`
+		Note           string `json:"note"`
+		GatewayRouteID *int64 `json:"gateway_route_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	srv := &model.Server{
-		Protocol:        model.Protocol(req.Protocol),
-		Host:            req.Host,
-		User:            req.User,
-		Port:            req.Port,
-		GatewayID:       req.GatewayID,
-		GatewayServerID: req.GatewayServerID,
-		Locale:          req.Locale,
-		DeviceType:      model.DeviceType(req.DeviceType),
-		Note:            req.Note,
+		Protocol:       model.Protocol(req.Protocol),
+		Host:           req.Host,
+		User:           req.User,
+		Port:           req.Port,
+		Locale:         req.Locale,
+		DeviceType:     model.DeviceType(req.DeviceType),
+		Note:           req.Note,
+		GatewayRouteID: req.GatewayRouteID,
 	}
 	if err := h.db.Servers.Create(r.Context(), srv, req.Password); err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
@@ -385,32 +388,46 @@ func (h *Handler) updateServer(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "not found", http.StatusNotFound)
 		return
 	}
+	// Use json.RawMessage to distinguish between field absent and explicit null.
 	var req struct {
-		Protocol        string `json:"protocol"`
-		User            string `json:"user"`
-		Password        string `json:"password"`
-		Port            int    `json:"port"`
-		GatewayID       *int64 `json:"gateway_id"`
-		GatewayServerID *int64 `json:"gateway_server_id"`
-		Locale          string `json:"locale"`
-		DeviceType      string `json:"device_type"`
-		Note            string `json:"note"`
+		Protocol       string          `json:"protocol"`
+		User           string          `json:"user"`
+		Password       string          `json:"password"`
+		Port           int             `json:"port"`
+		Locale         string          `json:"locale"`
+		DeviceType     string          `json:"device_type"`
+		Note           string          `json:"note"`
+		GatewayRouteID json.RawMessage `json:"gateway_route_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	// Resolve gateway_route_id:
+	//   field absent (nil raw) → keep existing
+	//   explicit null          → clear (nil pointer)
+	//   numeric value          → use that value
+	gwRouteID := existing.GatewayRouteID
+	if len(req.GatewayRouteID) > 0 {
+		if string(req.GatewayRouteID) == "null" {
+			gwRouteID = nil
+		} else {
+			var v int64
+			if err := json.Unmarshal(req.GatewayRouteID, &v); err == nil {
+				gwRouteID = &v
+			}
+		}
+	}
 	srv := &model.Server{
-		ID:              id,
-		Protocol:        model.Protocol(req.Protocol),
-		Host:            existing.Host,
-		User:            req.User,
-		Port:            req.Port,
-		GatewayID:       req.GatewayID,
-		GatewayServerID: req.GatewayServerID,
-		Locale:          req.Locale,
-		DeviceType:      model.DeviceType(req.DeviceType),
-		Note:            req.Note,
+		ID:             id,
+		Protocol:       model.Protocol(req.Protocol),
+		Host:           existing.Host,
+		User:           req.User,
+		Port:           req.Port,
+		Locale:         req.Locale,
+		DeviceType:     model.DeviceType(req.DeviceType),
+		Note:           req.Note,
+		GatewayRouteID: gwRouteID,
 	}
 	if err := h.db.Servers.Update(r.Context(), srv, req.Password); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -844,7 +861,6 @@ func (h *Handler) createAppServer(w http.ResponseWriter, r *http.Request) {
 		Name        string `json:"name"`
 		ServerID    int64  `json:"server_id"`
 		PluginName  string `json:"plugin_name"`
-		AutoGW      bool   `json:"auto_gw"`
 		Description string `json:"description"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -859,7 +875,6 @@ func (h *Handler) createAppServer(w http.ResponseWriter, r *http.Request) {
 		Name:        req.Name,
 		ServerID:    req.ServerID,
 		PluginName:  req.PluginName,
-		AutoGW:      req.AutoGW,
 		Description: req.Description,
 	}
 	if err := h.db.AppServers.Create(r.Context(), as); err != nil {
@@ -885,7 +900,6 @@ func (h *Handler) updateAppServer(w http.ResponseWriter, r *http.Request) {
 		Name        string `json:"name"`
 		ServerID    int64  `json:"server_id"`
 		PluginName  string `json:"plugin_name"`
-		AutoGW      *bool  `json:"auto_gw"`
 		Description string `json:"description"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -900,9 +914,6 @@ func (h *Handler) updateAppServer(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.PluginName != "" {
 		existing.PluginName = req.PluginName
-	}
-	if req.AutoGW != nil {
-		existing.AutoGW = *req.AutoGW
 	}
 	if req.Description != "" {
 		existing.Description = req.Description
@@ -940,7 +951,6 @@ func (h *Handler) connectAppServer(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonOK(w, map[string]any{
 		"server_id": as.ServerID,
-		"auto_gw":   as.AutoGW,
 		"app":       as.PluginName,
 	})
 }

@@ -12,26 +12,19 @@ interface Props {
   onClose: () => void
 }
 
-// Encode gateway selection as a single string for <select> value.
-// "" = none, "gw:ID" = GatewayRoute, "srv:ID" = direct server-as-gateway
-const encodeGwValue = (gwId: number | null, srvGwId: number | null): string => {
-  if (gwId != null) return `gw:${gwId}`
-  if (srvGwId != null) return `srv:${srvGwId}`
-  return ''
-}
-
 const emptyForm = (): ServerFormData => ({
   protocol: 'ssh',
   host: '',
   user: '',
   password: '',
   port: 0,
-  gateway_id: null,
-  gateway_server_id: null,
+  gateway_route_id: null,
   locale: '',
+  device_type: '',
+  note: '',
 })
 
-export function ComputeFormModal({ initial, gateways, servers, onSave, onClose }: Props) {
+export function ComputeFormModal({ initial, gateways, onSave, onClose }: Props) {
   const isEdit = initial !== null
   const [form, setForm] = useState<ServerFormData>(() =>
     isEdit
@@ -41,16 +34,17 @@ export function ComputeFormModal({ initial, gateways, servers, onSave, onClose }
           user: initial.user,
           password: '',
           port: initial.port,
-          gateway_id: initial.gateway_id,
-          gateway_server_id: initial.gateway_server_id,
+          gateway_route_id: initial.gateway_route_id,
           locale: initial.locale,
+          device_type: initial.device_type,
+          note: initial.note,
         }
       : emptyForm()
   )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const set = (k: keyof ServerFormData, v: ServerFormData[keyof ServerFormData]) =>
+  const set = <K extends keyof ServerFormData>(k: K, v: ServerFormData[K]) =>
     setForm(f => ({ ...f, [k]: v }))
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -60,21 +54,10 @@ export function ComputeFormModal({ initial, gateways, servers, onSave, onClose }
     try {
       const url = isEdit ? `/api/compute/${initial.id}` : '/api/compute'
       const method = isEdit ? 'PUT' : 'POST'
-      const body = isEdit
-        ? {
-            protocol: form.protocol,
-            user: form.user,
-            password: form.password,
-            port: form.port,
-            gateway_id: form.gateway_id,
-            gateway_server_id: form.gateway_server_id,
-            locale: form.locale,
-          }
-        : form
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify(form),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
@@ -146,39 +129,15 @@ export function ComputeFormModal({ initial, gateways, servers, onSave, onClose }
           <div className="form-row">
             <label>Gateway</label>
             <select
-              value={encodeGwValue(form.gateway_id, form.gateway_server_id)}
-              onChange={e => {
-                const val = e.target.value
-                if (!val) {
-                  set('gateway_id', null)
-                  set('gateway_server_id', null)
-                } else if (val.startsWith('gw:')) {
-                  set('gateway_id', Number(val.slice(3)))
-                  set('gateway_server_id', null)
-                } else if (val.startsWith('srv:')) {
-                  set('gateway_id', null)
-                  set('gateway_server_id', Number(val.slice(4)))
-                }
-              }}
+              value={form.gateway_route_id ?? ''}
+              onChange={e => set('gateway_route_id', e.target.value ? Number(e.target.value) : null)}
             >
               <option value="">— none —</option>
-              {gateways.length > 0 && (
-                <optgroup label="Gateways">
-                  {gateways.map(gw => (
-                    <option key={`gw:${gw.id}`} value={`gw:${gw.id}`}>{gw.name}</option>
-                  ))}
-                </optgroup>
-              )}
-              {servers.filter(s => !isEdit || s.id !== initial?.id).length > 0 && (
-                <optgroup label="Servers">
-                  {servers
-                    .filter(s => !isEdit || s.id !== initial?.id)
-                    .map(s => (
-                      <option key={`srv:${s.id}`} value={`srv:${s.id}`}>{s.user}@{s.host}</option>
-                    ))}
-                </optgroup>
-              )}
+              {gateways.map(gw => (
+                <option key={gw.id} value={gw.id}>{gw.name}</option>
+              ))}
             </select>
+            <span className="form-hint">Per-server gateway hop (applied after active profile)</span>
           </div>
           <div className="form-row">
             <label>Locale</label>

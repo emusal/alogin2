@@ -111,16 +111,14 @@ Define a named gateway route once, assign it to servers. alogin2 handles the ful
 
 ```bash
 # Register jump hosts as a named route (up to 3 hops)
-alogin auth gateway add prod-bastion bastion-01
-alogin auth gateway add dmz-chain bastion-01 dmz-relay
+alogin net gateway add prod-bastion bastion-01
+alogin net gateway add dmz-chain bastion-01 dmz-relay
 
 # Assign a gateway to a server
-alogin compute add --host 10.0.1.50 --user admin --gateway prod-bastion
+alogin server add --host 10.0.1.50 --user admin --gateway prod-bastion
 
-# Connect — alogin resolves the full chain automatically
+# Connect — active profile's gateway is applied automatically
 t web-01
-# or explicitly:
-alogin access ssh web-01 --auto-gw
 ```
 
 **ShellChain fallback:** If an intermediate hop has `AllowTcpForwarding no`, alogin2 automatically detects the failure and retries using nested `ssh -tt` pseudo-terminal chaining — no manual intervention required.
@@ -130,10 +128,10 @@ alogin access ssh web-01 --auto-gw
 Bind a server to an application plugin (MariaDB, Redis, PostgreSQL, MongoDB, ...) so one command SSHes in, launches the client, and auto-injects credentials from the vault:
 
 ```bash
-alogin app-server add --name prod-mysql --server prod-db --app mariadb --auto-gw
-alogin app-server connect prod-mysql               # interactive session
-alogin app-server connect prod-mysql --cmd "SHOW DATABASES;"  # non-interactive
-alogin app-server list --format json
+alogin app add --name prod-mysql --server prod-db --app mariadb
+alogin app connect prod-mysql               # interactive session
+alogin app connect prod-mysql --cmd "SHOW DATABASES;"  # non-interactive
+alogin app list --format json
 ```
 
 Plugin definitions live in `~/.config/alogin/plugins/<name>.yaml` and specify the launch command plus PTY expect/send sequences for credential injection.
@@ -148,13 +146,13 @@ Group servers into a named cluster, then open all of them in a tiled tmux layout
 
 ```bash
 # Define a cluster
-alogin access cluster add web-cluster web-01 web-02 web-03
-alogin access cluster add db-shard db-primary db-replica1 db-replica2
+alogin ssh cluster add web-cluster web-01 web-02 web-03
+alogin ssh cluster add db-shard db-primary db-replica1 db-replica2
 
 # Open all nodes in tiled panes
 ct web-cluster          # shell alias
-alogin access cluster web-cluster --mode tmux    # tmux (Linux + macOS)
-alogin access cluster web-cluster --mode iterm   # iTerm2 split panes (macOS)
+alogin ssh cluster web-cluster --mode tmux    # tmux (Linux + macOS)
+alogin ssh cluster web-cluster --mode iterm   # iTerm2 split panes (macOS)
 ```
 
 ### Synchronized Broadcast Typing
@@ -175,8 +173,8 @@ The sync delay is automatic: 5 seconds for ≤4 nodes, 8 seconds for ≤10 nodes
 Run a command against a cluster without an interactive session. Output is aggregated per node:
 
 ```bash
-alogin access ssh web-cluster --cmd "uptime"
-alogin access ssh db-shard    --cmd "df -h /data"
+alogin ssh connect web-cluster --cmd "uptime"
+alogin ssh connect db-shard    --cmd "df -h /data"
 ```
 
 For AI agent use, `exec_on_cluster` runs commands in parallel and returns per-node results as structured JSON.
@@ -246,9 +244,9 @@ The AI works with abstract **server aliases and IDs**. alogin2 resolves the full
 
 ```bash
 # Human operator pre-provisions trust:
-alogin compute add --host 10.0.0.10 --user admin   # stores creds in vault
-alogin compute add --host 10.0.0.11 --user admin
-alogin access cluster add web-cluster 10.0.0.10 10.0.0.11
+alogin server add --host 10.0.0.10 --user admin   # stores creds in vault
+alogin server add --host 10.0.0.11 --user admin
+alogin ssh cluster add web-cluster 10.0.0.10 10.0.0.11
 
 # AI agent then operates via MCP — server IDs only:
 # list_servers → [ {id: 1, name: "web-01"}, {id: 2, name: "web-02"} ]
@@ -365,12 +363,12 @@ SSH key-based auth is always preferred. Use vault storage only for password-base
 ## Commands Overview
 
 ```
-alogin compute          Server registry (add, list, show, edit, remove)
-alogin access           SSH, cluster sessions, SCP, SSHFS
-alogin auth             Vault credentials, gateway routes, aliases
+alogin server           Server registry (add, list, show, alias, ...)
+alogin app              Named server+plugin bindings
+alogin ssh              SSH, SFTP, FTP, SSHFS, cluster sessions
+alogin vault            Stored credentials (set, get, delete)
+alogin net              Hosts, tunnels, gateways, profiles
 alogin agent            MCP server, policy, HITL, audit
-alogin net              Hosts file entries, background SSH tunnels
-alogin app-server       Named server+plugin bindings
 alogin tui              Interactive fuzzy TUI picker
 alogin web              Embedded web server (browser SSH + dashboard)
 ```

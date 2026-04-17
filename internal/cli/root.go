@@ -50,16 +50,16 @@ Manages SSH connections, port tunnels, cluster sessions, and server credentials
 with an encrypted vault and a full audit trail.
 
 Command groups:
-  compute     Manage servers (compute resources)
-  app-server  Named server+plugin bindings for one-command app access
-  access      Connect to remote hosts (SSH, SFTP, FTP, SSHFS, cluster)
-  auth        Manage credentials and routing (gateways, aliases, vault)
-  agent       AI/MCP tools: run as MCP server, configure AI clients, manage policies
-  net         Manage network resources (hosts, tunnels)
+  server   Manage servers in the registry (add, list, alias, ...)
+  app      Named server+plugin bindings for one-command app access
+  ssh      Connect to remote hosts (SSH, SFTP, FTP, SSHFS, cluster)
+  vault    Manage stored credentials
+  net      Manage network resources (hosts, tunnels, gateways, profiles)
+  agent    AI/MCP tools: run as MCP server, configure AI clients, manage policies
 
 Interactive UIs:
-  tui       Terminal UI host selector
-  web       Embedded Web UI
+  tui      Terminal UI host selector
+  web      Embedded Web UI
 
 Run 'alogin agent setup' to configure Claude Desktop or other AI clients.`,
 		SilenceUsage:  true,
@@ -80,12 +80,12 @@ Run 'alogin agent setup' to configure Claude Desktop or other AI clients.`,
 
 	// ---- Canonical new hierarchy ----
 	root.AddCommand(
-		newComputeCmd(),    // alogin compute
-		newAppServerCmd(),  // alogin app-server
-		newAccessCmd(),     // alogin access
-		newAuthCmd(),       // alogin auth
-		newAgentCmd(),      // alogin agent
-		newNetCmd(),        // alogin net
+		newServerGroupCmd(), // alogin server
+		newAppCmd(),         // alogin app
+		newSSHGroupCmd(),    // alogin ssh
+		newVaultCmd(),       // alogin vault
+		newNetCmd(),         // alogin net
+		newAgentCmd(),       // alogin agent
 	)
 
 	// ---- Unchanged root-level commands ----
@@ -97,6 +97,7 @@ Run 'alogin agent setup' to configure Claude Desktop or other AI clients.`,
 		newCompletionCmd(),
 		newMigrateCmd(),
 		newDBMigrateCmd(),
+		newDoctorCmd(),
 		newUpgradeCmd(),
 		newUninstallCmd(),
 	)

@@ -8,34 +8,17 @@ import (
 	"golang.org/x/term"
 )
 
-// newAuthCmd returns the "auth" group command for credentials and routing.
-func newAuthCmd() *cobra.Command {
+// newVaultCmd returns the top-level "vault" command for credential management.
+func newVaultCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "auth",
-		Short: "Manage credentials and routing (gateways, aliases, vault)",
-		Long: `Manage gateway routes, host aliases, and vault credentials.
+		Use:   "vault",
+		Short: "Manage stored credentials",
+		Long: `Manage stored credentials in the vault.
 
 Examples:
-  alogin auth gateway list
-  alogin auth gateway add corp-gw gw.corp.com
-  alogin auth alias add prod admin@web-01
-  alogin auth alias list
-  alogin auth vault set testuser@target-mariadb
-  alogin auth vault get testuser@target-mariadb
-  alogin auth vault delete testuser@target-mariadb`,
-	}
-	cmd.AddCommand(
-		newGatewayCmd(),
-		newAliasCmd(),
-		newAuthVaultCmd(),
-	)
-	return cmd
-}
-
-func newAuthVaultCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:         "vault",
-		Short:       "Manage stored credentials",
+  alogin vault set testuser@target-mariadb
+  alogin vault get testuser@target-mariadb
+  alogin vault delete testuser@target-mariadb`,
 		Annotations: map[string]string{skipDBAnnotation: "true"},
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			return initVaultOnly()

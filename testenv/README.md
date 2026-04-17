@@ -94,11 +94,11 @@ ssh target-mariadb
 ### 멀티홉 SSH
 
 ```bash
-# Bastion을 경유하여 target-ubuntu 접근 (2홉)
-alogin access ssh target-ubuntu --auto-gw
+# Bastion을 경유하여 target-ubuntu 접근 (2홉) — active profile의 gateway 자동 적용
+alogin access ssh target-ubuntu
 
 # 레거시 RSA 환경 접근 (2홉)
-alogin access ssh target-legacy-rsa --auto-gw
+alogin access ssh target-legacy-rsa
 ```
 
 ### 3-hop SSH
@@ -107,7 +107,7 @@ alogin access ssh target-legacy-rsa --auto-gw
 
 ```bash
 # localhost → bastion → middle → deep-target (3홉)
-alogin access ssh deep-target --auto-gw
+alogin access ssh deep-target
 ```
 
 ### 클러스터 일괄 접속

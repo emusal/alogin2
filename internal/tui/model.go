@@ -20,8 +20,7 @@ import (
 type SelectedServer struct {
 	Server *model.Server
 	User   string
-	AutoGW bool    // true = connect via gateway (legacy 'r' behaviour)
-	Plugin string  // non-empty = launch this plugin after connecting (plugin name)
+	Plugin string // non-empty = launch this plugin after connecting (plugin name)
 }
 
 // state tracks what the TUI is currently doing.
@@ -189,7 +188,6 @@ type Model struct {
 	tnFormMode         formMode
 	tnFormFields       []textinput.Model
 	tnFormFocus        int
-	tnFormAutoGW       bool
 	tnFormTarget       *model.Tunnel
 	tnFormServerID     int64
 	tnFormPickerOpen   bool
@@ -215,7 +213,6 @@ type Model struct {
 	asFormMode         formMode
 	asFormFields       []textinput.Model
 	asFormFocus        int
-	asFormAutoGW       bool
 	asFormServerID     int64
 	asFormTarget       *model.AppServer
 	asFormPickerOpen   bool
@@ -412,15 +409,13 @@ func (m *Model) initServerForm(srv *model.Server) tea.Cmd {
 			fields[4].SetValue(strconv.Itoa(srv.Port))
 		}
 		fields[5].SetValue(srv.Locale)
-		m.srvFormSelectedGwID = srv.GatewayID
-		m.srvFormSelectedSrvGwID = srv.GatewayServerID
+		m.srvFormSelectedGwID = srv.GatewayRouteID
 		m.formTarget = srv
 		m.formMode = fmEdit
 	} else {
+		m.srvFormSelectedGwID = nil
 		m.formMode = fmAdd
 		m.formTarget = nil
-		m.srvFormSelectedGwID = nil
-		m.srvFormSelectedSrvGwID = nil
 		fields[0].SetValue("ssh")
 	}
 
@@ -447,13 +442,12 @@ func (m Model) submitServerForm() tea.Cmd {
 		port, _ := strconv.Atoi(portStr)
 
 		srv := &model.Server{
-			Protocol:        proto,
-			Host:            host,
-			User:            user,
-			Port:            port,
-			Locale:          locale,
-			GatewayID:       m.srvFormSelectedGwID,
-			GatewayServerID: m.srvFormSelectedSrvGwID,
+			Protocol:       proto,
+			Host:           host,
+			User:           user,
+			Port:           port,
+			Locale:         locale,
+			GatewayRouteID: m.srvFormSelectedGwID,
 		}
 
 		var opErr error
@@ -775,12 +769,10 @@ func (m *Model) initTunnelForm(t *model.Tunnel) {
 		fields[5].SetValue(fmt.Sprintf("%d", t.RemotePort))
 		m.tnFormTarget = t
 		m.tnFormMode = fmEdit
-		m.tnFormAutoGW = t.AutoGW
 		m.tnFormServerID = t.ServerID
 	} else {
 		m.tnFormTarget = nil
 		m.tnFormMode = fmAdd
-		m.tnFormAutoGW = false
 		m.tnFormServerID = 0
 		fields[1].SetValue("L")
 		fields[2].SetValue("127.0.0.1")
@@ -825,7 +817,6 @@ func (m Model) submitTunnelForm() tea.Cmd {
 			LocalPort:  localPort,
 			RemoteHost: remoteHost,
 			RemotePort: remotePort,
-			AutoGW:     m.tnFormAutoGW,
 		}
 
 		var opErr error
@@ -882,12 +873,10 @@ func (m *Model) initAppServerForm(as *model.AppServer) {
 		fields[2].SetValue(as.Description)
 		m.asFormTarget = as
 		m.asFormMode = fmEdit
-		m.asFormAutoGW = as.AutoGW
 		m.asFormServerID = as.ServerID
 	} else {
 		m.asFormTarget = nil
 		m.asFormMode = fmAdd
-		m.asFormAutoGW = false
 		m.asFormServerID = 0
 	}
 
@@ -918,7 +907,6 @@ func (m Model) submitAppServerForm() tea.Cmd {
 			Name:        name,
 			ServerID:    m.asFormServerID,
 			PluginName:  pluginName,
-			AutoGW:      m.asFormAutoGW,
 			Description: description,
 		}
 

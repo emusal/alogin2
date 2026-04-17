@@ -115,7 +115,6 @@ The TUI is a single `Model` with a `state` field that drives all rendering and k
 ### Tunnel form extras
 | Key | Action |
 |-----|--------|
-| `space` | Toggle `auto_gw` |
 | `Ctrl+S` | Submit form |
 
 ### App-server list extras
@@ -159,16 +158,12 @@ type Model struct {
     clFormMembers      []clMember
     clFormUserEditOpen bool
 
-    // Tunnel form
-    tnFormAutoGW bool
-
     // App-server form state
     appServers      []*model.AppServer
     appServerCursor int
     asFormMode      formMode
     asFormFields    []textinput.Model
     asFormFocus     int
-    asFormAutoGW    bool
     asFormServerID  int64
     asFormTarget    *model.AppServer
 }

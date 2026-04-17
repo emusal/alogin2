@@ -2,24 +2,23 @@ package cli
 
 import "github.com/spf13/cobra"
 
-// newAccessCmd returns the "access" group command for connectivity operations.
-func newAccessCmd() *cobra.Command {
+// newSSHGroupCmd returns the "ssh" group command for connectivity operations.
+func newSSHGroupCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "access",
+		Use:   "ssh",
 		Short: "Connect to remote hosts (SSH, SFTP, FTP, SSHFS, cluster)",
 		Long: `Connectivity commands: SSH, SFTP, FTP, SSHFS mount, and cluster sessions.
 
 Examples:
-  alogin access ssh admin@web-01
-  alogin access sftp admin@web-01
-  alogin access cluster prod-cluster
-  alogin access cluster list`,
+  alogin ssh connect admin@web-01
+  alogin ssh sftp admin@web-01
+  alogin ssh cluster prod-cluster
+  alogin ssh cluster list`,
 	}
 
-	// Canonical SSH subcommand — same implementation as the legacy 'connect' command.
-	// Aliases t and r are preserved on this subcommand for muscle memory.
+	// Canonical SSH connect subcommand.
 	sshCmd := newConnectCmd()
-	sshCmd.Use = "ssh [user@]host..."
+	sshCmd.Use = "connect [user@]host..."
 	sshCmd.Short = "Connect via SSH"
 
 	cmd.AddCommand(

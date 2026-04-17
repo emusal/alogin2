@@ -17,7 +17,6 @@ import (
 func newClusterCmd() *cobra.Command {
 	var mode string
 	var tileX int
-	var useGW bool
 	var command string
 	var format string
 
@@ -39,7 +38,7 @@ Examples:
   alogin cluster
   alogin cluster prod-cluster
   alogin cluster prod-cluster --mode iterm
-  alogin cluster prod-cluster --auto-gw
+  alogin cluster prod-cluster
   alogin cluster prod-cluster --cmd "uptime"
   alogin cluster prod-cluster --cmd "df -h" --format json`,
 		Args: cobra.MaximumNArgs(1),
@@ -57,7 +56,7 @@ Examples:
 
 			// --cmd: parallel exec, print results, no tmux
 			if command != "" {
-				return runClusterCmd(ctx, cl, command, useGW, format)
+				return runClusterCmd(ctx, cl, command, format)
 			}
 
 			var hosts []cluster.HostEntry
@@ -72,30 +71,11 @@ Examples:
 				}
 				pwd, _ := vlt.Get(vaultKey(srv))
 
-				var hops []cluster.HopEntry
-				if useGW && srv.GatewayID != nil {
-					gwHops, _ := database.Gateways.HopsFor(ctx, srv.ID)
-					for _, h := range gwHops {
-						hopSrv, _ := database.Servers.GetByID(ctx, h.ServerID)
-						if hopSrv != nil {
-							hp, _ := vlt.Get(vaultKey(hopSrv))
-							hops = append(hops, cluster.HopEntry{
-								Host:     hopSrv.Host,
-								Port:     hopSrv.EffectivePort(),
-								User:     hopSrv.User,
-								Password: hp,
-							})
-						}
-					}
-				}
-
 				hosts = append(hosts, cluster.HostEntry{
 					Host:     srv.Host,
 					Port:     srv.EffectivePort(),
 					User:     user,
 					Password: pwd,
-					Hops:     hops,
-					UseGW:    useGW,
 				})
 			}
 
@@ -111,7 +91,6 @@ Examples:
 
 	cmd.Flags().StringVar(&mode, "mode", "tmux", "session mode: tmux|iterm|terminal")
 	cmd.Flags().IntVarP(&tileX, "tile-x", "x", 0, "number of columns for tiling (0=auto)")
-	cmd.Flags().BoolVar(&useGW, "auto-gw", false, "route through gateways (like legacy 'cr')")
 	cmd.Flags().StringVarP(&command, "cmd", "c", "", "command to run on each member (parallel exec, no tmux)")
 	cmd.Flags().StringVar(&format, "format", "table", "output format when using --cmd: table|json")
 	cmd.AddCommand(newClusterAddCmd())
@@ -128,7 +107,7 @@ type clusterCmdResult struct {
 }
 
 // runClusterCmd executes a command on all cluster members in parallel and prints results.
-func runClusterCmd(ctx context.Context, cl *model.Cluster, command string, useGW bool, format string) error {
+func runClusterCmd(ctx context.Context, cl *model.Cluster, command string, format string) error {
 	results := make([]clusterCmdResult, len(cl.Members))
 	var wg sync.WaitGroup
 
@@ -146,7 +125,6 @@ func runClusterCmd(ctx context.Context, cl *model.Cluster, command string, useGW
 			cmdResults, err := mcp.ExecOnServer(ctx, database, vlt, mcp.ExecRequest{
 				ServerID: srv.ID,
 				Commands: []string{command},
-				AutoGW:   useGW,
 			})
 			if err != nil {
 				results[idx].Error = err.Error()

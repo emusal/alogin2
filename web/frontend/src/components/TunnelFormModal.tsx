@@ -18,7 +18,6 @@ export function TunnelFormModal({ initial, servers, onSave, onClose }: Props) {
   const [localPort, setLocalPort] = useState(initial ? String(initial.local_port) : '')
   const [remoteHost, setRemoteHost] = useState(initial?.remote_host ?? '')
   const [remotePort, setRemotePort] = useState(initial ? String(initial.remote_port) : '')
-  const [autoGW, setAutoGW] = useState(initial?.auto_gw ?? false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -41,7 +40,6 @@ export function TunnelFormModal({ initial, servers, onSave, onClose }: Props) {
       local_port: lp,
       remote_host: remoteHost,
       remote_port: rp,
-      auto_gw: autoGW,
     }
     try {
       const url = isEdit ? `/api/tunnels/${initial.id}` : '/api/tunnels'
@@ -152,18 +150,6 @@ export function TunnelFormModal({ initial, servers, onSave, onClose }: Props) {
               max={65535}
               required
             />
-          </div>
-
-          <div className="form-row">
-            <label>Auto Gateway</label>
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={autoGW}
-                onChange={e => setAutoGW(e.target.checked)}
-              />
-              {' '}Follow server gateway chain (--auto-gw)
-            </label>
           </div>
 
           {error && <div className="modal-error">{error}</div>}

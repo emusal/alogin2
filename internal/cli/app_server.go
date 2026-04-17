@@ -11,21 +11,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newAppServerCmd() *cobra.Command {
+func newAppCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "app-server",
-		Short: "Manage app-server bindings (server + plugin shortcut)",
-		Long: `Manage named bindings that pair a compute server with an application plugin.
+		Use:   "app",
+		Short: "Manage app bindings (server + plugin shortcut)",
+		Long: `Manage named bindings that pair a server with an application plugin.
 
-An app-server binding gives a short name to the combination of a server and a
+An app binding gives a short name to the combination of a server and a
 plugin, so you can connect with a single name instead of specifying both.
 
 Examples:
-  alogin app-server add --name prod-mysql --server target-mariadb --app mariadb
-  alogin app-server list
-  alogin app-server connect prod-mysql
-  alogin app-server connect prod-mysql --cmd "SHOW DATABASES;"
-  alogin app-server delete prod-mysql`,
+  alogin app add --name prod-mysql --server target-mariadb --app mariadb
+  alogin app list
+  alogin app connect prod-mysql
+  alogin app connect prod-mysql --cmd "SHOW DATABASES;"
+  alogin app delete prod-mysql`,
 	}
 	cmd.AddCommand(
 		newAppServerListCmd(),
@@ -57,7 +57,6 @@ func newAppServerListCmd() *cobra.Command {
 				ServerID    int64  `json:"server_id"`
 				Server      string `json:"server"`
 				PluginName  string `json:"plugin_name"`
-				AutoGW      bool   `json:"auto_gw"`
 				Description string `json:"description"`
 			}
 
@@ -67,14 +66,12 @@ func newAppServerListCmd() *cobra.Command {
 				if srv, _ := database.Servers.GetByID(ctx, as.ServerID); srv != nil {
 					srvLabel = srv.Host
 				}
-				autoGW := as.AutoGW
 				rows = append(rows, row{
 					ID:          as.ID,
 					Name:        as.Name,
 					ServerID:    as.ServerID,
 					Server:      srvLabel,
 					PluginName:  as.PluginName,
-					AutoGW:      autoGW,
 					Description: as.Description,
 				})
 			}
@@ -91,14 +88,10 @@ func newAppServerListCmd() *cobra.Command {
 			}
 
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tSERVER\tPLUGIN\tAUTO-GW\tDESCRIPTION")
+			fmt.Fprintln(w, "NAME\tSERVER\tPLUGIN\tDESCRIPTION")
 			for _, r := range rows {
-				autoGW := "no"
-				if r.AutoGW {
-					autoGW = "yes"
-				}
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
-					r.Name, r.Server, r.PluginName, autoGW, r.Description)
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+					r.Name, r.Server, r.PluginName, r.Description)
 			}
 			return w.Flush()
 		},
@@ -113,7 +106,6 @@ func newAppServerAddCmd() *cobra.Command {
 		serverHost  string
 		serverUser  string
 		pluginName  string
-		autoGW      bool
 		description string
 	)
 	cmd := &cobra.Command{
@@ -132,7 +124,6 @@ func newAppServerAddCmd() *cobra.Command {
 				Name:        name,
 				ServerID:    srv.ID,
 				PluginName:  pluginName,
-				AutoGW:      autoGW,
 				Description: description,
 			}
 			if err := database.AppServers.Create(ctx, as); err != nil {
@@ -146,7 +137,6 @@ func newAppServerAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&serverHost, "server", "", "server hostname from the registry (required)")
 	cmd.Flags().StringVar(&serverUser, "user", "", "server user (disambiguates when host has multiple users)")
 	cmd.Flags().StringVar(&pluginName, "app", "", "plugin name, e.g. mariadb (required)")
-	cmd.Flags().BoolVar(&autoGW, "auto-gw", false, "connect via gateway by default")
 	cmd.Flags().StringVar(&description, "desc", "", "optional description")
 	return cmd
 }
@@ -169,15 +159,10 @@ func newAppServerShowCmd() *cobra.Command {
 			if srv, _ := database.Servers.GetByID(ctx, as.ServerID); srv != nil {
 				srvLabel = fmt.Sprintf("%s@%s", srv.User, srv.Host)
 			}
-			autoGW := "no"
-			if as.AutoGW {
-				autoGW = "yes"
-			}
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 			fmt.Fprintf(w, "Name:\t%s\n", as.Name)
 			fmt.Fprintf(w, "Server:\t%s\n", srvLabel)
 			fmt.Fprintf(w, "Plugin:\t%s\n", as.PluginName)
-			fmt.Fprintf(w, "Auto-GW:\t%s\n", autoGW)
 			fmt.Fprintf(w, "Description:\t%s\n", as.Description)
 			fmt.Fprintf(w, "Created:\t%s\n", as.CreatedAt.Format("2006-01-02 15:04:05"))
 			return w.Flush()
@@ -230,7 +215,6 @@ func newAppServerConnectCmd() *cobra.Command {
 			}
 			opts := &model.ConnectOptions{
 				AppName: as.PluginName,
-				AutoGW:  as.AutoGW,
 				Command: cmdFlag,
 			}
 			return doConnect(ctx, srv.User, srv.Host, opts)

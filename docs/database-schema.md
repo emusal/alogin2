@@ -51,7 +51,6 @@ Unique constraint: `(host, user)`
 | local_port | INTEGER | |
 | remote_host | TEXT | |
 | remote_port | INTEGER | |
-| auto_gw | INTEGER | 0/1 boolean |
 | created_at | DATETIME | |
 | updated_at | DATETIME | |
 
@@ -82,7 +81,6 @@ Unique constraint: `(host, user)`
 | name | TEXT UNIQUE | Human-readable binding identifier |
 | server_id | INTEGER | FK → servers ON DELETE CASCADE |
 | plugin_name | TEXT | Matches plugin YAML filename without extension |
-| auto_gw | INTEGER | 0/1 boolean |
 | description | TEXT | Free-form notes |
 | created_at | DATETIME | |
 | updated_at | DATETIME | |

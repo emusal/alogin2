@@ -12,7 +12,6 @@ interface Props {
   selectedIds: Set<number>
   nodes: ClusterNodeState[]
   servers: Server[]
-  autoGW: boolean
   onBack: () => void
   onNodeStatusChange: (serverId: number, status: 'connecting' | 'connected' | 'disconnected' | 'error') => void
 }
@@ -22,7 +21,6 @@ export const ClusterFocusView = forwardRef<ClusterFocusViewHandle, Props>(functi
   selectedIds,
   nodes,
   servers,
-  autoGW,
   onBack,
   onNodeStatusChange,
 }, ref) {
@@ -71,7 +69,6 @@ export const ClusterFocusView = forwardRef<ClusterFocusViewHandle, Props>(functi
                     else termRefs.current.delete(targetIds[0])
                   }}
                   server={srv}
-                  autoGW={autoGW}
                   onStatusChange={s => onNodeStatusChange(targetIds[0], s)}
                 />
               )
@@ -93,7 +90,6 @@ export const ClusterFocusView = forwardRef<ClusterFocusViewHandle, Props>(functi
                       else termRefs.current.delete(id)
                     }}
                     server={srv}
-                    autoGW={autoGW}
                     compact
                     onStatusChange={s => onNodeStatusChange(id, s)}
                   />

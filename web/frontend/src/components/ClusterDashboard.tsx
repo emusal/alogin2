@@ -10,11 +10,10 @@ import './ClusterDashboard.css'
 interface Props {
   cluster: Cluster
   servers: Server[]
-  autoGW: boolean
   onClose: () => void
 }
 
-export function ClusterDashboard({ cluster, servers, autoGW, onClose }: Props) {
+export function ClusterDashboard({ cluster, servers, onClose }: Props) {
   const [nodeStates, setNodeStates] = useState<Map<number, ClusterNodeState>>(new Map())
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   // null = heatmap, -1 = multi-focus (selected), N = single focus
@@ -169,7 +168,6 @@ export function ClusterDashboard({ cluster, servers, autoGW, onClose }: Props) {
       {/* Toolbar */}
       <div className="cd-toolbar">
         <span className="cd-toolbar-title">{cluster.name}</span>
-        {autoGW && <span className="cd-gw-badge">via GW</span>}
         {inFocusMode ? (
           <button className="cd-back-btn" style={{ marginLeft: 'auto' }} onClick={handleBackToMap}>
             ← Map
@@ -251,7 +249,6 @@ export function ClusterDashboard({ cluster, servers, autoGW, onClose }: Props) {
                 else termRefs.current.delete(node.serverId)
               }}
               server={srv}
-              autoGW={autoGW}
               onStatusChange={s => setNodeStatus(node.serverId,
                 s === 'connected' ? 'connected' :
                 s === 'disconnected' ? 'disconnected' : 'error'

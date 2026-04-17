@@ -7,24 +7,23 @@ import { HostList } from './components/HostList'
 import { TunnelList } from './components/TunnelList'
 import { PluginList } from './components/PluginList'
 import { AppServerList } from './components/AppServerList'
+import { ProfileList } from './components/ProfileList'
 import { Terminal } from './components/Terminal'
 import { PageBanner } from './components/PageBanner'
-import type { Server, Cluster } from './types'
+import type { Server, Cluster, Profile } from './types'
 import './App.css'
 
-type View = 'compute' | 'gateways' | 'clusters' | 'hosts' | 'tunnels' | 'plugins' | 'app-servers' | string
+type View = 'compute' | 'gateways' | 'clusters' | 'hosts' | 'tunnels' | 'plugins' | 'app-servers' | 'profiles' | string
 
 interface TerminalTab {
   id: string
   server: Server
-  autoGW: boolean
   app?: string
 }
 
 interface ClusterDashTab {
   id: string
   cluster: Cluster
-  autoGW: boolean
 }
 
 let tabCounter = 0
@@ -34,25 +33,33 @@ export default function App() {
   const [terminals, setTerminals] = useState<TerminalTab[]>([])
   const [clusterDashTabs, setClusterDashTabs] = useState<ClusterDashTab[]>([])
   const [servers, setServers] = useState<Server[]>([])
+  const [activeProfile, setActiveProfile] = useState<Profile | null>(null)
 
   useEffect(() => {
     fetch('/api/compute')
       .then(r => r.json())
       .then(data => setServers(Array.isArray(data) ? data : []))
       .catch(() => {})
+    fetch('/api/profiles')
+      .then(r => r.json())
+      .then((data: Profile[]) => {
+        const list = Array.isArray(data) ? data : []
+        setActiveProfile(list.find(p => p.is_active) ?? null)
+      })
+      .catch(() => {})
   }, [])
 
-  const connect = (server: Server, autoGW = false, app?: string) => {
+  const connect = (server: Server, app?: string) => {
     tabCounter++
     const id = `term-${tabCounter}`
-    setTerminals(tabs => [...tabs, { id, server, autoGW, app }])
+    setTerminals(tabs => [...tabs, { id, server, app }])
     setView(id)
   }
 
-  const connectAppServer = (serverId: number, autoGW: boolean, app: string) => {
+  const connectAppServer = (serverId: number, app: string) => {
     const server = servers.find(s => s.id === serverId)
     if (!server) return
-    connect(server, autoGW, app)
+    connect(server, app)
   }
 
   const closeTab = (id: string) => {
@@ -60,11 +67,11 @@ export default function App() {
     setView(prev => prev === id ? 'compute' : prev)
   }
 
-  const openClusterDash = (cluster: Cluster, autoGW: boolean) => {
+  const openClusterDash = (cluster: Cluster) => {
     const id = `cluster-dash-${cluster.id}`
     setClusterDashTabs(tabs => {
       if (tabs.find(t => t.id === id)) return tabs
-      return [...tabs, { id, cluster, autoGW }]
+      return [...tabs, { id, cluster }]
     })
     setView(id)
   }
@@ -78,6 +85,11 @@ export default function App() {
     <div className="app">
       <header className="header">
         <h1 className="logo">alogin</h1>
+        {activeProfile && (
+          <span className="active-profile-badge" title={`Active profile: ${activeProfile.name}`}>
+            {activeProfile.name}
+          </span>
+        )}
         <nav className="nav">
           <button
             className={`nav-btn ${view === 'compute' ? 'active' : ''}`}
@@ -90,6 +102,12 @@ export default function App() {
             onClick={() => setView('gateways')}
           >
             Gateways
+          </button>
+          <button
+            className={`nav-btn ${view === 'profiles' ? 'active' : ''}`}
+            onClick={() => setView('profiles')}
+          >
+            Profiles
           </button>
           <button
             className={`nav-btn ${view === 'clusters' ? 'active' : ''}`}
@@ -144,7 +162,7 @@ export default function App() {
                 className="nav-tab-label"
                 onClick={() => setView(tab.id)}
               >
-                {tab.server.host}{tab.autoGW ? ' [GW]' : ''}
+                {tab.server.host}
               </button>
               <button
                 className="nav-tab-close"
@@ -161,6 +179,7 @@ export default function App() {
       <main className="main">
         {view === 'compute'  && <PageBanner page="compute" />}
         {view === 'gateways' && <PageBanner page="gateways" />}
+        {view === 'profiles' && <PageBanner page="profiles" />}
         {view === 'clusters' && <PageBanner page="clusters" />}
         {view === 'hosts'    && <PageBanner page="hosts" />}
         {view === 'tunnels'  && <PageBanner page="tunnels" />}
@@ -170,6 +189,7 @@ export default function App() {
 
         {view === 'compute'  && <ComputeList onConnect={connect} />}
         {view === 'gateways' && <GatewayList servers={servers} />}
+        {view === 'profiles' && <ProfileList onActiveProfileChange={setActiveProfile} />}
         {view === 'clusters' && <ClusterList servers={servers} onOpenDashboard={openClusterDash} />}
         {view === 'hosts'    && <HostList />}
         {view === 'tunnels'  && <TunnelList servers={servers} />}
@@ -180,14 +200,13 @@ export default function App() {
             <ClusterDashboard
               cluster={tab.cluster}
               servers={servers}
-              autoGW={tab.autoGW}
               onClose={() => closeClusterDash(tab.id)}
             />
           </div>
         ))}
         {terminals.map(tab => (
           <div key={tab.id} style={{ display: view === tab.id ? 'flex' : 'none', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
-            <Terminal server={tab.server} autoGW={tab.autoGW} app={tab.app} />
+            <Terminal server={tab.server} app={tab.app} />
           </div>
         ))}
       </main>

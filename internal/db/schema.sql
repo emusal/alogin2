@@ -18,8 +18,7 @@ CREATE TABLE IF NOT EXISTS servers (
     user              TEXT    NOT NULL,
     password          TEXT    NOT NULL DEFAULT '_HIDDEN_',
     port              INTEGER NOT NULL DEFAULT 0,
-    gateway_id        INTEGER REFERENCES gateway_routes(id) ON DELETE SET NULL,
-    gateway_server_id INTEGER REFERENCES servers(id) ON DELETE SET NULL,
+    gateway_route_id  INTEGER REFERENCES gateway_routes(id) ON DELETE SET NULL,
     locale            TEXT    NOT NULL DEFAULT '-',
     device_type       TEXT    NOT NULL DEFAULT 'linux',
     note              TEXT    NOT NULL DEFAULT '',
@@ -174,6 +173,35 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_server_id  ON audit_log(server_id);
 CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at);
 
 -- ----------------------------------------------------------------
+-- profiles: named network context profiles (v11)
+-- Exactly one profile may have is_active = 1 at a time.
+-- When active, all SSH connections are routed through the profile's gateway.
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS profiles (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT    NOT NULL UNIQUE,
+    description TEXT    NOT NULL DEFAULT '',
+    is_active   INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    updated_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_profiles_is_active ON profiles(is_active);
+
+-- ----------------------------------------------------------------
+-- profile_gateways: maps a profile to a gateway_route (v11)
+-- UNIQUE(profile_id) enforces 1:1; relax to 1:N later if needed.
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS profile_gateways (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    route_id   INTEGER NOT NULL REFERENCES gateway_routes(id) ON DELETE CASCADE,
+    UNIQUE(profile_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_profile_gateways_profile ON profile_gateways(profile_id);
+
+-- ----------------------------------------------------------------
 -- schema_migrations: version tracking
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -191,3 +219,5 @@ INSERT OR IGNORE INTO schema_migrations(version) VALUES (7);
 INSERT OR IGNORE INTO schema_migrations(version) VALUES (8);
 INSERT OR IGNORE INTO schema_migrations(version) VALUES (9);
 INSERT OR IGNORE INTO schema_migrations(version) VALUES (10);
+INSERT OR IGNORE INTO schema_migrations(version) VALUES (11);
+INSERT OR IGNORE INTO schema_migrations(version) VALUES (12);

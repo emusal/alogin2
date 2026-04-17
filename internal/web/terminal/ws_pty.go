@@ -65,7 +65,7 @@ func (h *Handler) ServeWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	autoGW := r.URL.Query().Get("auto_gw") == "true"
+	profileOverride := r.URL.Query().Get("profile")
 	appName := r.URL.Query().Get("app")
 
 	ws, err := upgrader.Upgrade(w, r, nil)
@@ -74,19 +74,19 @@ func (h *Handler) ServeWS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer ws.Close()
 
-	if err := h.runSession(r.Context(), ws, serverID, autoGW, appName); err != nil {
+	if err := h.runSession(r.Context(), ws, serverID, profileOverride, appName); err != nil {
 		msg, _ := json.Marshal(wsMessage{Type: "data", Data: "\r\nError: " + err.Error() + "\r\n"})
 		ws.WriteMessage(websocket.TextMessage, msg)
 	}
 }
 
-func (h *Handler) runSession(ctx context.Context, ws *websocket.Conn, serverID int64, autoGW bool, appName string) error {
+func (h *Handler) runSession(ctx context.Context, ws *websocket.Conn, serverID int64, profileOverride string, appName string) error {
 	srv, err := h.db.Servers.GetByID(ctx, serverID)
 	if err != nil || srv == nil {
 		return fmt.Errorf("server %d not found", serverID)
 	}
 
-	hops, err := h.buildHops(ctx, srv, autoGW)
+	hops, err := h.buildHops(ctx, srv, profileOverride)
 	if err != nil {
 		return err
 	}
@@ -243,36 +243,88 @@ func (h *Handler) resolveHost(ctx context.Context, hostname string) string {
 	return h.db.Hosts.Resolve(ctx, hostname)
 }
 
-func (h *Handler) buildHops(ctx context.Context, srv *model.Server, autoGW bool) ([]internalssh.HopConfig, error) {
+// buildHops constructs the SSH hop list using the active network profile.
+// profileOverride: "" = active profile, "none" = direct, "<name>" = named profile.
+// Loop prevention: if the destination is one of the gateway hops, connect directly.
+func (h *Handler) buildHops(ctx context.Context, srv *model.Server, profileOverride string) ([]internalssh.HopConfig, error) {
 	var hops []internalssh.HopConfig
+	var activeProfile *model.Profile
 
-	if autoGW {
-		// Case 1: named gateway route (GatewayID set).
-		if srv.GatewayID != nil {
-			gwHops, err := h.db.Gateways.HopsFor(ctx, srv.ID)
+	if profileOverride != "none" {
+		var err error
+
+		if profileOverride != "" {
+			activeProfile, err = h.db.Profiles.GetByName(ctx, profileOverride)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("profile %q: %w", profileOverride, err)
 			}
-			for _, gh := range gwHops {
-				hopSrv, err := h.db.Servers.GetByID(ctx, gh.ServerID)
-				if err != nil || hopSrv == nil {
-					continue
+			if activeProfile == nil {
+				return nil, fmt.Errorf("profile %q not found", profileOverride)
+			}
+		} else {
+			activeProfile, err = h.db.Profiles.GetActive(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("get active profile: %w", err)
+			}
+		}
+
+		if activeProfile != nil && activeProfile.GatewayRouteID != nil {
+			gw, err := h.db.Gateways.GetByID(ctx, *activeProfile.GatewayRouteID)
+			if err != nil || gw == nil {
+				return nil, fmt.Errorf("profile gateway route not found: %w", err)
+			}
+
+			// Loop prevention: if destination is one of the gateway hops, connect directly.
+			isGWHop := false
+			for _, gh := range gw.Hops {
+				if gh.ServerID == srv.ID {
+					isGWHop = true
+					break
 				}
-				pwd, _ := h.vlt.Get(hopSrv.User + "@" + hopSrv.Host)
-				hops = append(hops, internalssh.HopConfig{
-					Host:     h.resolveHost(ctx, hopSrv.Host),
-					Port:     hopSrv.EffectivePort(),
-					User:     hopSrv.User,
-					Password: pwd,
-				})
 			}
-		} else if srv.GatewayServerID != nil {
-			// Case 2: recursive server chain (GatewayServerID set).
-			chain, err := h.resolveGatewayChain(ctx, srv)
-			if err != nil {
-				return nil, err
+
+			if !isGWHop {
+				for _, gh := range gw.Hops {
+					hopSrv, err := h.db.Servers.GetByID(ctx, gh.ServerID)
+					if err != nil || hopSrv == nil {
+						return nil, fmt.Errorf("gateway hop server %d not found", gh.ServerID)
+					}
+					pwd, _ := h.vlt.Get(hopSrv.User + "@" + hopSrv.Host)
+					hops = append(hops, internalssh.HopConfig{
+						Host:     h.resolveHost(ctx, hopSrv.Host),
+						Port:     hopSrv.EffectivePort(),
+						User:     hopSrv.User,
+						Password: pwd,
+					})
+				}
 			}
-			hops = append(hops, chain...)
+		}
+	}
+
+	// Server-level internal gateway hops (applied after profile gateway, before destination).
+	// Dedup: if server gateway is the same route as the profile gateway, skip it.
+	if srv.GatewayRouteID != nil && (activeProfile == nil ||
+		activeProfile.GatewayRouteID == nil ||
+		*srv.GatewayRouteID != *activeProfile.GatewayRouteID) {
+		srvGW, err := h.db.Gateways.GetByID(ctx, *srv.GatewayRouteID)
+		if err != nil || srvGW == nil {
+			return nil, fmt.Errorf("server gateway route %d not found", *srv.GatewayRouteID)
+		}
+		for _, gh := range srvGW.Hops {
+			if gh.ServerID == srv.ID {
+				continue
+			}
+			hopSrv, err := h.db.Servers.GetByID(ctx, gh.ServerID)
+			if err != nil || hopSrv == nil {
+				return nil, fmt.Errorf("server gateway hop %d not found", gh.ServerID)
+			}
+			pwd, _ := h.vlt.Get(hopSrv.User + "@" + hopSrv.Host)
+			hops = append(hops, internalssh.HopConfig{
+				Host:     h.resolveHost(ctx, hopSrv.Host),
+				Port:     hopSrv.EffectivePort(),
+				User:     hopSrv.User,
+				Password: pwd,
+			})
 		}
 	}
 
@@ -285,60 +337,4 @@ func (h *Handler) buildHops(ctx context.Context, srv *model.Server, autoGW bool)
 		Password: pwd,
 	})
 	return hops, nil
-}
-
-// resolveGatewayChain follows gateway_server_id links recursively, returning hops
-// in order [outermost-gw ... innermost-gw] (destination appended by caller).
-func (h *Handler) resolveGatewayChain(ctx context.Context, dest *model.Server) ([]internalssh.HopConfig, error) {
-	var chain []internalssh.HopConfig
-	visited := map[int64]bool{dest.ID: true}
-
-	cur := dest
-	for cur.GatewayServerID != nil {
-		gwSrv, err := h.db.Servers.GetByID(ctx, *cur.GatewayServerID)
-		if err != nil || gwSrv == nil {
-			return nil, fmt.Errorf("gateway server %d not found", *cur.GatewayServerID)
-		}
-		if visited[gwSrv.ID] {
-			return nil, fmt.Errorf("gateway loop detected at server %s", gwSrv.Host)
-		}
-		visited[gwSrv.ID] = true
-
-		pwd, _ := h.vlt.Get(gwSrv.User + "@" + gwSrv.Host)
-		// Prepend so the outermost gateway is first.
-		chain = append([]internalssh.HopConfig{{
-			Host:     h.resolveHost(ctx, gwSrv.Host),
-			Port:     gwSrv.EffectivePort(),
-			User:     gwSrv.User,
-			Password: pwd,
-		}}, chain...)
-
-		cur = gwSrv
-	}
-
-	// If the outermost server in the GatewayServerID chain itself has a named
-	// gateway route (GatewayID), prepend those hops to complete the full path.
-	if cur.GatewayID != nil {
-		gwHops, err := h.db.Gateways.HopsFor(ctx, cur.ID)
-		if err != nil {
-			return nil, fmt.Errorf("gateway hops for %s: %w", cur.Host, err)
-		}
-		var prefix []internalssh.HopConfig
-		for _, hop := range gwHops {
-			hopSrv, err := h.db.Servers.GetByID(ctx, hop.ServerID)
-			if err != nil || hopSrv == nil {
-				return nil, fmt.Errorf("gateway hop server %d not found", hop.ServerID)
-			}
-			pwd, _ := h.vlt.Get(hopSrv.User + "@" + hopSrv.Host)
-			prefix = append(prefix, internalssh.HopConfig{
-				Host:     h.resolveHost(ctx, hopSrv.Host),
-				Port:     hopSrv.EffectivePort(),
-				User:     hopSrv.User,
-				Password: pwd,
-			})
-		}
-		chain = append(prefix, chain...)
-	}
-
-	return chain, nil
 }

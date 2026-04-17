@@ -9,51 +9,83 @@ Commands that skip DB initialization are annotated with `alogin:skip-db` in thei
 ## Command hierarchy overview
 
 ```
-alogin compute          Server registry management (alias: server)
-alogin access           Remote connectivity
-alogin auth             Credentials and routing
+alogin server           Server registry management
+alogin app              Named server+plugin bindings
+alogin ssh              Remote connectivity (SSH, SFTP, FTP, SSHFS, cluster)
+alogin vault            Stored credentials
+alogin net              Network resource management (hosts, tunnels, gateways, profiles)
 alogin agent            AI/MCP tools
-alogin net              Network resource management
-alogin app-server       Named server+plugin bindings
 ```
 
 ---
 
-## compute — Server registry
+## server — Server registry
 
-File: `internal/cli/compute.go` (group), `internal/cli/server.go` (subcommands)
-
-Alias: `alogin server` → `alogin compute`
+File: `internal/cli/compute.go` (group), `internal/cli/server.go` (subcommands), `internal/cli/alias.go` (alias subcommand)
 
 ```
-alogin compute add    [--proto ssh] [--host HOST] [--user USER] [--password PW]
-                      [--port N] [--gateway GW] [--locale LOCALE]
-                      [--device-type TYPE] [--note TEXT]
-alogin compute list   [--format table|json]
-alogin compute show   [user@]host
-alogin compute delete [user@]host
-alogin compute passwd [user@]host    # update stored password in vault
-alogin compute getpwd [user@]host    # retrieve password from vault
+alogin server add    [--proto ssh] [--host HOST] [--user USER] [--password PW]
+                     [--port N] [--gateway GW] [--locale LOCALE]
+                     [--device-type TYPE] [--note TEXT]
+alogin server list   [--format table|json]
+alogin server show   [user@]host
+alogin server delete [user@]host
+alogin server passwd [user@]host    # update stored password in vault
+alogin server getpwd [user@]host    # retrieve password from vault
+alogin server alias add    SHORT_NAME HOST
+alogin server alias list   [--format table|json]
+alogin server alias show   SHORT_NAME
+alogin server alias delete SHORT_NAME
 ```
 
 Device type values: `linux` | `windows` | `router` | `switch` | `firewall` | `other`
 
+| Flag | Description |
+|------|-------------|
+| `--gateway` | Per-server internal gateway route (applied *after* the active profile gateway). Use for servers that require an extra internal jump beyond the profile gateway. Full path: `profile.gateway_hops → server.gateway_hops → server`. Omit for servers reachable directly from the profile gateway. |
+
 ---
 
-## access — Remote connectivity
+## app — Named server+plugin bindings
+
+File: `internal/cli/app_server.go`, `internal/cli/plugin.go`
+
+```
+alogin app list    [--format table|json]
+alogin app add     --name NAME --server HOST --app PLUGIN [--desc TEXT]
+alogin app show    NAME
+alogin app delete  NAME                   # aliases: rm, del
+alogin app connect NAME [--cmd COMMAND]
+alogin app plugin list  [--format table|json]
+```
+
+`app` binds a server with an application plugin so a single name launches the correct app (DB client, container shell, etc.) with automatic credential injection.
+
+| Flag | Description |
+|------|-------------|
+| `--name` | Unique binding name |
+| `--server` | Server hostname (must exist in server registry) |
+| `--app` | Plugin name (matches `~/.config/alogin/plugins/<name>.yaml`) |
+| `--desc` | Free-form description |
+| `--cmd` | (connect only) Non-interactive command to run via the plugin |
+| `--format` | `table` (default) or `json` |
+
+---
+
+## ssh — Remote connectivity
 
 File: `internal/cli/access.go` (group)
 
-### `access ssh`
+### `ssh connect`
 File: `internal/cli/connect.go`
 
 ```
-alogin access ssh [user@]host... [flags]
+alogin ssh connect [user@]host... [flags]
 ```
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--auto-gw` | | Force gateway lookup |
+| `--profile` | | Network profile override: name, `none` (direct), or empty (active profile) |
 | `--dry-run` | | Print hop chain, don't connect |
 | `--cmd` | `-c` | Remote command to run |
 | `--local-forward` | `-L` | Local port forward spec |
@@ -62,15 +94,13 @@ alogin access ssh [user@]host... [flags]
 
 Port-forward spec: `PORT` | `LPORT:RPORT` | `LPORT:HOST:RPORT` | `LHOST:LPORT:RHOST:RPORT`
 
-Legacy aliases: `alogin connect` → `alogin access`, `alogin t` (direct), `alogin r` (auto-gateway)
-
-### `access sftp`
+### `ssh sftp`
 File: `internal/cli/sftp.go`
 
 ```
-alogin access sftp [user@]host                    # interactive SFTP
-alogin access sftp [user@]host -p local remote    # upload
-alogin access sftp [user@]host -g remote local    # download
+alogin ssh sftp [user@]host                    # interactive SFTP
+alogin ssh sftp [user@]host -p local remote    # upload
+alogin ssh sftp [user@]host -g remote local    # download
 ```
 
 | Flag | Short | Description |
@@ -78,15 +108,15 @@ alogin access sftp [user@]host -g remote local    # download
 | `--put` | `-p` | Upload file |
 | `--get` | `-g` | Download file |
 
-### `access ftp`
+### `ssh ftp`
 File: `internal/cli/ftp.go` — delegates to system `ftp` binary.
 
-### `access mount`
+### `ssh mount`
 File: `internal/cli/mount.go`
 
 ```
-alogin access mount [user@]host[:path] [local-path]
-alogin access mount --unmount host
+alogin ssh mount [user@]host[:path] [local-path]
+alogin ssh mount --unmount host
 ```
 
 | Flag | Description |
@@ -95,49 +125,101 @@ alogin access mount --unmount host
 
 Default mount path: `~/mnt/{host}`
 
-### `access cluster`
+### `ssh cluster`
 File: `internal/cli/cluster.go`
 
 ```
-alogin access cluster [name]     # interactive picker if no name
-alogin access cluster add [name] [host1] [host2...]
-alogin access cluster list
+alogin ssh cluster [name]     # interactive picker if no name
+alogin ssh cluster add [name] [host1] [host2...]
+alogin ssh cluster list
 ```
 
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--mode` | | tmux \| iterm \| terminal (default: tmux) |
 | `--tile-x` | `-x` | Tile columns for iTerm2/Terminal |
-| `--gateway` | | Override gateway for all members |
+| `--cmd` | `-c` | Run command on all members in parallel (no tmux) |
+| `--format` | | Output format when using `--cmd`: table\|json |
 
 ---
 
-## auth — Credentials and routing
+## vault — Stored credentials
 
-File: `internal/cli/auth_group.go` (group)
+File: `internal/cli/auth_group.go`
 
-### `auth gateway`
+Skips DB init. Uses `ALOGIN_VAULT_PASS` env var for age vault.
+
+```
+alogin vault set    <account>   # account format: user@host
+alogin vault get    <account>
+alogin vault delete <account>
+```
+
+---
+
+## net — Network resources
+
+File: `internal/cli/net.go` (group)
+
+### `net hosts`
+File: `internal/cli/hosts.go` — local hostname→IP mappings (custom DNS table).
+
+```
+alogin net hosts add    HOSTNAME IP [-d DESCRIPTION]
+alogin net hosts list   [--format table|json]
+alogin net hosts show   HOSTNAME
+alogin net hosts update HOSTNAME NEW_IP [-d DESCRIPTION]
+alogin net hosts delete HOSTNAME
+```
+
+Aliases for delete: `del`, `rm`
+
+### `net tunnel`
+File: `internal/cli/tunnel.go` — persistent SSH port-forward tunnels (tmux-backed).
+
+```
+alogin net tunnel add    NAME --server HOST --dir L|R --local-port N
+                              --remote-host H --remote-port N
+                              [--local-host 127.0.0.1]
+alogin net tunnel edit   NAME [same flags as add]
+alogin net tunnel list   [--format table|json]
+alogin net tunnel rm     NAME               # aliases: delete, del
+alogin net tunnel start  NAME               # spawn detached tmux session
+alogin net tunnel stop   NAME               # kill tmux session
+alogin net tunnel status NAME               # print running state
+alogin net tunnel run    NAME               # [hidden] foreground forward (called by tmux)
+```
+
+Tunnel directions: `L` (local forward, `-L LOCAL:REMOTE`) | `R` (reverse, `-R REMOTE:LOCAL`)
+
+### `net gateway`
 File: `internal/cli/gateway.go`
 
 ```
-alogin auth gateway add    NAME hop1 [hop2 ...]
-alogin auth gateway list   [--format table|json]
-alogin auth gateway show   NAME
-alogin auth gateway delete NAME
+alogin net gateway add    NAME hop1 [hop2 ...]
+alogin net gateway list   [--format table|json]
+alogin net gateway show   NAME
+alogin net gateway delete NAME
 ```
 
-### `auth alias`
-File: `internal/cli/alias.go`
+### `net profile`
+File: `internal/cli/profile.go`
 
 ```
-alogin auth alias add    SHORT_NAME HOST
-alogin auth alias list   [--format table|json]
-alogin auth alias show   SHORT_NAME
-alogin auth alias delete SHORT_NAME
+alogin net profile add    NAME [--gateway ROUTE] [--desc TEXT]
+alogin net profile list   [--format table|json]
+alogin net profile show   NAME
+alogin net profile edit   NAME [--gateway ROUTE|none] [--desc TEXT]
+alogin net profile delete NAME
+alogin net profile use    NAME|none
 ```
 
-### `auth vault`
-Phase 2 stub. Uses `ALOGIN_VAULT_PASS` env var for age vault.
+A profile activates a gateway route globally. Once active, all SSH connections automatically route through its gateway — no per-command flags needed. Use `alogin net profile use none` to disable gateway routing.
+
+| Flag | Description |
+|------|-------------|
+| `--gateway` | Gateway route name to attach (use `none` to detach) |
+| `--desc` | Free-form description |
 
 ---
 
@@ -217,70 +299,6 @@ alogin agent server-prompt clear <server-id>
 
 ---
 
-## net — Network resources
-
-File: `internal/cli/net.go` (group)
-
-### `net hosts`
-File: `internal/cli/hosts.go` — local hostname→IP mappings (custom DNS table).
-
-```
-alogin net hosts add    HOSTNAME IP [-d DESCRIPTION]
-alogin net hosts list   [--format table|json]
-alogin net hosts show   HOSTNAME
-alogin net hosts update HOSTNAME NEW_IP [-d DESCRIPTION]
-alogin net hosts delete HOSTNAME
-```
-
-Aliases for delete: `del`, `rm`
-
-### `net tunnel`
-File: `internal/cli/tunnel.go` — persistent SSH port-forward tunnels (tmux-backed).
-
-```
-alogin net tunnel add    NAME --server HOST --dir L|R --local-port N
-                              --remote-host H --remote-port N
-                              [--local-host 127.0.0.1] [--auto-gw]
-alogin net tunnel edit   NAME [same flags as add]
-alogin net tunnel list   [--format table|json]
-alogin net tunnel rm     NAME               # aliases: delete, del
-alogin net tunnel start  NAME               # spawn detached tmux session
-alogin net tunnel stop   NAME               # kill tmux session
-alogin net tunnel status NAME               # print running state
-alogin net tunnel run    NAME               # [hidden] foreground forward (called by tmux)
-```
-
-Tunnel directions: `L` (local forward, `-L LOCAL:REMOTE`) | `R` (reverse, `-R REMOTE:LOCAL`)
-
----
-
-## app-server — Named server+plugin bindings
-
-File: `internal/cli/app_server.go`, `internal/cli/plugin.go`
-
-```
-alogin app-server list    [--format table|json]
-alogin app-server add     --name NAME --server HOST --app PLUGIN [--auto-gw] [--desc TEXT]
-alogin app-server show    NAME
-alogin app-server delete  NAME                   # aliases: rm, del
-alogin app-server connect NAME [--cmd COMMAND]
-alogin app-server plugin list  [--format table|json]
-```
-
-`app-server` binds a compute server with an application plugin so a single name launches the correct app (DB client, container shell, etc.) with automatic credential injection.
-
-| Flag | Description |
-|------|-------------|
-| `--name` | Unique binding name |
-| `--server` | Server hostname (must exist in compute registry) |
-| `--app` | Plugin name (matches `~/.config/alogin/plugins/<name>.yaml`) |
-| `--auto-gw` | Route through gateway when connecting |
-| `--desc` | Free-form description |
-| `--cmd` | (connect only) Non-interactive command to run via the plugin |
-| `--format` | `table` (default) or `json` |
-
----
-
 ## Root-level commands
 
 ### Interactive UIs
@@ -326,6 +344,24 @@ alogin db-migrate
 
 Applies any pending DB schema migrations. Reports current → target version.
 
+#### `doctor`
+File: `internal/cli/doctor.go`
+
+```
+alogin doctor [--fix]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--fix` | Automatically repair issues where safe to do so |
+
+Inspects the database for integrity issues and optionally repairs them. Checks performed:
+
+- Schema version and pending migrations
+- Legacy columns (`gateway_id`, `gateway_server_id`) — migrates data to `gateway_route_id` and drops the columns
+- Referential integrity: gateway route/hop servers, server `gateway_route_id`, cluster members, tunnels, app-servers
+- Plaintext passwords in the DB column (should be in vault)
+
 #### `upgrade`
 File: `internal/cli/upgrade.go`
 
@@ -358,7 +394,7 @@ alogin version
 Skips DB init.
 
 #### `shell-init`
-File: `internal/cli/shell_init.go`
+File: `internal/cli/version.go`
 
 ```
 alogin shell-init [--shell zsh|bash]
@@ -381,10 +417,10 @@ Skips DB init.
 
 ## Adding a new command checklist
 
-When a CLI command is added, changed, or removed — update **all five**:
+When a CLI command is added, changed, or removed — update **all four**:
 
-1. `README.md` — `## 명령어` section (Korean, code block with flags)
-2. `README.en.md` — `## Commands` section (English equivalent)
+1. `README.md` — `## Commands Overview` section
+2. `README.ko.md` — `## 명령어 한눈에 보기` section
 3. `internal/completion/completion.go` — both `ZshScript` and `BashScript` (commands list + case block)
 4. `internal/cli/root.go` — add annotation `alogin:skip-db` if the command doesn't need DB
 5. `docs/cli-command-map.md` — this file

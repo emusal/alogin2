@@ -111,16 +111,14 @@ Bastion을 거쳐야 하는 서버라면, 게이트웨이 라우트를 한 번�
 
 ```bash
 # Bastion 서버를 게이트웨이로 등록 (최대 3홉까지 지원)
-alogin auth gateway add prod-bastion bastion-01
-alogin auth gateway add dmz-chain bastion-01 dmz-relay
+alogin net gateway add prod-bastion bastion-01
+alogin net gateway add dmz-chain bastion-01 dmz-relay
 
 # 서버를 추가할 때 게이트웨이를 함께 지정
-alogin compute add --host 10.0.1.50 --user admin --gateway prod-bastion
+alogin server add --host 10.0.1.50 --user admin --gateway prod-bastion
 
-# 이후엔 그냥 접속하면 됨
+# 이후엔 그냥 접속하면 됨 — 활성 프로파일의 게이트웨이가 자동 적용
 t web-01
-# 또는:
-alogin access ssh web-01 --auto-gw
 ```
 
 중간 서버에서 TCP 포워딩을 막아놨어도(`AllowTcpForwarding no`) 괜찮습니다. alogin2가 자동으로 감지하고 `ssh -tt` 체인 방식으로 전환합니다.
@@ -130,10 +128,10 @@ alogin access ssh web-01 --auto-gw
 서버와 DB 클라이언트(MariaDB, Redis, PostgreSQL, MongoDB 등)를 이름 하나로 묶어두면, 명령 한 번에 SSH 접속 → 클라이언트 실행 → 비밀번호 자동 입력까지 이어집니다.
 
 ```bash
-alogin app-server add --name prod-mysql --server prod-db --app mariadb --auto-gw
-alogin app-server connect prod-mysql                          # 대화형 세션
-alogin app-server connect prod-mysql --cmd "SHOW DATABASES;"  # 비대화형 쿼리
-alogin app-server list --format json
+alogin app add --name prod-mysql --server prod-db --app mariadb
+alogin app connect prod-mysql                          # 대화형 세션
+alogin app connect prod-mysql --cmd "SHOW DATABASES;"  # 비대화형 쿼리
+alogin app list --format json
 ```
 
 플러그인은 `~/.config/alogin/plugins/<name>.yaml` 파일로 정의하며, 실행 명령과 PTY 자동화(expect/send) 시퀀스를 담습니다.
@@ -148,13 +146,13 @@ alogin app-server list --format json
 
 ```bash
 # 클러스터 정의
-alogin access cluster add web-cluster web-01 web-02 web-03
-alogin access cluster add db-shard db-primary db-replica1 db-replica2
+alogin ssh cluster add web-cluster web-01 web-02 web-03
+alogin ssh cluster add db-shard db-primary db-replica1 db-replica2
 
 # 전체를 한 번에 열기
-ct web-cluster                                               # 쉘 단축 명령
-alogin access cluster web-cluster --mode tmux                # tmux (Linux + macOS)
-alogin access cluster web-cluster --mode iterm               # iTerm2 (macOS)
+ct web-cluster                                           # 쉘 단축 명령
+alogin ssh cluster web-cluster --mode tmux               # tmux (Linux + macOS)
+alogin ssh cluster web-cluster --mode iterm              # iTerm2 (macOS)
 ```
 
 ### 동기화 브로드캐스트 타이핑
@@ -175,8 +173,8 @@ tail -f /var/log/app/error.log
 터미널 세션 없이 클러스터 전체에 명령을 던지고 서버별 결과를 한꺼번에 받을 수 있습니다.
 
 ```bash
-alogin access ssh web-cluster --cmd "uptime"
-alogin access ssh db-shard    --cmd "df -h /data"
+alogin ssh connect web-cluster --cmd "uptime"
+alogin ssh connect db-shard    --cmd "df -h /data"
 ```
 
 AI 에이전트에서는 `exec_on_cluster`를 쓰면 병렬 실행 결과가 서버별 JSON으로 돌아옵니다.
@@ -244,9 +242,9 @@ AI 에이전트  ──→  alogin2 MCP  ──→  Vault(저장소)  ──→ 
 
 ```bash
 # 운영자가 미리 준비:
-alogin compute add --host 10.0.0.10 --user admin   # 비밀번호는 Vault에 저장
-alogin compute add --host 10.0.0.11 --user admin
-alogin access cluster add web-cluster 10.0.0.10 10.0.0.11
+alogin server add --host 10.0.0.10 --user admin   # 비밀번호는 Vault에 저장
+alogin server add --host 10.0.0.11 --user admin
+alogin ssh cluster add web-cluster 10.0.0.10 10.0.0.11
 
 # AI는 이름만 가지고 동작:
 # list_servers → [ {id: 1, name: "web-01"}, {id: 2, name: "web-02"} ]
@@ -363,12 +361,12 @@ alogin agent audit tail                    # 실시간 스트리밍 (Ctrl+C로 �
 ## 명령어 한눈에 보기
 
 ```
-alogin compute          서버 등록 및 관리 (add, list, show, edit, remove)
-alogin access           SSH 접속, 클러스터 세션, SCP, SSHFS
-alogin auth             비밀번호 저장, 게이트웨이 라우트, 별칭 관리
+alogin server           서버 등록 및 관리 (add, list, show, alias, ...)
+alogin app              서버 + 앱 플러그인 묶음 관리
+alogin ssh              SSH 접속, SFTP, FTP, SSHFS, 클러스터 세션
+alogin vault            비밀번호 저장소 (set, get, delete)
+alogin net              hosts, 터널, 게이트웨이, 프로파일 관리
 alogin agent            MCP 서버, 정책, 사람 승인, 실행 이력
-alogin net              hosts 항목 관리, 백그라운드 SSH 터널
-alogin app-server       서버 + 앱 플러그인 묶음 관리
 alogin tui              TUI 서버 검색 화면
 alogin web              웹 브라우저 SSH 터미널 + 관리 대시보드
 ```

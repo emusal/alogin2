@@ -36,7 +36,6 @@ type ExecRequest struct {
 	Commands   []string
 	Expect     []ExpectRule
 	TimeoutSec int
-	AutoGW     bool // follow gateway chain stored in the server registry
 }
 
 // ExpectRule is a pattern→response pair for interactive mode.
@@ -74,9 +73,8 @@ func ExecOnServer(ctx context.Context, database *db.DB, vlt vault.Vault, req Exe
 	return execOnServer(ctx, database, vlt, req)
 }
 
-// execOnServer connects to a server (following its gateway chain) and runs commands.
-// It returns one CommandResult per command in non-interactive mode, or one combined
-// result in PTY/interactive mode (when expect rules are provided).
+// execOnServer connects to a server (following the active profile's gateway chain)
+// and runs commands.
 func execOnServer(ctx context.Context, database *db.DB, vlt vault.Vault, req ExecRequest) ([]CommandResult, error) {
 	srv, err := database.Servers.GetByID(ctx, req.ServerID)
 	if err != nil || srv == nil {
@@ -90,7 +88,7 @@ func execOnServer(ctx context.Context, database *db.DB, vlt vault.Vault, req Exe
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	hops, err := buildHopChainGW(ctx, database, vlt, srv, req.AutoGW)
+	hops, err := buildHopChain(ctx, database, vlt, srv)
 	if err != nil {
 		return nil, err
 	}
@@ -192,24 +190,65 @@ func runPTY(client *internalssh.Client, commands []string, rules []ExpectRule) (
 	}}, nil
 }
 
-// buildHopChain constructs the SSH hop list for a server.
-// When autoGW is true (or always in MCP context), gateway chains are followed.
+// buildHopChain constructs the SSH hop list for a server using the active profile.
+// Always follows the active profile's gateway — MCP context doesn't support per-call overrides.
+// Loop prevention: if the destination is one of the gateway hop servers, connect directly.
 func buildHopChain(ctx context.Context, database *db.DB, vlt vault.Vault, srv *model.Server) ([]internalssh.HopConfig, error) {
-	return buildHopChainGW(ctx, database, vlt, srv, true)
-}
-
-func buildHopChainGW(ctx context.Context, database *db.DB, vlt vault.Vault, srv *model.Server, autoGW bool) ([]internalssh.HopConfig, error) {
 	var hops []internalssh.HopConfig
 
-	if autoGW && srv.GatewayID != nil {
-		gwHops, err := database.Gateways.HopsFor(ctx, srv.ID)
-		if err != nil {
-			return nil, fmt.Errorf("gateway hops: %w", err)
+	activeProfile, err := database.Profiles.GetActive(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get active profile: %w", err)
+	}
+
+	if activeProfile != nil && activeProfile.GatewayRouteID != nil {
+		gw, err := database.Gateways.GetByID(ctx, *activeProfile.GatewayRouteID)
+		if err != nil || gw == nil {
+			return nil, fmt.Errorf("profile gateway route not found: %w", err)
 		}
-		for _, h := range gwHops {
+
+		// Loop prevention: if destination is one of the gateway hops, connect directly.
+		isGWHop := false
+		for _, h := range gw.Hops {
+			if h.ServerID == srv.ID {
+				isGWHop = true
+				break
+			}
+		}
+
+		if !isGWHop {
+			for _, h := range gw.Hops {
+				hopSrv, err := database.Servers.GetByID(ctx, h.ServerID)
+				if err != nil || hopSrv == nil {
+					return nil, fmt.Errorf("gateway hop server %d not found", h.ServerID)
+				}
+				pwd, _ := vlt.Get(hopSrv.User + "@" + hopSrv.Host)
+				hops = append(hops, internalssh.HopConfig{
+					Host:     database.Hosts.Resolve(ctx, hopSrv.Host),
+					Port:     hopSrv.EffectivePort(),
+					User:     hopSrv.User,
+					Password: pwd,
+				})
+			}
+		}
+	}
+
+	// Server-level internal gateway hops (applied after profile gateway, before destination).
+	// Dedup: if server gateway is the same route as the profile gateway, skip it.
+	if srv.GatewayRouteID != nil && (activeProfile == nil ||
+		activeProfile.GatewayRouteID == nil ||
+		*srv.GatewayRouteID != *activeProfile.GatewayRouteID) {
+		srvGW, err := database.Gateways.GetByID(ctx, *srv.GatewayRouteID)
+		if err != nil || srvGW == nil {
+			return nil, fmt.Errorf("server gateway route %d not found", *srv.GatewayRouteID)
+		}
+		for _, h := range srvGW.Hops {
+			if h.ServerID == srv.ID {
+				continue
+			}
 			hopSrv, err := database.Servers.GetByID(ctx, h.ServerID)
 			if err != nil || hopSrv == nil {
-				return nil, fmt.Errorf("gateway hop server %d not found", h.ServerID)
+				return nil, fmt.Errorf("server gateway hop %d not found", h.ServerID)
 			}
 			pwd, _ := vlt.Get(hopSrv.User + "@" + hopSrv.Host)
 			hops = append(hops, internalssh.HopConfig{
@@ -219,12 +258,6 @@ func buildHopChainGW(ctx context.Context, database *db.DB, vlt vault.Vault, srv 
 				Password: pwd,
 			})
 		}
-	} else if autoGW && srv.GatewayServerID != nil {
-		chain, err := resolveGatewayChain(ctx, database, vlt, srv)
-		if err != nil {
-			return nil, err
-		}
-		hops = append(hops, chain...)
 	}
 
 	pwd, _ := vlt.Get(srv.User + "@" + srv.Host)
@@ -235,54 +268,4 @@ func buildHopChainGW(ctx context.Context, database *db.DB, vlt vault.Vault, srv 
 		Password: pwd,
 	})
 	return hops, nil
-}
-
-func resolveGatewayChain(ctx context.Context, database *db.DB, vlt vault.Vault, dest *model.Server) ([]internalssh.HopConfig, error) {
-	var chain []internalssh.HopConfig
-	visited := map[int64]bool{dest.ID: true}
-	cur := dest
-	for cur.GatewayServerID != nil {
-		gwSrv, err := database.Servers.GetByID(ctx, *cur.GatewayServerID)
-		if err != nil || gwSrv == nil {
-			return nil, fmt.Errorf("gateway server %d not found", *cur.GatewayServerID)
-		}
-		if visited[gwSrv.ID] {
-			return nil, fmt.Errorf("gateway loop at server %s", gwSrv.Host)
-		}
-		visited[gwSrv.ID] = true
-		pwd, _ := vlt.Get(gwSrv.User + "@" + gwSrv.Host)
-		chain = append([]internalssh.HopConfig{{
-			Host:     database.Hosts.Resolve(ctx, gwSrv.Host),
-			Port:     gwSrv.EffectivePort(),
-			User:     gwSrv.User,
-			Password: pwd,
-		}}, chain...)
-		cur = gwSrv
-	}
-
-	// If the outermost server in the GatewayServerID chain itself has a named
-	// gateway route (GatewayID), prepend those hops to complete the full path.
-	if cur.GatewayID != nil {
-		gwHops, err := database.Gateways.HopsFor(ctx, cur.ID)
-		if err != nil {
-			return nil, fmt.Errorf("gateway hops for %s: %w", cur.Host, err)
-		}
-		var prefix []internalssh.HopConfig
-		for _, h := range gwHops {
-			hopSrv, err := database.Servers.GetByID(ctx, h.ServerID)
-			if err != nil || hopSrv == nil {
-				return nil, fmt.Errorf("gateway hop server %d not found", h.ServerID)
-			}
-			pwd, _ := vlt.Get(hopSrv.User + "@" + hopSrv.Host)
-			prefix = append(prefix, internalssh.HopConfig{
-				Host:     database.Hosts.Resolve(ctx, hopSrv.Host),
-				Port:     hopSrv.EffectivePort(),
-				User:     hopSrv.User,
-				Password: pwd,
-			})
-		}
-		chain = append(prefix, chain...)
-	}
-
-	return chain, nil
 }

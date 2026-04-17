@@ -57,29 +57,29 @@ For tab-completion, install separately (Docker style):
 
 const zshShim = `# alogin v2 shell compatibility shim (zsh)
 # Usage: source <(alogin shell-init)
-function t()         { alogin access ssh "$@" }
-function r()         { alogin access ssh --auto-gw "$@" }
-function s()         { alogin access sftp "$@" }
-function f()         { alogin access ftp "$@" }
-function m()         { alogin access mount "$@" }
-function ct()        { alogin access cluster "$@" }
-function cr()        { alogin access cluster --auto-gw "$@" }
-function addsvr()    { alogin compute add "$@" }
-function delsvr()    { alogin compute delete "$@" }
-function dissvr()    { alogin compute show "$@" }
-function dissvrlist(){ alogin compute list }
-function chgsvr()    { alogin compute update "$@" }
-function chgpwd()    { alogin compute passwd "$@" }
-function addalias()  { alogin auth alias add "$@" }
-function disalias()  { alogin auth alias show "$@" }
+function t()         { alogin ssh connect "$@" }
+function r()         { alogin ssh connect "$@" }
+function s()         { alogin ssh sftp "$@" }
+function f()         { alogin ssh ftp "$@" }
+function m()         { alogin ssh mount "$@" }
+function ct()        { alogin ssh cluster "$@" }
+function cr()        { alogin ssh cluster "$@" }
+function addsvr()    { alogin server add "$@" }
+function delsvr()    { alogin server delete "$@" }
+function dissvr()    { alogin server show "$@" }
+function dissvrlist(){ alogin server list }
+function chgsvr()    { alogin server update "$@" }
+function chgpwd()    { alogin server passwd "$@" }
+function addalias()  { alogin server alias add "$@" }
+function disalias()  { alogin server alias show "$@" }
 function tver()      { alogin version }
 
 # Tab-completion for shim functions.
 # Works immediately on source; does not require alogin completion install.
 if (( $+functions[compdef] )); then
-  _alogin_shim_hosts()   { local -a h; h=(${(f)"$(alogin compute list 2>/dev/null | awk 'NR>2{print $3}')"}); compadd -a h }
-  _alogin_shim_clusters(){ local -a c; c=(${(f)"$(alogin access cluster list 2>/dev/null | awk 'NR>2{print $1}')"}); compadd -a c }
-  _alogin_shim_aliases() { local -a a; a=(${(f)"$(alogin auth alias list 2>/dev/null | awk 'NR>2{print $1}')"}); compadd -a a }
+  _alogin_shim_hosts()   { local -a h; h=(${(f)"$(alogin server list 2>/dev/null | awk 'NR>2{print $3}')"}); compadd -a h }
+  _alogin_shim_clusters(){ local -a c; c=(${(f)"$(alogin ssh cluster list 2>/dev/null | awk 'NR>2{print $1}')"}); compadd -a c }
+  _alogin_shim_aliases() { local -a a; a=(${(f)"$(alogin server alias list 2>/dev/null | awk 'NR>2{print $1}')"}); compadd -a a }
   _alogin_shim_addsvr()  {
     _arguments \
       '--proto[protocol]:proto:(ssh sftp ftp sshfs telnet)' \
@@ -98,27 +98,27 @@ fi
 
 const bashShim = `# alogin v2 shell compatibility shim (bash)
 # Usage: source <(alogin shell-init --shell bash)
-t()         { alogin access ssh "$@"; }
-r()         { alogin access ssh --auto-gw "$@"; }
-s()         { alogin access sftp "$@"; }
-f()         { alogin access ftp "$@"; }
-m()         { alogin access mount "$@"; }
-ct()        { alogin access cluster "$@"; }
-cr()        { alogin access cluster --auto-gw "$@"; }
-addsvr()    { alogin compute add "$@"; }
-delsvr()    { alogin compute delete "$@"; }
-dissvr()    { alogin compute show "$@"; }
-dissvrlist(){ alogin compute list; }
-chgsvr()    { alogin compute update "$@"; }
-chgpwd()    { alogin compute passwd "$@"; }
-addalias()  { alogin auth alias add "$@"; }
-disalias()  { alogin auth alias show "$@"; }
+t()         { alogin ssh connect "$@"; }
+r()         { alogin ssh connect "$@"; }
+s()         { alogin ssh sftp "$@"; }
+f()         { alogin ssh ftp "$@"; }
+m()         { alogin ssh mount "$@"; }
+ct()        { alogin ssh cluster "$@"; }
+cr()        { alogin ssh cluster "$@"; }
+addsvr()    { alogin server add "$@"; }
+delsvr()    { alogin server delete "$@"; }
+dissvr()    { alogin server show "$@"; }
+dissvrlist(){ alogin server list; }
+chgsvr()    { alogin server update "$@"; }
+chgpwd()    { alogin server passwd "$@"; }
+addalias()  { alogin server alias add "$@"; }
+disalias()  { alogin server alias show "$@"; }
 tver()      { alogin version; }
 
 # Tab-completion for shim functions.
-_alogin_shim_hosts()   { COMPREPLY=($(compgen -W "$(alogin compute list 2>/dev/null | awk 'NR>2{print $3}')" -- "${COMP_WORDS[COMP_CWORD]}")); }
-_alogin_shim_clusters(){ COMPREPLY=($(compgen -W "$(alogin access cluster list 2>/dev/null | awk 'NR>2{print $1}')" -- "${COMP_WORDS[COMP_CWORD]}")); }
-_alogin_shim_aliases() { COMPREPLY=($(compgen -W "$(alogin auth alias list 2>/dev/null | awk 'NR>2{print $1}')" -- "${COMP_WORDS[COMP_CWORD]}")); }
+_alogin_shim_hosts()   { COMPREPLY=($(compgen -W "$(alogin server list 2>/dev/null | awk 'NR>2{print $3}')" -- "${COMP_WORDS[COMP_CWORD]}")); }
+_alogin_shim_clusters(){ COMPREPLY=($(compgen -W "$(alogin ssh cluster list 2>/dev/null | awk 'NR>2{print $1}')" -- "${COMP_WORDS[COMP_CWORD]}")); }
+_alogin_shim_aliases() { COMPREPLY=($(compgen -W "$(alogin server alias list 2>/dev/null | awk 'NR>2{print $1}')" -- "${COMP_WORDS[COMP_CWORD]}")); }
 _alogin_shim_addsvr()  { COMPREPLY=($(compgen -W "--proto --host --user --port --gateway --locale" -- "${COMP_WORDS[COMP_CWORD]}")); }
 complete -F _alogin_shim_hosts    t r s f m delsvr dissvr chgpwd
 complete -F _alogin_shim_clusters ct cr

@@ -4,9 +4,10 @@ export interface Server {
   host: string
   user: string
   port: number
-  gateway_id: number | null
-  gateway_server_id: number | null
+  gateway_route_id: number | null
   locale: string
+  device_type: string
+  note: string
   created_at: string
   updated_at: string
 }
@@ -17,9 +18,10 @@ export interface ServerFormData {
   user: string
   password: string
   port: number
-  gateway_id: number | null
-  gateway_server_id: number | null
+  gateway_route_id: number | null
   locale: string
+  device_type: string
+  note: string
 }
 
 export interface GatewayFormData {
@@ -31,6 +33,22 @@ export interface Gateway {
   id: number
   name: string
   hops: { server_id: number; hop_order: number }[]
+}
+
+export interface Profile {
+  id: number
+  name: string
+  description: string
+  is_active: boolean
+  gateway_route_id: number | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ProfileFormData {
+  name: string
+  description: string
+  gateway_route_id: number | null
 }
 
 export interface Cluster {
@@ -71,7 +89,6 @@ export interface Tunnel {
   local_port: number
   remote_host: string
   remote_port: number
-  auto_gw: boolean
   created_at: string
   updated_at: string
 }
@@ -89,7 +106,6 @@ export interface TunnelFormData {
   local_port: number
   remote_host: string
   remote_port: number
-  auto_gw: boolean
 }
 
 export interface AppServer {
@@ -97,7 +113,6 @@ export interface AppServer {
   name: string
   server_id: number
   plugin_name: string
-  auto_gw: boolean
   description: string
   created_at: string
   updated_at: string
@@ -107,7 +122,6 @@ export interface AppServerFormData {
   name: string
   server_id: number
   plugin_name: string
-  auto_gw: boolean
   description: string
 }
 

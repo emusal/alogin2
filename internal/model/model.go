@@ -50,16 +50,18 @@ type Server struct {
 	Host     string   `json:"host"`
 	User     string   `json:"user"`
 	// Password is never stored here at runtime; it is fetched from Vault on demand.
-	Port            int        `json:"port"`              // 0 = use protocol default
-	GatewayID       *int64     `json:"gateway_id"`        // named route from gateway_routes (mirrors gateway_list)
-	GatewayServerID *int64     `json:"gateway_server_id"` // direct server reference (mirrors server_list.gateway)
-	Locale          string     `json:"locale"`            // e.g. "ko_KR.eucKR"; "-" or "" = system default
-	DeviceType      DeviceType `json:"device_type"`                  // linux|windows|router|switch|firewall|other
-	Note            string     `json:"note"`                         // free-form description (LLM context)
-	PolicyYAML      string     `json:"policy_yaml,omitempty"`        // inline YAML policy; "" = use global
-	SystemPrompt    string     `json:"system_prompt,omitempty"`      // per-server LLM system prompt; "" = use global
-	CreatedAt       time.Time  `json:"created_at"`
-	UpdatedAt       time.Time  `json:"updated_at"`
+	Port       int        `json:"port"`        // 0 = use protocol default
+	Locale     string     `json:"locale"`      // e.g. "ko_KR.eucKR"; "-" or "" = system default
+	DeviceType DeviceType `json:"device_type"` // linux|windows|router|switch|firewall|other
+	Note       string     `json:"note"`        // free-form description (LLM context)
+	// GatewayRouteID is the internal gateway route applied after the profile gateway.
+	// Full path: profile.gateway_hops → server.gateway_route_hops → server
+	// nil means connect directly from the profile gateway (or directly if no profile).
+	GatewayRouteID *int64 `json:"gateway_route_id,omitempty"`
+	PolicyYAML   string `json:"policy_yaml,omitempty"`   // inline YAML policy; "" = use global
+	SystemPrompt string `json:"system_prompt,omitempty"` // per-server LLM system prompt; "" = use global
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 // EffectivePort returns the actual TCP port to connect to.
@@ -143,7 +145,6 @@ type Tunnel struct {
 	LocalPort  int             `json:"local_port"`
 	RemoteHost string          `json:"remote_host"`
 	RemotePort int             `json:"remote_port"`
-	AutoGW     bool            `json:"auto_gw"`
 	CreatedAt  time.Time       `json:"created_at"`
 	UpdatedAt  time.Time       `json:"updated_at"`
 }
@@ -154,7 +155,6 @@ type AppServer struct {
 	Name        string    `json:"name"`
 	ServerID    int64     `json:"server_id"`
 	PluginName  string    `json:"plugin_name"`
-	AutoGW      bool      `json:"auto_gw"`
 	Description string    `json:"description"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
@@ -168,12 +168,25 @@ type ConnectOptions struct {
 	TunnelL  []string // -L local:host:remote port forwards
 	TunnelR  []string // -R remote:host:local port forwards
 	DestPath string   // -d: SSHFS/FTP destination path
-	AutoGW   bool     // r-style: auto-resolve gateway chain
-	DryRun   bool     // print route without connecting
-	ScreenID string   // cluster -s: screen id
-	TileX    int      // cluster -x: tile columns
-	Align    string   // cluster --left/--right
-	HostKeys string   // cluster --host_keys
-	Mode     string   // cluster --mode: tmux|iterm|terminal
-	AppName  string   // --app: application plugin name to launch after connecting
+	// ProfileOverride: "" = use active profile, "none" = direct connection, "<name>" = named profile
+	ProfileOverride string
+	DryRun          bool   // print route without connecting
+	ScreenID        string // cluster -s: screen id
+	TileX           int    // cluster -x: tile columns
+	Align           string // cluster --left/--right
+	HostKeys        string // cluster --host_keys
+	Mode            string // cluster --mode: tmux|iterm|terminal
+	AppName         string // --app: application plugin name to launch after connecting
+}
+
+// Profile represents a named network context (e.g. "home", "office", "travel").
+// When active, all SSH connections automatically route through the profile's gateway.
+type Profile struct {
+	ID             int64     `json:"id"`
+	Name           string    `json:"name"`
+	Description    string    `json:"description"`
+	IsActive       bool      `json:"is_active"`
+	GatewayRouteID *int64    `json:"gateway_route_id,omitempty"` // nil = no gateway (direct connections)
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }

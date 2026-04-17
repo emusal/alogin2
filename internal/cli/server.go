@@ -14,24 +14,9 @@ import (
 	"golang.org/x/term"
 )
 
-func newServerCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "server",
-		Short: "Manage servers in the registry",
-	}
-	cmd.AddCommand(
-		newServerAddCmd(),
-		newServerListCmd(),
-		newServerShowCmd(),
-		newServerDeleteCmd(),
-		newServerPasswdCmd(),
-		newServerGetPwdCmd(),
-	)
-	return cmd
-}
 
 func newServerAddCmd() *cobra.Command {
-	var proto, host, user, password, gateway, locale string
+	var proto, host, user, password, locale, gateway string
 	var port int
 
 	cmd := &cobra.Command{
@@ -39,18 +24,21 @@ func newServerAddCmd() *cobra.Command {
 		Short: "Add a server to the registry",
 		Long: `Add a server to the registry.
 
-The --gateway flag sets the gateway route used when connecting with 'r' (--auto-gw).
-Connecting with 't' (direct) ignores the gateway and connects straight to the host.
+The --gateway flag sets a per-server internal gateway route that is always applied
+after the active profile gateway. Use this for servers that require an extra internal
+jump hop beyond the profile gateway.
+
+Full connection path: profile.gateway_hops → server.gateway_hops → server
 
 Examples:
-  # Direct-only server (t web-01 connects directly)
-  alogin compute add --host web-01 --user admin
+  # Server reachable directly from the profile gateway
+  alogin server add --host db-01 --user admin
 
-  # Server reachable only via a gateway (r web-01 goes gw → web-01)
-  alogin compute add --host web-01 --user admin --gateway corp-gw
+  # Server requiring an extra internal jump after the profile gateway
+  alogin server add --host db-01 --user admin --gateway internal-jump
 
-  # Explicit multi-hop with t (no gateway needed in registry):
-  # t gw-01 web-01   →  connects gw-01 then web-01`,
+  # Explicit multi-hop (no gateway needed in registry):
+  # alogin ssh connect gw-01 web-01   →  connects gw-01 then web-01`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			r := bufio.NewReader(os.Stdin)
@@ -80,14 +68,11 @@ Examples:
 			}
 
 			if gateway != "" {
-				// Accept named route (gateway_list) or server hostname (server_list.gateway).
-				if gw, err := database.Gateways.GetByName(ctx, gateway); err == nil && gw != nil {
-					srv.GatewayID = &gw.ID
-				} else if gwSrv, err := database.Servers.GetByHost(ctx, gateway, ""); err == nil && gwSrv != nil {
-					srv.GatewayServerID = &gwSrv.ID
-				} else {
-					return fmt.Errorf("gateway %q not found as a named route or server", gateway)
+				gw, err := database.Gateways.GetByName(ctx, gateway)
+				if err != nil || gw == nil {
+					return fmt.Errorf("gateway route %q not found", gateway)
 				}
+				srv.GatewayRouteID = &gw.ID
 			}
 
 			if err := database.Servers.Create(ctx, srv, password); err != nil {
@@ -111,8 +96,8 @@ Examples:
 	cmd.Flags().StringVar(&user, "user", "", "login user")
 	cmd.Flags().StringVar(&password, "password", "", "password (insecure; prefer interactive prompt)")
 	cmd.Flags().IntVar(&port, "port", 0, "port (0 = protocol default)")
-	cmd.Flags().StringVar(&gateway, "gateway", "", "gateway route name")
 	cmd.Flags().StringVar(&locale, "locale", "", "locale (e.g. ko_KR.eucKR)")
+	cmd.Flags().StringVar(&gateway, "gateway", "", "internal gateway route name (applied after profile gateway)")
 	return cmd
 }
 
@@ -130,30 +115,24 @@ func newServerListCmd() *cobra.Command {
 
 			if format == "json" {
 				type serverJSON struct {
-					ID         int64  `json:"id"`
-					Protocol   string `json:"protocol"`
-					Host       string `json:"host"`
-					User       string `json:"user"`
-					Port       int    `json:"port"`
-					Gateway    string `json:"gateway"`
-					Locale     string `json:"locale"`
-					DeviceType string `json:"device_type"`
-					Note       string `json:"note"`
+					ID             int64  `json:"id"`
+					Protocol       string `json:"protocol"`
+					Host           string `json:"host"`
+					User           string `json:"user"`
+					Port           int    `json:"port"`
+					Locale         string `json:"locale"`
+					DeviceType     string `json:"device_type"`
+					Note           string `json:"note"`
+					GatewayRouteID *int64 `json:"gateway_route_id,omitempty"`
 				}
 				out := make([]serverJSON, 0, len(servers))
 				for _, s := range servers {
-					gw := ""
-					if s.GatewayID != nil {
-						r, _ := database.Gateways.GetByID(ctx, *s.GatewayID)
-						if r != nil {
-							gw = r.Name
-						}
-					}
 					out = append(out, serverJSON{
 						ID: s.ID, Protocol: string(s.Protocol),
 						Host: s.Host, User: s.User, Port: s.Port,
-						Gateway: gw, Locale: s.Locale,
+						Locale: s.Locale,
 						DeviceType: string(s.DeviceType), Note: s.Note,
+						GatewayRouteID: s.GatewayRouteID,
 					})
 				}
 				return printJSON(out)
@@ -164,23 +143,31 @@ func newServerListCmd() *cobra.Command {
 				return nil
 			}
 
+			// Pre-load all gateway routes for display (name lookup)
+			gwCache := map[int64]string{}
+
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tPROTO\tHOST\tUSER\tPORT\tGATEWAY\tLOCALE")
-			fmt.Fprintln(w, "--\t-----\t----\t----\t----\t-------\t------")
+			fmt.Fprintln(w, "ID\tPROTO\tHOST\tUSER\tPORT\tLOCALE\tGATEWAY")
+			fmt.Fprintln(w, "--\t-----\t----\t----\t----\t------\t-------")
 			for _, s := range servers {
-				gw := "-"
-				if s.GatewayID != nil {
-					r, _ := database.Gateways.GetByID(ctx, *s.GatewayID)
-					if r != nil {
-						gw = r.Name
-					}
-				}
 				port := "-"
 				if s.Port > 0 {
 					port = strconv.Itoa(s.Port)
 				}
+				gwName := "-"
+				if s.GatewayRouteID != nil {
+					if name, ok := gwCache[*s.GatewayRouteID]; ok {
+						gwName = name
+					} else {
+						gw, err := database.Gateways.GetByID(context.Background(), *s.GatewayRouteID)
+						if err == nil && gw != nil {
+							gwCache[*s.GatewayRouteID] = gw.Name
+							gwName = gw.Name
+						}
+					}
+				}
 				fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%s\n",
-					s.ID, s.Protocol, s.Host, s.User, port, gw, s.Locale)
+					s.ID, s.Protocol, s.Host, s.User, port, s.Locale, gwName)
 			}
 			return w.Flush()
 		},
@@ -204,24 +191,18 @@ func newServerShowCmd() *cobra.Command {
 			}
 
 			if format == "json" {
-				gwName := ""
-				if srv.GatewayID != nil {
-					r, _ := database.Gateways.GetByID(ctx, *srv.GatewayID)
-					if r != nil {
-						gwName = r.Name
-					}
-				}
 				_, pwdErr := vlt.Get(vaultKey(srv))
 				hasPassword := pwdErr == nil
 				return printJSON(map[string]any{
 					"id": srv.ID, "protocol": string(srv.Protocol),
 					"host": srv.Host, "user": srv.User,
 					"port": srv.Port, "effective_port": srv.EffectivePort(),
-					"locale": srv.Locale, "gateway": gwName,
-					"device_type": string(srv.DeviceType), "note": srv.Note,
-					"has_password":  hasPassword,
-					"policy_yaml":   srv.PolicyYAML,
-					"system_prompt": srv.SystemPrompt,
+					"locale": srv.Locale,
+					"device_type":      string(srv.DeviceType), "note": srv.Note,
+					"gateway_route_id": srv.GatewayRouteID,
+					"has_password":     hasPassword,
+					"policy_yaml":      srv.PolicyYAML,
+					"system_prompt":    srv.SystemPrompt,
 				})
 			}
 
@@ -232,24 +213,15 @@ func newServerShowCmd() *cobra.Command {
 			fmt.Printf("Port:     %d (effective: %d)\n", srv.Port, srv.EffectivePort())
 			fmt.Printf("Locale:   %s\n", srv.Locale)
 
-			if srv.GatewayID != nil {
-				r, _ := database.Gateways.GetByID(ctx, *srv.GatewayID)
-				if r != nil {
-					hops := make([]string, len(r.Hops))
-					for i, h := range r.Hops {
-						hopSrv, _ := database.Servers.GetByID(ctx, h.ServerID)
-						if hopSrv != nil {
-							hops[i] = hopSrv.Host
-						}
-					}
-					fmt.Printf("Gateway:  %s (%s → %s)\n", r.Name,
-						strings.Join(hops, " → "), srv.Host)
+			if srv.GatewayRouteID != nil {
+				gw, err := database.Gateways.GetByID(ctx, *srv.GatewayRouteID)
+				if err == nil && gw != nil {
+					fmt.Printf("Gateway:  %s (route id: %d)\n", gw.Name, gw.ID)
+				} else {
+					fmt.Printf("Gateway:  (route id: %d — not found)\n", *srv.GatewayRouteID)
 				}
-			} else if srv.GatewayServerID != nil {
-				gwSrv, _ := database.Servers.GetByID(ctx, *srv.GatewayServerID)
-				if gwSrv != nil {
-					fmt.Printf("Gateway:  %s@%s (via server)\n", gwSrv.User, gwSrv.Host)
-				}
+			} else {
+				fmt.Printf("Gateway:  (none)\n")
 			}
 
 			pwd, err := vlt.Get(vaultKey(srv))

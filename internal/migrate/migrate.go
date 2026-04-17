@@ -80,34 +80,9 @@ func Run(ctx context.Context, database *db.DB, opts Options) error {
 		if s.Gateway == "" {
 			continue
 		}
-		dbSrv, err := database.Servers.GetByHost(ctx, s.Host, s.User)
-		if err != nil || dbSrv == nil {
-			continue
-		}
-
-		// Case (a): gateway name matches a named route in gateway_list.
-		if route, err := database.Gateways.GetByName(ctx, s.Gateway); err == nil && route != nil {
-			dbSrv.GatewayID = &route.ID
-			if err := database.Servers.Update(ctx, dbSrv, ""); err != nil {
-				log("  WARN: link gateway route for %s: %v", s.Host, err)
-			} else {
-				log("  ~ gateway route %s → %s", s.Host, s.Gateway)
-			}
-			continue
-		}
-
-		// Case (b): gateway is a server hostname — direct server reference.
-		gwSrv, err := database.Servers.GetByHost(ctx, s.Gateway, "")
-		if err != nil || gwSrv == nil {
-			log("  WARN: gateway %q for %s not found in servers or gateway routes", s.Gateway, s.Host)
-			continue
-		}
-		dbSrv.GatewayServerID = &gwSrv.ID
-		if err := database.Servers.Update(ctx, dbSrv, ""); err != nil {
-			log("  WARN: link gateway server for %s: %v", s.Host, err)
-		} else {
-			log("  ~ gateway server %s → %s", s.Host, s.Gateway)
-		}
+		// Gateway linking is no longer supported — profile-based routing replaced
+		// per-server gateway_id/gateway_server_id fields. Log a notice and skip.
+		log("  NOTE: server %s had gateway %q in v1; configure a profile instead", s.Host, s.Gateway)
 	}
 
 	// 4. Aliases

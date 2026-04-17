@@ -16,14 +16,13 @@ export interface TerminalHandle {
 
 interface Props {
   server: Server
-  autoGW?: boolean
   app?: string
   onStatusChange?: (status: 'connecting' | 'connected' | 'disconnected' | 'error') => void
   compact?: boolean
 }
 
 export const Terminal = forwardRef<TerminalHandle, Props>(function Terminal(
-  { server, autoGW = false, app, onStatusChange, compact },
+  { server, app, onStatusChange, compact },
   ref
 ) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -93,7 +92,6 @@ export const Terminal = forwardRef<TerminalHandle, Props>(function Terminal(
     // Connect WebSocket
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const params = new URLSearchParams()
-    if (autoGW) params.set('auto_gw', 'true')
     if (app) params.set('app', app)
     const qs = params.toString() ? '?' + params.toString() : ''
     const wsURL = `${proto}//${window.location.host}/ws/terminal/${server.id}${qs}`
@@ -101,8 +99,7 @@ export const Terminal = forwardRef<TerminalHandle, Props>(function Terminal(
     wsRef.current = ws
 
     ws.onopen = () => {
-      const gwLabel = autoGW ? ' (via GW)' : ''
-      term.write('\x1b[32mConnecting to ' + server.user + '@' + server.host + gwLabel + '...\x1b[0m\r\n')
+      term.write('\x1b[32mConnecting to ' + server.user + '@' + server.host + '...\x1b[0m\r\n')
       onStatusChangeRef.current?.('connected')
     }
 
@@ -152,7 +149,7 @@ export const Terminal = forwardRef<TerminalHandle, Props>(function Terminal(
       ws.close()
       term.dispose()
     }
-  }, [server.id, autoGW])
+  }, [server.id])
 
   return (
     <div className="terminal-container">
