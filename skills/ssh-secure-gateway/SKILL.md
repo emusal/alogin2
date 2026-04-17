@@ -108,6 +108,23 @@ Use `--timeout N` (seconds, default 30) on `exec` for long-running commands.
 
 **When to use one-shot `--cmd` instead:** only when you need a single, truly stateless command and no follow-up commands are expected (e.g., a quick health check in a CI script).
 
+#### Login Shell
+
+By default, the session starts `bash --noprofile --norc`, which skips `.bash_profile` and `.zshrc`.
+This means `PATH` extensions from `nvm`, `pyenv`, `rbenv`, conda, etc. are **not** loaded.
+
+If a command is not found or a tool appears missing, the session was likely started without a login shell.
+Use the MCP `remote_shell` tool with `login_shell: true`, or prefix commands with `bash -l -c`:
+
+```bash
+# MCP: start a login-shell session
+# remote_shell(target=3, login_shell=true)
+
+# CLI workaround: wrap individual commands
+alogin ssh session exec "$id" "bash -l -c 'node --version'"
+alogin ssh session exec "$id" "bash -l -c 'python3 --version'"
+```
+
 ### [Background Execution (bg-exec)](https://github.com/emusal/alogin2#ssh-session)
 
 For long-running commands (package installs, data migrations, large backups) that would time out, use `bg-exec` to fire-and-poll instead of blocking.
@@ -171,6 +188,12 @@ alogin scp pull -r web-01:/var/log/nginx/ ./logs/
 ```
 
 If the destination path ends with `/`, the source filename (or directory name) is appended automatically.
+
+> **Agent tip — skip the file round-trip:** When you want to upload and immediately run a script, use the MCP `run_script` tool instead of `push_file` + `remote_shell`. It accepts the script as a string, uploads it via SFTP, executes it, and deletes the temp file in one atomic call — no quoting, no temp-path management.
+>
+> ```json
+> {"tool": "run_script", "arguments": {"server_id": "3", "content": "#!/bin/bash\nnginx -t", "intent": "test nginx config"}}
+> ```
 
 ### [Net (Gateway, Profile, Tunnels & DNS)](https://github.com/emusal/alogin2#multi-hop-gateway-routing)
 

@@ -18,9 +18,12 @@ import (
 // remoteShellSession holds one persistent SSH connection and its managed bash
 // process for a remote_shell session.
 type remoteShellSession struct {
-	chain    *internalssh.ChainedClient
-	managed  *internalssh.ManagedSession
-	serverID int64
+	chain      *internalssh.ChainedClient
+	managed    *internalssh.ManagedSession
+	serverID   int64
+	loginShell bool
+	// hops is stored so the session can reconnect after an i/o timeout.
+	hops []internalssh.HopConfig
 }
 
 // remoteShellStore is a process-global in-memory map of active sessions.
@@ -71,6 +74,7 @@ func newRemoteShellHandler(d Deps) func(context.Context, mcpgo.CallToolRequest) 
 		if timeoutSec <= 0 {
 			timeoutSec = 120
 		}
+		loginShell, _ := args["login_shell"].(bool)
 
 		// Resolve or create session.
 		var sess *remoteShellSession
@@ -121,16 +125,18 @@ func newRemoteShellHandler(d Deps) func(context.Context, mcpgo.CallToolRequest) 
 				return toolError(fmt.Sprintf("dial: %v", err)), nil
 			}
 
-			managed, err := internalssh.NewManagedSession(chain.Terminal())
+			managed, err := internalssh.NewManagedSession(chain.Terminal(), loginShell)
 			if err != nil {
 				chain.CloseAll()
 				return toolError(fmt.Sprintf("start managed session: %v", err)), nil
 			}
 			sessionID = uuid.New().String()
 			sess = &remoteShellSession{
-				chain:    chain,
-				managed:  managed,
-				serverID: serverID,
+				chain:      chain,
+				managed:    managed,
+				serverID:   serverID,
+				loginShell: loginShell,
+				hops:       hops,
 			}
 			globalShellStore.put(sessionID, sess)
 			isNew = true
@@ -195,9 +201,28 @@ func newRemoteShellHandler(d Deps) func(context.Context, mcpgo.CallToolRequest) 
 		}
 
 		// Stateful execution via persistent bash: cwd and env are preserved.
+		// On i/o error (e.g. timeout dropped the TCP connection), attempt one
+		// automatic reconnect so the agent can keep using the same session_id.
 		result, execErr := sess.managed.Exec(ctx, command, time.Duration(timeoutSec)*time.Second)
 		if execErr != nil {
-			return toolError(fmt.Sprintf("exec: %v", execErr)), nil
+			reconnected, reconnErr := reconnectSession(sess)
+			if reconnErr != nil {
+				// Both original exec and reconnect failed — give up.
+				globalShellStore.delete(sessionID)
+				return toolError(fmt.Sprintf("exec failed and reconnect failed: %v; reconnect: %v", execErr, reconnErr)), nil
+			}
+			// Retry the command on the fresh connection.
+			result, execErr = reconnected.managed.Exec(ctx, command, time.Duration(timeoutSec)*time.Second)
+			if execErr != nil {
+				globalShellStore.delete(sessionID)
+				return toolError(fmt.Sprintf("exec after reconnect: %v", execErr)), nil
+			}
+			return toolJSON(map[string]any{
+				"session_id":  sessionID,
+				"output":      result.Output,
+				"exit_code":   result.ExitCode,
+				"reconnected": true,
+			})
 		}
 		return toolJSON(map[string]any{
 			"session_id": sessionID,
@@ -205,6 +230,29 @@ func newRemoteShellHandler(d Deps) func(context.Context, mcpgo.CallToolRequest) 
 			"exit_code":  result.ExitCode,
 		})
 	}
+}
+
+// reconnectSession tears down the stale SSH connection in sess and establishes
+// a fresh one using the stored hop configuration. On success, sess is updated
+// in-place in the global store and returned; on failure the caller should
+// evict the session.
+func reconnectSession(sess *remoteShellSession) (*remoteShellSession, error) {
+	// Best-effort cleanup of the dead connection.
+	_ = sess.managed.Close()
+	sess.chain.CloseAll()
+
+	chain, err := internalssh.DialChain(sess.hops)
+	if err != nil {
+		return nil, fmt.Errorf("dial: %w", err)
+	}
+	managed, err := internalssh.NewManagedSession(chain.Terminal(), sess.loginShell)
+	if err != nil {
+		chain.CloseAll()
+		return nil, fmt.Errorf("managed session: %w", err)
+	}
+	sess.chain = chain
+	sess.managed = managed
+	return sess, nil
 }
 
 // runPTYCommand runs a single command in a PTY session with a timeout, collecting

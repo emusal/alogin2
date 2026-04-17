@@ -769,10 +769,25 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 		mcpgo.WithString("command", mcpgo.Description("Command to execute. Empty or omit to establish session only. Use 'exit' to close.")),
 		mcpgo.WithString("session_id", mcpgo.Description("Reuse existing persistent session ID. Omit to create a new session.")),
 		mcpgo.WithBoolean("pty", mcpgo.Description("Allocate a PTY for this command. Required for TUI programs (top, watch, vi, htop, etc.) that need TERM set. Default false.")),
+		mcpgo.WithBoolean("login_shell", mcpgo.Description("Start bash as a login shell (bash -l) so ~/.bash_profile is sourced. Enables PATH, nvm, pyenv, rbenv etc. Default false.")),
 		mcpgo.WithString("agent_id", mcpgo.Description("Optional: identifier for the calling agent")),
 		mcpgo.WithString("intent", mcpgo.Description("Optional: human-readable intent (logged to audit trail)")),
 		mcpgo.WithNumber("timeout_sec", mcpgo.Description("Command timeout in seconds (default 120). For PTY commands this is a hard cutoff — the command is sent SIGINT after this duration.")),
 	), newRemoteShellHandler(d))
+
+	// --- run_script ---
+	srv.AddTool(mcpgo.NewTool("run_script",
+		mcpgo.WithDescription(`Upload and execute a script on a remote server in a single atomic call.
+Accepts the script as a string (no local file needed). The script is uploaded to a temp path via SFTP,
+executed, then automatically deleted. Eliminates the need for push_file + remote_shell + quoting gymnastics.`),
+		mcpgo.WithString("server_id", mcpgo.Description("Server ID (from list_servers)"), mcpgo.Required()),
+		mcpgo.WithString("content", mcpgo.Description("Script content to upload and run"), mcpgo.Required()),
+		mcpgo.WithString("interpreter", mcpgo.Description("Interpreter to run the script with (default: bash). Examples: bash, python3, sh, ruby")),
+		mcpgo.WithBoolean("login_shell", mcpgo.Description("Run via a login shell (bash -l) so ~/.bash_profile is sourced. Enables PATH, nvm, pyenv, etc. Default false.")),
+		mcpgo.WithNumber("timeout_sec", mcpgo.Description("Execution timeout in seconds (default 120)")),
+		mcpgo.WithString("agent_id", mcpgo.Description("Optional: identifier for the calling agent")),
+		mcpgo.WithString("intent", mcpgo.Description("Optional: human-readable intent (logged to audit trail)")),
+	), newRunScriptHandler(d))
 
 	// --- push_file ---
 	srv.AddTool(mcpgo.NewTool("push_file",

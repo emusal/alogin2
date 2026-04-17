@@ -163,6 +163,24 @@ func (s *SFTPClient) expandRemoteTilde(p string) string {
 	return p
 }
 
+// UploadContent writes p directly to remotePath without needing a local file.
+func (s *SFTPClient) UploadContent(p []byte, remotePath string) error {
+	remotePath = s.expandRemoteTilde(remotePath)
+	if err := s.cl.MkdirAll(path.Dir(remotePath)); err != nil {
+		return fmt.Errorf("mkdir remote %s: %w", path.Dir(remotePath), err)
+	}
+	dst, err := s.cl.Create(remotePath)
+	if err != nil {
+		return fmt.Errorf("create remote %s: %w", remotePath, err)
+	}
+	defer dst.Close()
+	if _, err := dst.Write(p); err != nil {
+		return fmt.Errorf("write %s: %w", remotePath, err)
+	}
+	// Make executable so the caller can run it directly.
+	return s.cl.Chmod(remotePath, 0700)
+}
+
 // Upload copies a local file to the remote path.
 // If remotePath is an existing directory (or ends with / or .), the local
 // filename is appended automatically, mirroring scp(1) behaviour.

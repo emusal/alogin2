@@ -35,7 +35,10 @@ type ExecResult struct {
 // bash is started with --norc --noprofile to suppress banner output that
 // could interfere with sentinel detection. stderr is merged into stdout at
 // the shell level (2>&1) to preserve write ordering across the single pipe.
-func NewManagedSession(client *Client) (*ManagedSession, error) {
+//
+// When loginShell is true, bash is invoked as "bash -l" instead, which loads
+// ~/.bash_profile and ~/.profile so PATH, nvm, pyenv, etc. are available.
+func NewManagedSession(client *Client, loginShell bool) (*ManagedSession, error) {
 	sess, err := client.inner.NewSession()
 	if err != nil {
 		return nil, fmt.Errorf("new ssh session: %w", err)
@@ -54,7 +57,11 @@ func NewManagedSession(client *Client) (*ManagedSession, error) {
 		return nil, fmt.Errorf("stdout pipe: %w", err)
 	}
 
-	if err := sess.Start("bash --norc --noprofile 2>&1"); err != nil {
+	bashCmd := "bash --norc --noprofile 2>&1"
+	if loginShell {
+		bashCmd = "bash -l 2>&1"
+	}
+	if err := sess.Start(bashCmd); err != nil {
 		stdin.Close()
 		sess.Close()
 		return nil, fmt.Errorf("start bash: %w", err)

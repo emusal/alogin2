@@ -130,7 +130,7 @@ func newSessionJobRunCmd() *cobra.Command {
 			}
 			defer chain.CloseAll()
 
-			managed, err := internalssh.NewManagedSession(chain.Terminal())
+			managed, err := internalssh.NewManagedSession(chain.Terminal(), false)
 			if err != nil {
 				fail("managed session: " + err.Error())
 				return nil

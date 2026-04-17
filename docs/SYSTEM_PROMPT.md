@@ -32,7 +32,7 @@ Safety rules:
 
 ## Overview
 
-alogin exposes 12 MCP tools over stdio (JSON-RPC 2.0). It manages:
+alogin exposes 15 MCP tools over stdio (JSON-RPC 2.0). It manages:
 - A server registry with encrypted credential vault
 - Multi-hop SSH gateway routing
 - Cluster session groups
@@ -175,7 +175,9 @@ Run SSH commands on all servers in a cluster in parallel. Individual failures ar
 #### `remote_shell`
 **Primary and preferred tool for ALL remote shell access.** Use this first for any remote server interaction. Provides a persistent SSH connection identified by a `session_id` — call it repeatedly with the same `session_id` to run multiple commands on the same server.
 
-> **Note:** Each command opens a fresh SSH channel on the persistent connection (SSH multiplexing). This means `cd` does not carry over between calls. Chain state into one command: `cd /path && ls`.
+> **Note:** Each command runs inside a persistent bash process, so `cd`, exported variables, and shell state carry over between calls.
+>
+> **Reconnect:** If an i/o timeout drops the TCP connection, `remote_shell` automatically reconnects and retries the command on the same `session_id`. The response will include `"reconnected": true`.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -183,6 +185,7 @@ Run SSH commands on all servers in a cluster in parallel. Individual failures ar
 | `command` | string | no | Command to run. Omit to establish session only. Use `"exit"` to close. |
 | `session_id` | string | no | Reuse an existing session. Omit to create a new one. |
 | `pty` | boolean | no | Allocate a PTY. Required for TUI programs: `top`, `watch`, `vi`, `htop`, etc. Default false. |
+| `login_shell` | boolean | no | Start bash as a login shell (`bash -l`) to source `~/.bash_profile`. Enables PATH, nvm, pyenv, rbenv, etc. Default false. |
 | `timeout_sec` | number | no | Per-command timeout in seconds (default 120). PTY commands are sent SIGINT after this duration. |
 | `agent_id` | string | no | Agent identifier (logged to audit) |
 | `intent` | string | no | Human-readable intent (logged to audit) |
@@ -205,6 +208,40 @@ Session lifecycle example:
 Returns on command execution:
 ```json
 {"session_id": "abc-123", "results": [{"command": "ls /var/log", "output": "...", "exit_code": 0}]}
+```
+
+---
+
+#### `run_script`
+Upload and execute a script on a remote server in a single atomic call. The script content is passed as a string — no local file or quoting gymnastics required. The script is uploaded to a temp path via SFTP, executed, then automatically deleted.
+
+**Use this instead of `push_file` + `remote_shell` when you want to run a multi-line script.**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `server_id` | string/number | yes | Server ID from list_servers |
+| `content` | string | yes | Script source code to upload and run |
+| `interpreter` | string | no | Interpreter to use (default: `bash`). Examples: `python3`, `sh`, `ruby` |
+| `login_shell` | boolean | no | Run via a login shell (`bash -l`) so `~/.bash_profile` is sourced. Default false. |
+| `timeout_sec` | number | no | Execution timeout in seconds (default 120) |
+| `agent_id` | string | no | Agent identifier (logged to audit) |
+| `intent` | string | no | Human-readable intent (logged to audit) |
+
+Example:
+```json
+{
+  "tool": "run_script",
+  "arguments": {
+    "server_id": "3",
+    "content": "#!/bin/bash\napt list --installed 2>/dev/null | grep nginx",
+    "intent": "check nginx version"
+  }
+}
+```
+
+Returns:
+```json
+{"server_id": 3, "output": "nginx/stable,now 1.24.0 ...", "exit_code": 0}
 ```
 
 ---
