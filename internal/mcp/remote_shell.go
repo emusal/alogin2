@@ -74,7 +74,10 @@ func newRemoteShellHandler(d Deps) func(context.Context, mcpgo.CallToolRequest) 
 		if timeoutSec <= 0 {
 			timeoutSec = 120
 		}
-		loginShell, _ := args["login_shell"].(bool)
+		loginShell := true
+		if v, ok := args["login_shell"]; ok {
+			loginShell, _ = v.(bool)
+		}
 
 		// Resolve or create session.
 		var sess *remoteShellSession
@@ -160,15 +163,27 @@ func newRemoteShellHandler(d Deps) func(context.Context, mcpgo.CallToolRequest) 
 			})
 		}
 
-		// No command: session established, return ID.
+		// No command: session established — return ID plus current context
+		// (user, cwd) so the agent knows where it landed without extra calls.
 		if strings.TrimSpace(command) == "" {
 			status := "ready"
 			if isNew {
 				status = "created"
 			}
+			ctx2 := map[string]string{}
+			if r, err := sess.managed.Exec(ctx, "whoami && pwd", 10*time.Second); err == nil {
+				lines := strings.SplitN(strings.TrimSpace(r.Output), "\n", 2)
+				if len(lines) >= 1 {
+					ctx2["user"] = strings.TrimSpace(lines[0])
+				}
+				if len(lines) >= 2 {
+					ctx2["pwd"] = strings.TrimSpace(lines[1])
+				}
+			}
 			return toolJSON(map[string]any{
 				"session_id": sessionID,
 				"status":     status,
+				"context":    ctx2,
 			})
 		}
 

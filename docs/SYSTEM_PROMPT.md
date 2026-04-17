@@ -26,13 +26,14 @@ Safety rules:
 - If a server has device_type "router", "switch", or "firewall", do not assume standard Linux commands work
 - When managing tunnels, check list_tunnels first to avoid starting duplicates
 - For any remote shell task, always try remote_shell first before exec_command
+- To edit a remote file, prefer remote_replace over cat+run_script; it is safer and handles special characters correctly
 ```
 
 ---
 
 ## Overview
 
-alogin exposes 15 MCP tools over stdio (JSON-RPC 2.0). It manages:
+alogin exposes 16 MCP tools over stdio (JSON-RPC 2.0). It manages:
 - A server registry with encrypted credential vault
 - Multi-hop SSH gateway routing
 - Cluster session groups
@@ -185,7 +186,7 @@ Run SSH commands on all servers in a cluster in parallel. Individual failures ar
 | `command` | string | no | Command to run. Omit to establish session only. Use `"exit"` to close. |
 | `session_id` | string | no | Reuse an existing session. Omit to create a new one. |
 | `pty` | boolean | no | Allocate a PTY. Required for TUI programs: `top`, `watch`, `vi`, `htop`, etc. Default false. |
-| `login_shell` | boolean | no | Start bash as a login shell (`bash -l`) to source `~/.bash_profile`. Enables PATH, nvm, pyenv, rbenv, etc. Default false. |
+| `login_shell` | boolean | no | Start bash as a login shell (`bash -l`) to source `~/.bash_profile`. Enables PATH, nvm, pyenv, rbenv, etc. **Default true.** Set `false` only when a pristine environment is required. |
 | `timeout_sec` | number | no | Per-command timeout in seconds (default 120). PTY commands are sent SIGINT after this duration. |
 | `agent_id` | string | no | Agent identifier (logged to audit) |
 | `intent` | string | no | Human-readable intent (logged to audit) |
@@ -243,6 +244,27 @@ Returns:
 ```json
 {"server_id": 3, "output": "nginx/stable,now 1.24.0 ...", "exit_code": 0}
 ```
+
+---
+
+#### `remote_replace`
+Safely replace a string inside a remote file in-place. Reads the file, substitutes `old_string` with `new_string`, and writes it back. Use this instead of `cat` + `run_script` when editing config files or code — it avoids full-file overwrites and handles arbitrary special characters safely.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `server_id` | string/number | yes | Server ID from list_servers |
+| `path` | string | yes | Absolute path of the remote file to edit |
+| `old_string` | string | yes | Exact literal string to search for (case-sensitive, not a regex) |
+| `new_string` | string | yes | Replacement string. May be empty to delete `old_string`. |
+| `all` | boolean | no | Replace all occurrences. Default true. Set false for first-only. |
+| `agent_id` | string | no | Agent identifier (logged) |
+| `intent` | string | no | Human-readable intent (logged) |
+
+Returns:
+```json
+{"server_id": 3, "path": "/etc/nginx/nginx.conf", "replaced": 2}
+```
+`replaced: 0` means `old_string` was not found; the file is unchanged.
 
 ---
 

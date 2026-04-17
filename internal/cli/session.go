@@ -166,40 +166,70 @@ func newSessionStartCmd() *cobra.Command {
 	return cmd
 }
 
+// withUTF8 wraps command with an inline env prefix that forces UTF-8 locale.
+// This ensures stdout is UTF-8 regardless of the server's default locale.
+func withUTF8(command string) string {
+	return `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 ` + command
+}
+
 func newSessionExecCmd() *cobra.Command {
 	var timeoutSec int
+	var idleTimeoutSec int
+	var forceUTF8 bool
 	cmd := &cobra.Command{
 		Use:   "exec <session-id> <command>",
 		Short: "Execute a command in an existing session",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, command := args[0], args[1]
+			if forceUTF8 {
+				command = withUTF8(command)
+			}
 
 			if !sessionIsRunning(id) {
 				return fmt.Errorf("session %q is not running", id)
 			}
 
-			timeout := time.Duration(timeoutSec) * time.Second
+			wallTimeout := time.Duration(timeoutSec) * time.Second
+			idleTimeout := time.Duration(idleTimeoutSec) * time.Second
+
 			conn, err := net.DialTimeout("unix", sessionSock(id), 5*time.Second)
 			if err != nil {
 				return fmt.Errorf("connect to session: %w", err)
 			}
 			defer conn.Close()
 
-			// Send command.
-			if _, err := fmt.Fprintln(conn, command); err != nil {
+			// Set a hard wall-clock deadline on the connection so the client
+			// unblocks no later than wallTimeout after sending the command.
+			// The server side enforces the same wall timeout via ManagedSession.Exec,
+			// so in practice the sentinel always arrives before this fires.
+			if wallTimeout > 0 {
+				_ = conn.SetDeadline(time.Now().Add(wallTimeout))
+			}
+
+			// Send timeout header then command so the run bridge can forward the
+			// same wall timeout to ManagedSession.Exec.
+			if _, err := fmt.Fprintf(conn, "__ALOGIN_TIMEOUT_%d\n%s\n", timeoutSec, command); err != nil {
 				return fmt.Errorf("send command: %w", err)
 			}
 
-			// Read response until sentinel, honouring timeout.
-			_ = conn.SetDeadline(time.Now().Add(timeout))
 			scanner := bufio.NewScanner(conn)
 			exitCode := 0
 			for scanner.Scan() {
+				// Reset idle deadline on every received line when --idle-timeout is set.
+				if idleTimeout > 0 {
+					_ = conn.SetDeadline(time.Now().Add(idleTimeout))
+				}
 				line := scanner.Text()
 				if strings.HasPrefix(line, "__ALOGIN_EXIT_") {
 					fmt.Sscanf(strings.TrimPrefix(line, "__ALOGIN_EXIT_"), "%d", &exitCode)
 					break
+				}
+				// Error messages from the session bridge go to stderr so they
+				// don't pollute stdout that callers may be parsing.
+				if strings.HasPrefix(line, sessionErrPrefix) {
+					fmt.Fprintln(os.Stderr, strings.TrimPrefix(line, sessionErrPrefix))
+					continue
 				}
 				fmt.Println(line)
 			}
@@ -212,7 +242,9 @@ func newSessionExecCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().IntVar(&timeoutSec, "timeout", 30, "command timeout in seconds")
+	cmd.Flags().IntVar(&timeoutSec, "timeout", 30, "wall-clock timeout in seconds — the command is interrupted after this duration regardless of output activity (default 30)")
+	cmd.Flags().IntVar(&idleTimeoutSec, "idle-timeout", 0, "idle timeout in seconds — cut the connection if no output is received for this long (0 = disabled)")
+	cmd.Flags().BoolVar(&forceUTF8, "force-utf8", false, "Force LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 for the command (prevents garbled multi-byte output)")
 	return cmd
 }
 
@@ -310,7 +342,7 @@ func newSessionRunCmd() *cobra.Command {
 			}
 			defer chain.CloseAll()
 
-			managed, err := internalssh.NewManagedSession(chain.Terminal(), false)
+			managed, err := internalssh.NewManagedSession(chain.Terminal(), true)
 			if err != nil {
 				return fmt.Errorf("start managed session: %w", err)
 			}
@@ -350,25 +382,64 @@ func newSessionRunCmd() *cobra.Command {
 	}
 }
 
+// Wire protocol:
+//   exec → run : optional "__ALOGIN_TIMEOUT_<sec>\n" header, then "<command>\n"
+//   run  → exec : <output lines...> then "__ALOGIN_EXIT_<N>\n"
+//   run  → exec : error lines are prefixed with "__ALOGIN_ERR_"
+const sessionErrPrefix = "__ALOGIN_ERR_"
+const sessionTimeoutPrefix = "__ALOGIN_TIMEOUT_"
+
 // handleSessionConn reads one command from conn, executes it via managed,
 // and writes the output + sentinel back.
+//
+// If the client sends a "__ALOGIN_TIMEOUT_<sec>" header line before the command,
+// that value is used as the wall-clock timeout for ManagedSession.Exec.
+// This allows the exec client to set a matching deadline on both ends so the
+// server interrupts the running command at exactly the same time the client
+// gives up reading.
 func handleSessionConn(ctx context.Context, conn net.Conn, managed *internalssh.ManagedSession) {
 	defer conn.Close()
 
 	reader := bufio.NewReader(conn)
-	line, err := reader.ReadString('\n')
+
+	// Read the first line: may be a timeout header or the command itself.
+	first, err := reader.ReadString('\n')
 	if err != nil && err != io.EOF {
 		return
 	}
-	command := strings.TrimRight(line, "\r\n")
-	if command == "" {
-		// Probe connection from start (readiness check) — just close.
+	first = strings.TrimRight(first, "\r\n")
+	if first == "" {
+		// Probe connection from session start (readiness check) — just close.
 		return
 	}
 
-	result, execErr := managed.Exec(ctx, command, 0)
+	var timeout time.Duration
+	var command string
+
+	if strings.HasPrefix(first, sessionTimeoutPrefix) {
+		var secs int
+		fmt.Sscanf(strings.TrimPrefix(first, sessionTimeoutPrefix), "%d", &secs)
+		if secs > 0 {
+			timeout = time.Duration(secs) * time.Second
+		}
+		// Read the actual command on the next line.
+		second, err := reader.ReadString('\n')
+		if err != nil && err != io.EOF {
+			return
+		}
+		command = strings.TrimRight(second, "\r\n")
+	} else {
+		// No header — legacy client or probe; first line is the command.
+		command = first
+	}
+
+	if command == "" {
+		return
+	}
+
+	result, execErr := managed.Exec(ctx, command, timeout)
 	if execErr != nil {
-		fmt.Fprintf(conn, "[error: %v]\n", execErr)
+		fmt.Fprintf(conn, "%s%v\n", sessionErrPrefix, execErr)
 		fmt.Fprintf(conn, "__ALOGIN_EXIT_1\n")
 		return
 	}

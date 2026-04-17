@@ -23,6 +23,7 @@ func newConnectCmd() *cobra.Command {
 		tunnelL         []string
 		tunnelR         []string
 		appName         string
+		forceUTF8       bool
 	)
 
 	cmd := &cobra.Command{
@@ -58,6 +59,9 @@ Other options:
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 
+			if forceUTF8 && command != "" {
+				command = withUTF8(command)
+			}
 			opts := &model.ConnectOptions{
 				Command:         command,
 				ProfileOverride: profileOverride,
@@ -90,6 +94,7 @@ Other options:
 	cmd.Flags().StringArrayVarP(&tunnelL, "local-forward", "L", nil, "local port forward: PORT | LPORT:RPORT | LPORT:host:RPORT | lhost:LPORT:host:RPORT")
 	cmd.Flags().StringArrayVarP(&tunnelR, "remote-forward", "R", nil, "remote port forward (SSH -R): RPORT:lhost:LPORT | rhost:RPORT:lhost:LPORT")
 	cmd.Flags().StringVar(&appName, "app", "", "application plugin to launch after connecting (e.g. mariadb)")
+	cmd.Flags().BoolVar(&forceUTF8, "force-utf8", false, "Force LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 for --cmd (prevents garbled multi-byte output)")
 
 	return cmd
 }

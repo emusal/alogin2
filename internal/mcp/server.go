@@ -12,6 +12,7 @@ func NewServer(d Deps) *server.MCPServer {
 		server.WithToolCapabilities(false),
 	)
 	RegisterTools(srv, d)
+	RegisterBgExecTools(srv, d)
 	return srv
 }
 

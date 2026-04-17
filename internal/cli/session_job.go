@@ -130,7 +130,7 @@ func newSessionJobRunCmd() *cobra.Command {
 			}
 			defer chain.CloseAll()
 
-			managed, err := internalssh.NewManagedSession(chain.Terminal(), false)
+			managed, err := internalssh.NewManagedSession(chain.Terminal(), true)
 			if err != nil {
 				fail("managed session: " + err.Error())
 				return nil
@@ -228,7 +228,8 @@ func newSessionJobStatusCmd() *cobra.Command {
 }
 
 func newSessionJobLogsCmd() *cobra.Command {
-	return &cobra.Command{
+	var follow bool
+	cmd := &cobra.Command{
 		Use:   "logs <job-id>",
 		Short: "Print the captured output of a background job",
 		Args:  cobra.ExactArgs(1),
@@ -238,17 +239,47 @@ func newSessionJobLogsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			j, err := database.Jobs.Get(ctx, id)
-			if err != nil {
-				return err
+
+			if !follow {
+				j, err := database.Jobs.Get(ctx, id)
+				if err != nil {
+					return err
+				}
+				if j == nil {
+					return fmt.Errorf("job %s not found", args[0])
+				}
+				fmt.Print(j.Output)
+				return nil
 			}
-			if j == nil {
-				return fmt.Errorf("job %s not found", args[0])
+
+			// --follow: poll DB output incrementally until job finishes.
+			printed := 0
+			for {
+				j, err := database.Jobs.Get(ctx, id)
+				if err != nil {
+					return err
+				}
+				if j == nil {
+					return fmt.Errorf("job %s not found", args[0])
+				}
+				if len(j.Output) > printed {
+					fmt.Print(j.Output[printed:])
+					printed = len(j.Output)
+				}
+				if j.Status != db.JobPending && j.Status != db.JobRunning {
+					fmt.Fprintf(os.Stderr, "\n[job %s: %s", id[:8], j.Status)
+					if j.ExitCode != nil {
+						fmt.Fprintf(os.Stderr, ", exit %d", *j.ExitCode)
+					}
+					fmt.Fprintln(os.Stderr, "]")
+					return nil
+				}
+				time.Sleep(500 * time.Millisecond)
 			}
-			fmt.Print(j.Output)
-			return nil
 		},
 	}
+	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "Stream output until the job finishes")
+	return cmd
 }
 
 func newSessionJobListCmd() *cobra.Command {

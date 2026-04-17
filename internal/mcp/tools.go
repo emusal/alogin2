@@ -769,7 +769,7 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 		mcpgo.WithString("command", mcpgo.Description("Command to execute. Empty or omit to establish session only. Use 'exit' to close.")),
 		mcpgo.WithString("session_id", mcpgo.Description("Reuse existing persistent session ID. Omit to create a new session.")),
 		mcpgo.WithBoolean("pty", mcpgo.Description("Allocate a PTY for this command. Required for TUI programs (top, watch, vi, htop, etc.) that need TERM set. Default false.")),
-		mcpgo.WithBoolean("login_shell", mcpgo.Description("Start bash as a login shell (bash -l) so ~/.bash_profile is sourced. Enables PATH, nvm, pyenv, rbenv etc. Default false.")),
+		mcpgo.WithBoolean("login_shell", mcpgo.Description("Start bash as a login shell (bash -l) so ~/.bash_profile is sourced. Enables PATH, nvm, pyenv, rbenv etc. Default true. Set false only when a pristine environment is required.")),
 		mcpgo.WithString("agent_id", mcpgo.Description("Optional: identifier for the calling agent")),
 		mcpgo.WithString("intent", mcpgo.Description("Optional: human-readable intent (logged to audit trail)")),
 		mcpgo.WithNumber("timeout_sec", mcpgo.Description("Command timeout in seconds (default 120). For PTY commands this is a hard cutoff — the command is sent SIGINT after this duration.")),
@@ -783,7 +783,7 @@ executed, then automatically deleted. Eliminates the need for push_file + remote
 		mcpgo.WithString("server_id", mcpgo.Description("Server ID (from list_servers)"), mcpgo.Required()),
 		mcpgo.WithString("content", mcpgo.Description("Script content to upload and run"), mcpgo.Required()),
 		mcpgo.WithString("interpreter", mcpgo.Description("Interpreter to run the script with (default: bash). Examples: bash, python3, sh, ruby")),
-		mcpgo.WithBoolean("login_shell", mcpgo.Description("Run via a login shell (bash -l) so ~/.bash_profile is sourced. Enables PATH, nvm, pyenv, etc. Default false.")),
+		mcpgo.WithBoolean("login_shell", mcpgo.Description("Run via a login shell (bash -l) so ~/.bash_profile is sourced. Enables PATH, nvm, pyenv, etc. Default true. Set false only when a pristine environment is required.")),
 		mcpgo.WithNumber("timeout_sec", mcpgo.Description("Execution timeout in seconds (default 120)")),
 		mcpgo.WithString("agent_id", mcpgo.Description("Optional: identifier for the calling agent")),
 		mcpgo.WithString("intent", mcpgo.Description("Optional: human-readable intent (logged to audit trail)")),
@@ -791,23 +791,43 @@ executed, then automatically deleted. Eliminates the need for push_file + remote
 
 	// --- push_file ---
 	srv.AddTool(mcpgo.NewTool("push_file",
-		mcpgo.WithDescription(`Upload a local file to a remote server via SFTP.
+		mcpgo.WithDescription(`Upload a local file or directory to a remote server via SFTP.
 local_path is the alogin process's local filesystem path (absolute or relative to alogin's cwd).
-remote_path is the destination path on the remote server; parent directories are created automatically.`),
+remote_path is the destination path on the remote server; parent directories are created automatically.
+Set recursive=true to upload a directory tree.`),
 		mcpgo.WithString("server_id", mcpgo.Description("Server ID (from list_servers)"), mcpgo.Required()),
-		mcpgo.WithString("local_path", mcpgo.Description("Local file path"), mcpgo.Required()),
+		mcpgo.WithString("local_path", mcpgo.Description("Local file or directory path"), mcpgo.Required()),
 		mcpgo.WithString("remote_path", mcpgo.Description("Remote destination path (file or directory ending with /)"), mcpgo.Required()),
+		mcpgo.WithBoolean("recursive", mcpgo.Description("Recursively upload a directory tree. Default false.")),
 		mcpgo.WithString("agent_id", mcpgo.Description("Optional: identifier for the calling agent")),
 	), newPushFileHandler(d))
 
+	// --- remote_replace ---
+	srv.AddTool(mcpgo.NewTool("remote_replace",
+		mcpgo.WithDescription(`Safely replace a string inside a remote file in-place.
+Reads the file, substitutes old_string with new_string, and writes it back atomically.
+Use this instead of cat+run_script when editing config files, code, or any text file —
+it avoids full-file overwrites and handles arbitrary special characters safely.
+Returns the number of replacements made (0 = old_string not found, no change).`),
+		mcpgo.WithString("server_id", mcpgo.Description("Server ID (from list_servers)"), mcpgo.Required()),
+		mcpgo.WithString("path", mcpgo.Description("Absolute path of the remote file to edit"), mcpgo.Required()),
+		mcpgo.WithString("old_string", mcpgo.Description("Exact string to search for (case-sensitive, literal — not a regex)"), mcpgo.Required()),
+		mcpgo.WithString("new_string", mcpgo.Description("Replacement string. May be empty to delete old_string."), mcpgo.Required()),
+		mcpgo.WithBoolean("all", mcpgo.Description("Replace all occurrences. Default true. Set false to replace only the first occurrence.")),
+		mcpgo.WithString("agent_id", mcpgo.Description("Optional: identifier for the calling agent")),
+		mcpgo.WithString("intent", mcpgo.Description("Optional: human-readable intent (logged to audit trail)")),
+	), newRemoteReplaceHandler(d))
+
 	// --- pull_file ---
 	srv.AddTool(mcpgo.NewTool("pull_file",
-		mcpgo.WithDescription(`Download a file from a remote server to the local filesystem via SFTP.
+		mcpgo.WithDescription(`Download a file or directory from a remote server to the local filesystem via SFTP.
 remote_path is the absolute path on the remote server.
-local_path is where to save the file on the alogin process's local filesystem.`),
+local_path is where to save the file on the alogin process's local filesystem.
+Set recursive=true to download a directory tree.`),
 		mcpgo.WithString("server_id", mcpgo.Description("Server ID (from list_servers)"), mcpgo.Required()),
-		mcpgo.WithString("remote_path", mcpgo.Description("Remote file path"), mcpgo.Required()),
+		mcpgo.WithString("remote_path", mcpgo.Description("Remote file or directory path"), mcpgo.Required()),
 		mcpgo.WithString("local_path", mcpgo.Description("Local destination path"), mcpgo.Required()),
+		mcpgo.WithBoolean("recursive", mcpgo.Description("Recursively download a directory tree. Default false.")),
 		mcpgo.WithString("agent_id", mcpgo.Description("Optional: identifier for the calling agent")),
 	), newPullFileHandler(d))
 }

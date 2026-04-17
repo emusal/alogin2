@@ -29,6 +29,8 @@ Examples:
 		newClusterCmd(),
 		newPluginCmd(),
 		newSessionCmd(),
+		newRunLocalCmd(),
+		newRunScriptCmd(),
 	)
 	return cmd
 }

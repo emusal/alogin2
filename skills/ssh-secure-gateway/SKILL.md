@@ -106,30 +106,49 @@ alogin ssh session stop "$id"
 
 Use `--timeout N` (seconds, default 30) on `exec` for long-running commands.
 
+Add `--force-utf8` to any `exec` or `connect --cmd` call when the server's default locale may produce garbled multi-byte (Korean, Japanese, Chinese, etc.) output:
+
+```bash
+alogin ssh session exec --force-utf8 "$id" "cat /etc/os-release"
+alogin ssh connect web-01 --cmd "hostname" --force-utf8
+```
+
 **When to use one-shot `--cmd` instead:** only when you need a single, truly stateless command and no follow-up commands are expected (e.g., a quick health check in a CI script).
+
+#### Timeout behaviour
+
+`exec` uses a **wall-clock timeout**: `--timeout N` is the maximum total seconds the command is allowed to run. The command is interrupted after N seconds regardless of output activity.
+
+- `--timeout N` (default **30 s**) = wall-clock limit — the command is killed after this duration (exit 130).
+- `--idle-timeout N` (default **disabled**) = additionally cut the connection if no output is received for N consecutive seconds. Use this for commands where silence itself indicates a hang.
+
+```bash
+# Allow up to 5 min total
+alogin ssh session exec --timeout 300 "$id" "make build"
+
+# Kill if silent for 60 s (e.g. interactive prompt waiting for input)
+alogin ssh session exec --timeout 300 --idle-timeout 60 "$id" "some-interactive-cmd"
+```
+
+If a command times out, the session remains usable — cwd and env are preserved.
+
+> **When NOT to use `exec`:** commands that run indefinitely or longer than any reasonable timeout — streaming log tails (`tail -f`), long-running daemons, browser automation with unpredictable duration. Use `bg-exec` for these cases instead.
 
 #### Login Shell
 
-By default, the session starts `bash --noprofile --norc`, which skips `.bash_profile` and `.zshrc`.
-This means `PATH` extensions from `nvm`, `pyenv`, `rbenv`, conda, etc. are **not** loaded.
+By default, the session starts `bash -l` (login shell), which sources `~/.bash_profile` and `~/.profile`.
+`PATH` extensions from `nvm`, `pyenv`, `rbenv`, conda, etc. are loaded automatically — no extra flags needed.
 
-If a command is not found or a tool appears missing, the session was likely started without a login shell.
-Use the MCP `remote_shell` tool with `login_shell: true`, or prefix commands with `bash -l -c`:
-
-```bash
-# MCP: start a login-shell session
-# remote_shell(target=3, login_shell=true)
-
-# CLI workaround: wrap individual commands
-alogin ssh session exec "$id" "bash -l -c 'node --version'"
-alogin ssh session exec "$id" "bash -l -c 'python3 --version'"
-```
+If a pristine environment is required (e.g. CI scripts that must not be affected by user profile customisations),
+start the session with `--no-login-shell` to use `bash --noprofile --norc` instead.
 
 ### [Background Execution (bg-exec)](https://github.com/emusal/alogin2#ssh-session)
 
-For long-running commands (package installs, data migrations, large backups) that would time out, use `bg-exec` to fire-and-poll instead of blocking.
+For long-running commands or commands that produce little/no stdout for extended periods — package installs, data migrations, large backups, browser automation (Playwright, Puppeteer), cold-start runtimes — use `bg-exec` to fire-and-poll instead of blocking. These commands will hit `exec`'s idle timeout regardless of the `--timeout` value.
 
 `bg-exec` spawns a detached tmux session that outlives the CLI process — the job keeps running even after the terminal closes.
+
+For MCP-based background execution use the `bg_exec_command` tool (runs as a goroutine inside the MCP server process, no tmux needed), then poll with `job_status` / `job_logs`.
 
 ```bash
 id=$(alogin ssh session start web-01)
@@ -166,8 +185,23 @@ alogin ssh session job purge --all
 Job statuses: `pending` → `running` → `done` | `failed` | `cancelled`
 
 **When to use bg-exec vs exec:**
+
 - `exec`: short commands where you need the output immediately (≤ timeout, default 30 s)
 - `bg-exec`: anything that may exceed the timeout, or when you want to launch multiple jobs in parallel and poll later
+
+#### `--follow` / `-f`: Stream output until done
+
+Instead of polling `job status` in a loop, pass `--follow` to `job logs` to stream output incrementally until the job finishes:
+
+```bash
+job=$(alogin ssh session bg-exec "$id" "apt-get upgrade -y")
+
+# Block here, printing output as it arrives; exits when job completes
+alogin ssh session job logs --follow "$job"
+# or: alogin ssh session job logs -f "$job"
+```
+
+The command prints each new chunk as it is written to the DB, then exits with a summary line (`[job <id>: done, exit 0]`) when the job finishes. Ctrl-C interrupts the follow without cancelling the job itself.
 
 ### [SCP (File Transfer)](https://github.com/emusal/alogin2#scp)
 
@@ -189,11 +223,69 @@ alogin scp pull -r web-01:/var/log/nginx/ ./logs/
 
 If the destination path ends with `/`, the source filename (or directory name) is appended automatically.
 
-> **Agent tip — skip the file round-trip:** When you want to upload and immediately run a script, use the MCP `run_script` tool instead of `push_file` + `remote_shell`. It accepts the script as a string, uploads it via SFTP, executes it, and deletes the temp file in one atomic call — no quoting, no temp-path management.
->
-> ```json
-> {"tool": "run_script", "arguments": {"server_id": "3", "content": "#!/bin/bash\nnginx -t", "intent": "test nginx config"}}
-> ```
+For MCP-based file transfer use the `push_file` / `pull_file` tools with `recursive=true` for directory trees.
+
+### [Run Local Script (run-local)](https://github.com/emusal/alogin2#ssh--remote-connectivity)
+
+Upload a local script **file**, execute it on the remote host, and delete the temp file — all in one command.
+Eliminates the manual `scp push → session exec → rm` workflow.
+
+```bash
+# Basic usage — interpreter auto-detected from shebang or extension
+alogin ssh run-local ./deploy.sh --remote web-01
+alogin ssh run-local ./check.py --remote admin@web-01
+
+# Explicit interpreter
+alogin ssh run-local ./migrate.py --remote web-01 --interpreter python3
+
+# Pass script arguments (use -- to separate from alogin flags)
+alogin ssh run-local ./setup.sh --remote web-01 -- --env prod --version 1.2
+
+# Pristine environment (skip ~/.bash_profile)
+alogin ssh run-local ./build.sh --remote web-01 --login-shell=false
+
+# Force UTF-8 output + long timeout
+alogin ssh run-local ./report.py --remote web-01 --force-utf8 --timeout 300
+
+# Keep the uploaded file on the remote host after execution
+alogin ssh run-local ./debug.sh --remote web-01 --keep
+```
+
+Interpreter auto-detection order:
+1. Shebang line (`#!/usr/bin/env python3`, `#!/bin/bash`, …)
+2. File extension (`.py` → `python3`, `.rb` → `ruby`, `.js` → `node`, `.pl` → `perl`)
+3. Default: `bash`
+
+### [Run Script (run-script)](https://github.com/emusal/alogin2#ssh--remote-connectivity)
+
+Upload a script given as a **string** (via `--content` or stdin), execute it on the remote host, and delete the temp file.
+Unlike `run-local` (which takes a local file path), `run-script` is ideal for dynamically generated scripts or piped input.
+This is the CLI equivalent of the MCP `run_script` tool.
+
+```bash
+# Pipe script content from stdin
+echo "df -h && uptime" | alogin ssh run-script --remote web-01
+
+# Pass content directly via --content (use \n for newlines)
+alogin ssh run-script --remote web-01 --content "#!/bin/bash\ndf -h\nuptime"
+
+# Explicit interpreter
+alogin ssh run-script --remote web-01 --interpreter python3 --content "import sys; print(sys.version)"
+
+# Pristine environment (skip ~/.bash_profile)
+alogin ssh run-script --remote web-01 --login-shell=false --content "node --version"
+
+# Force UTF-8 output + long timeout
+alogin ssh run-script --remote web-01 --force-utf8 --timeout 300 --content "cat /etc/os-release"
+```
+
+**When to use `run-script` vs `run-local`:**
+
+| | `run-local` | `run-script` |
+|---|---|---|
+| Input | Local file path | String (`--content`) or stdin |
+| Use case | Pre-existing scripts | Dynamically generated content, pipes |
+| MCP equivalent | — | `run_script` tool |
 
 ### [Net (Gateway, Profile, Tunnels & DNS)](https://github.com/emusal/alogin2#multi-hop-gateway-routing)
 
@@ -324,25 +416,27 @@ Credentials are resolved from vault and injected via PTY automation (expect/send
 
 All list and show commands support `--format json` for machine-readable output:
 
-| Command | `--format json` output |
-|---------|----------------------|
-| `server list` | array of server objects |
-| `server show <host>` | single server object (incl. policy_yaml, system_prompt) |
-| `server alias list` | array of alias objects |
-| `server alias show <name>` | single alias object |
-| `net gateway list` | array of gateway objects |
-| `net gateway show <name>` | gateway object with hops array |
-| `net tunnel list` | array of tunnel objects with running status |
-| `net hosts list` | array of host mapping objects |
-| `net hosts show <hostname>` | single host mapping object |
-| `net profile list` | array of profile objects |
-| `ssh cluster list` | array of cluster objects |
-| `ssh cluster <name> --cmd <cmd>` | array of `{host, output, exit_code, error}` |
-| `agent audit list` | array of audit entry objects |
-| `agent audit tail` | newline-delimited JSON stream |
-| `agent policy dry-run --json` | `{action, commands, agent_id, server_id, policy, rule?}` |
-| `app list` | array of app binding objects |
-| `app show <name>` | single binding object |
+| Command                          | `--format json` output                                   |
+| -------------------------------- | -------------------------------------------------------- |
+| `server list`                    | array of server objects                                  |
+| `server show <host>`             | single server object (incl. policy_yaml, system_prompt)  |
+| `server alias list`              | array of alias objects                                   |
+| `server alias show <name>`       | single alias object                                      |
+| `net gateway list`               | array of gateway objects                                 |
+| `net gateway show <name>`        | gateway object with hops array                           |
+| `net tunnel list`                | array of tunnel objects with running status              |
+| `net hosts list`                 | array of host mapping objects                            |
+| `net hosts show <hostname>`      | single host mapping object                               |
+| `net profile list`               | array of profile objects                                 |
+| `ssh cluster list`               | array of cluster objects                                 |
+| `ssh cluster <name> --cmd <cmd>` | array of `{host, output, exit_code, error}`              |
+| `agent audit list`               | array of audit entry objects                             |
+| `agent audit tail`               | newline-delimited JSON stream                            |
+| `agent policy dry-run --json`    | `{action, commands, agent_id, server_id, policy, rule?}` |
+| `app list`                       | array of app binding objects                             |
+| `app show <name>`                | single binding object                                    |
+| `ssh session job list --json`    | array of bg_job objects                                  |
+| `ssh session job status --json`  | single bg_job object                                     |
 
 ```bash
 # Examples
