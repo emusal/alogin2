@@ -751,6 +751,28 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 		mcpgo.WithString("intent", mcpgo.Description("Optional: human-readable intent (logged to audit trail)")),
 		mcpgo.WithNumber("timeout_sec", mcpgo.Description("Command timeout in seconds (default 120). For PTY commands this is a hard cutoff — the command is sent SIGINT after this duration.")),
 	), newRemoteShellHandler(d))
+
+	// --- push_file ---
+	srv.AddTool(mcpgo.NewTool("push_file",
+		mcpgo.WithDescription(`Upload a local file to a remote server via SFTP.
+local_path is the alogin process's local filesystem path (absolute or relative to alogin's cwd).
+remote_path is the destination path on the remote server; parent directories are created automatically.`),
+		mcpgo.WithString("server_id", mcpgo.Description("Server ID (from list_servers)"), mcpgo.Required()),
+		mcpgo.WithString("local_path", mcpgo.Description("Local file path"), mcpgo.Required()),
+		mcpgo.WithString("remote_path", mcpgo.Description("Remote destination path (file or directory ending with /)"), mcpgo.Required()),
+		mcpgo.WithString("agent_id", mcpgo.Description("Optional: identifier for the calling agent")),
+	), newPushFileHandler(d))
+
+	// --- pull_file ---
+	srv.AddTool(mcpgo.NewTool("pull_file",
+		mcpgo.WithDescription(`Download a file from a remote server to the local filesystem via SFTP.
+remote_path is the absolute path on the remote server.
+local_path is where to save the file on the alogin process's local filesystem.`),
+		mcpgo.WithString("server_id", mcpgo.Description("Server ID (from list_servers)"), mcpgo.Required()),
+		mcpgo.WithString("remote_path", mcpgo.Description("Remote file path"), mcpgo.Required()),
+		mcpgo.WithString("local_path", mcpgo.Description("Local destination path"), mcpgo.Required()),
+		mcpgo.WithString("agent_id", mcpgo.Description("Optional: identifier for the calling agent")),
+	), newPullFileHandler(d))
 }
 
 // nodeHealth is the structured output of inspect_node.

@@ -366,6 +366,8 @@ SSH key-based auth is always preferred. Use vault storage only for password-base
 alogin server           Server registry (add, list, show, alias, ...)
 alogin app              Named server+plugin bindings
 alogin ssh              SSH, SFTP, FTP, SSHFS, cluster sessions
+alogin ssh session      Persistent stateful sessions (cwd/env preserved across commands)
+alogin scp push/pull    File transfer to/from remote hosts via SFTP
 alogin vault            Stored credentials (set, get, delete)
 alogin net              Hosts, tunnels, gateways, profiles
 alogin agent            MCP server, policy, HITL, audit

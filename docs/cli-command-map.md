@@ -11,7 +11,8 @@ Commands that skip DB initialization are annotated with `alogin:skip-db` in thei
 ```
 alogin server           Server registry management
 alogin app              Named server+plugin bindings
-alogin ssh              Remote connectivity (SSH, SFTP, FTP, SSHFS, cluster)
+alogin ssh              Remote connectivity (SSH, SFTP, FTP, SSHFS, cluster, session)
+alogin scp              File transfer to/from remote hosts (push/pull via SFTP)
 alogin vault            Stored credentials
 alogin net              Network resource management (hosts, tunnels, gateways, profiles)
 alogin agent            AI/MCP tools
@@ -140,6 +141,58 @@ alogin ssh cluster list
 | `--tile-x` | `-x` | Tile columns for iTerm2/Terminal |
 | `--cmd` | `-c` | Run command on all members in parallel (no tmux) |
 | `--format` | | Output format when using `--cmd`: table\|json |
+
+### `ssh session`
+File: `internal/cli/session.go`
+
+Manage persistent stateful SSH sessions. A session holds a single bash process on the remote server so that cwd, environment variables, and shell variables persist across commands.
+
+**Note:** sessions are process-local (live only for the duration of the CLI invocation).
+
+```
+alogin ssh session start [user@]host [--id NAME]   # start session, prints session ID
+alogin ssh session exec  <id> <command>             # run command in session
+alogin ssh session stop  <id>                       # terminate session
+alogin ssh session list                             # list active sessions
+```
+
+| Flag | Description |
+|------|-------------|
+| `--id` | Session name (default: generated UUID) |
+| `--timeout` | Command timeout in seconds (exec only, default 30) |
+
+Example:
+```bash
+id=$(alogin ssh session start web-01)
+alogin ssh session exec "$id" "cd /var/log"
+alogin ssh session exec "$id" "pwd"    # outputs /var/log
+alogin ssh session stop "$id"
+```
+
+---
+
+## scp — File transfer
+
+File: `internal/cli/scp.go`
+
+Copy files between local and remote hosts via SFTP. Source first, destination second (same convention as `scp(1)`).
+
+```
+alogin scp push <local-path> <[user@]host:/remote-path>   # upload
+alogin scp pull <[user@]host:/remote-path> <local-path>   # download
+```
+
+If the remote path ends with `/`, the local filename is appended automatically.
+If the local path ends with `/`, the remote filename is appended automatically.
+
+Examples:
+```bash
+alogin scp push ./deploy.tar.gz web-01:/opt/releases/
+alogin scp pull web-01:/var/log/app.log ./
+alogin scp pull admin@web-01:/etc/nginx/nginx.conf ./nginx.conf.bak
+```
+
+Credentials and multi-hop routing follow the same profile/gateway chain as `alogin ssh connect`.
 
 ---
 

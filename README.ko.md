@@ -361,14 +361,16 @@ alogin agent audit tail                    # 실시간 스트리밍 (Ctrl+C로 �
 ## 명령어 한눈에 보기
 
 ```
-alogin server           서버 등록 및 관리 (add, list, show, alias, ...)
-alogin app              서버 + 앱 플러그인 묶음 관리
-alogin ssh              SSH 접속, SFTP, FTP, SSHFS, 클러스터 세션
-alogin vault            비밀번호 저장소 (set, get, delete)
-alogin net              hosts, 터널, 게이트웨이, 프로파일 관리
-alogin agent            MCP 서버, 정책, 사람 승인, 실행 이력
-alogin tui              TUI 서버 검색 화면
-alogin web              웹 브라우저 SSH 터미널 + 관리 대시보드
+alogin server              서버 등록 및 관리 (add, list, show, alias, ...)
+alogin app                 서버 + 앱 플러그인 묶음 관리
+alogin ssh                 SSH 접속, SFTP, FTP, SSHFS, 클러스터 세션
+alogin ssh session         상태 유지 세션 (명령 간 cwd/env 유지)
+alogin scp push/pull       원격 서버와 파일 전송 (SFTP 기반)
+alogin vault               비밀번호 저장소 (set, get, delete)
+alogin net                 hosts, 터널, 게이트웨이, 프로파일 관리
+alogin agent               MCP 서버, 정책, 사람 승인, 실행 이력
+alogin tui                 TUI 서버 검색 화면
+alogin web                 웹 브라우저 SSH 터미널 + 관리 대시보드
 ```
 
 목록 조회 명령에는 모두 `--format=json`을 쓸 수 있습니다.

@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -55,7 +56,16 @@ func InteractiveSFTP(hops []HopConfig) error {
 }
 
 // Upload copies a local file to the remote path.
+// If remotePath is an existing directory (or ends with / or .), the local
+// filename is appended automatically, mirroring scp(1) behaviour.
 func (s *SFTPClient) Upload(localPath, remotePath string) error {
+	// Resolve remote path: if it points to a directory, append the filename.
+	if info, err := s.cl.Stat(remotePath); err == nil && info.IsDir() {
+		remotePath = path.Join(remotePath, filepath.Base(localPath))
+	} else if strings.HasSuffix(remotePath, "/") || strings.HasSuffix(remotePath, "/.") || remotePath == "." {
+		remotePath = path.Join(remotePath, filepath.Base(localPath))
+	}
+
 	src, err := os.Open(localPath)
 	if err != nil {
 		return fmt.Errorf("open local %s: %w", localPath, err)
@@ -63,8 +73,8 @@ func (s *SFTPClient) Upload(localPath, remotePath string) error {
 	defer src.Close()
 
 	// Ensure remote directory exists
-	if err := s.cl.MkdirAll(filepath.Dir(remotePath)); err != nil {
-		return fmt.Errorf("mkdir remote %s: %w", filepath.Dir(remotePath), err)
+	if err := s.cl.MkdirAll(path.Dir(remotePath)); err != nil {
+		return fmt.Errorf("mkdir remote %s: %w", path.Dir(remotePath), err)
 	}
 
 	dst, err := s.cl.Create(remotePath)

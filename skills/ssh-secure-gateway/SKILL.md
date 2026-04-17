@@ -80,6 +80,47 @@ alogin ssh cluster list --format json
 alogin ssh mount user@host:/var/log ~/mnt/logs
 ```
 
+### [SSH Session (Stateful Shell)](https://github.com/emusal/alogin2#ssh-session)
+
+A session holds a single persistent bash process on the remote server so that working directory, environment variables, and shell state persist across commands. Without a session, each `--cmd` invocation starts a fresh bash process and loses all state.
+
+Sessions are backed by a tmux session and persist across separate `alogin` invocations. For MCP-based persistence use the `remote_shell` tool.
+
+```bash
+# Start a session (prints session ID)
+id=$(alogin ssh session start web-01)
+
+# Commands share state — cd persists to the next call
+alogin ssh session exec "$id" "cd /var/log"
+alogin ssh session exec "$id" "pwd"             # outputs /var/log
+alogin ssh session exec "$id" "export FOO=bar"
+alogin ssh session exec "$id" "echo \$FOO"      # outputs bar
+
+# List active sessions
+alogin ssh session list
+
+# Terminate
+alogin ssh session stop "$id"
+```
+
+Use `--timeout N` (seconds, default 30) on `exec` for long-running commands.
+
+### [SCP (File Transfer)](https://github.com/emusal/alogin2#scp)
+
+Copy files between local and remote hosts via SFTP. Credentials and multi-hop routing follow the same profile/gateway chain as `alogin ssh connect`.
+
+```bash
+# Upload local file to remote
+alogin scp push ./deploy.tar.gz web-01:/opt/releases/
+alogin scp push ./script.py admin@web-01:/tmp/
+
+# Download remote file to local
+alogin scp pull web-01:/var/log/app.log ./
+alogin scp pull admin@web-01:/etc/nginx/nginx.conf ./nginx.conf.bak
+```
+
+If the destination path ends with `/`, the source filename is appended automatically.
+
 ### [Net (Gateway, Profile, Tunnels & DNS)](https://github.com/emusal/alogin2#multi-hop-gateway-routing)
 
 Define multi-hop jump paths once, then use them for any server. Manage persistent tunnels and local DNS overrides.

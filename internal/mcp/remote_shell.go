@@ -15,10 +15,11 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 )
 
-// remoteShellSession holds one persistent SSH connection for a remote_shell session.
+// remoteShellSession holds one persistent SSH connection and its managed bash
+// process for a remote_shell session.
 type remoteShellSession struct {
 	chain    *internalssh.ChainedClient
-	client   *internalssh.Client
+	managed  *internalssh.ManagedSession
 	serverID int64
 }
 
@@ -120,10 +121,15 @@ func newRemoteShellHandler(d Deps) func(context.Context, mcpgo.CallToolRequest) 
 				return toolError(fmt.Sprintf("dial: %v", err)), nil
 			}
 
+			managed, err := internalssh.NewManagedSession(chain.Terminal())
+			if err != nil {
+				chain.CloseAll()
+				return toolError(fmt.Sprintf("start managed session: %v", err)), nil
+			}
 			sessionID = uuid.New().String()
 			sess = &remoteShellSession{
 				chain:    chain,
-				client:   chain.Terminal(),
+				managed:  managed,
 				serverID: serverID,
 			}
 			globalShellStore.put(sessionID, sess)
@@ -137,9 +143,10 @@ func newRemoteShellHandler(d Deps) func(context.Context, mcpgo.CallToolRequest) 
 			}
 		}
 
-		// Handle "exit": close connection and remove from store.
+		// Handle "exit": close managed bash process, connection, remove from store.
 		if strings.TrimSpace(command) == "exit" {
 			globalShellStore.delete(sessionID)
+			_ = sess.managed.Close()
 			sess.chain.CloseAll()
 			return toolJSON(map[string]any{
 				"session_id": sessionID,
@@ -175,20 +182,27 @@ func newRemoteShellHandler(d Deps) func(context.Context, mcpgo.CallToolRequest) 
 			writeAuditDB(ctx, d, ev)
 		}
 
-		var results []CommandResult
-		var execErr error
 		if pty {
-			results, execErr = runPTYCommand(sess.client, command, time.Duration(timeoutSec)*time.Second)
-		} else {
-			results, execErr = runBatch(sess.client, []string{command})
+			// PTY mode: for TUI programs (top, vi, etc.) that require a terminal.
+			results, execErr := runPTYCommand(sess.chain.Terminal(), command, time.Duration(timeoutSec)*time.Second)
+			if execErr != nil {
+				return toolError(fmt.Sprintf("exec: %v", execErr)), nil
+			}
+			return toolJSON(map[string]any{
+				"session_id": sessionID,
+				"results":    results,
+			})
 		}
+
+		// Stateful execution via persistent bash: cwd and env are preserved.
+		result, execErr := sess.managed.Exec(ctx, command, time.Duration(timeoutSec)*time.Second)
 		if execErr != nil {
 			return toolError(fmt.Sprintf("exec: %v", execErr)), nil
 		}
-
 		return toolJSON(map[string]any{
 			"session_id": sessionID,
-			"results":    results,
+			"output":     result.Output,
+			"exit_code":  result.ExitCode,
 		})
 	}
 }

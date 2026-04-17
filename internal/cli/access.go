@@ -28,6 +28,7 @@ Examples:
 		newMountCmd(),
 		newClusterCmd(),
 		newPluginCmd(),
+		newSessionCmd(),
 	)
 	return cmd
 }

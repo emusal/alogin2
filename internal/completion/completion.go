@@ -381,6 +381,7 @@ _alogin() {
             'ftp:FTP connection'
             'mount:Mount remote filesystem via SSHFS'
             'cluster:Open cluster SSH sessions'
+            'session:Manage persistent stateful SSH sessions'
           )
           _arguments -C '1: :->sub' '*:: :->sub_args'
           case $state in
@@ -417,6 +418,46 @@ _alogin() {
                     '1: :_alogin_hosts'
                   ;;
                 cluster) _alogin_cluster_args ;;
+                session)
+                  local -a session_subcmds
+                  session_subcmds=(
+                    'start:Start a new stateful session'
+                    'exec:Execute a command in a session'
+                    'stop:Stop a session'
+                    'list:List active sessions'
+                  )
+                  _arguments -C '1: :->session_sub' '*:: :->session_args'
+                  case $state in
+                    session_sub) _describe 'subcommand' session_subcmds ;;
+                    session_args)
+                      case $words[1] in
+                        start) _arguments '1: :_alogin_hosts' '--id[session name]:name:' ;;
+                        exec)  _arguments '1:session-id:' '2:command:' '--timeout[timeout seconds]:seconds:' ;;
+                        stop)  _arguments '1:session-id:' ;;
+                        list)  ;;
+                      esac
+                      ;;
+                  esac
+                  ;;
+              esac
+              ;;
+          esac
+          ;;
+
+        # ── scp ──────────────────────────────────────────────────────────
+        scp)
+          local -a scp_subcmds
+          scp_subcmds=(
+            'push:Upload a local file to a remote host'
+            'pull:Download a remote file to the local host'
+          )
+          _arguments -C '1: :->sub' '*:: :->sub_args'
+          case $state in
+            sub) _describe 'subcommand' scp_subcmds ;;
+            sub_args)
+              case $words[1] in
+                push) _arguments '1:local file:_files' '2:remote (host:/path):' ;;
+                pull) _arguments '1:remote (host:/path):' '2:local path:_files' ;;
               esac
               ;;
           esac
@@ -571,7 +612,7 @@ _alogin_completion() {
     cword=$COMP_CWORD
   }
 
-  local commands="server app ssh vault net agent tui web migrate db-migrate doctor completion shell-init uninstall upgrade version"
+  local commands="server app ssh scp vault net agent tui web migrate db-migrate doctor completion shell-init uninstall upgrade version"
 
   # Helpers
   _alogin_hosts() {
@@ -660,7 +701,7 @@ _alogin_completion() {
     # ── ssh ─────────────────────────────────────────────────────────────────
     ssh)
       if [[ $cword -eq 2 ]]; then
-        COMPREPLY=($(compgen -W "connect sftp ftp mount cluster" -- "$cur"))
+        COMPREPLY=($(compgen -W "connect sftp ftp mount cluster session" -- "$cur"))
       elif [[ $cword -ge 3 ]]; then
         case "$sub" in
           connect)
@@ -688,7 +729,24 @@ _alogin_completion() {
               COMPREPLY=($(compgen -W "$cluster_opts" -- "$cur"))
             fi
             ;;
+          session)
+            if [[ $cword -eq 3 ]]; then
+              COMPREPLY=($(compgen -W "start exec stop list" -- "$cur"))
+            elif [[ $cword -ge 4 ]]; then
+              case "$sub2" in
+                start) COMPREPLY=($(compgen -W "$(_alogin_hosts) --id" -- "$cur")) ;;
+                exec)  COMPREPLY=($(compgen -W "--timeout" -- "$cur")) ;;
+              esac
+            fi
+            ;;
         esac
+      fi
+      ;;
+
+    # ── scp ─────────────────────────────────────────────────────────────────
+    scp)
+      if [[ $cword -eq 2 ]]; then
+        COMPREPLY=($(compgen -W "push pull" -- "$cur"))
       fi
       ;;
 

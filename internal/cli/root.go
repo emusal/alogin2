@@ -86,6 +86,7 @@ Run 'alogin agent setup' to configure Claude Desktop or other AI clients.`,
 		newVaultCmd(),       // alogin vault
 		newNetCmd(),         // alogin net
 		newAgentCmd(),       // alogin agent
+		newScpCmd(),         // alogin scp
 	)
 
 	// ---- Unchanged root-level commands ----
