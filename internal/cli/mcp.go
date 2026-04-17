@@ -13,7 +13,7 @@ func newMCPServerCmd() *cobra.Command {
 		Short: "Run alogin as an MCP (Model Context Protocol) server over stdio",
 		Long: `Run alogin as an MCP (Model Context Protocol) server over stdio.
 
-LLMs can use this server to query and manage alogin servers, tunnels,
+LLMs can use this server to query and manage alogin compute entries, tunnels,
 and clusters. Communicate using JSON-RPC 2.0 messages over stdin/stdout.
 
 Available tools:

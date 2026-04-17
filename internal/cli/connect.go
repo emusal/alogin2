@@ -34,24 +34,24 @@ func newConnectCmd() *cobra.Command {
 If no host is provided, opens the interactive TUI host selector.
 
 Single host (t — direct, ignores gateway setting):
-  alogin connect web-01
-  alogin connect admin@web-01
+  alogin access sshweb-01
+  alogin access ssh admin@web-01
 
 Single host via gateway (r — follows the gateway defined in the registry):
-  alogin connect web-01 --auto-gw
+  alogin access ssh web-01 --auto-gw
 
 Explicit multi-hop (each host is an SSH jump, resolved from the registry):
-  alogin connect gw-01 web-01
-  alogin connect gw-01 gw-02 web-01
+  alogin access ssh gw-01 web-01
+  alogin access ssh gw-01 gw-02 web-01
 
 Port forwarding (-L local, -R remote):
-  alogin connect web-01 -L 8080:localhost:80       # full spec
-  alogin connect web-01 -L 2222:22                 # shorthand: local:2222 → dest:22
-  alogin connect web-01 --auto-gw -L 2222:22       # works through gateway too
-  alogin connect web-01 -R 2222:127.0.0.1:22       # remote→local reverse tunnel
+  alogin access ssh web-01 -L 8080:localhost:80       # full spec
+  alogin access ssh web-01 -L 2222:22                 # shorthand: local:2222 → dest:22
+  alogin access ssh web-01 --auto-gw -L 2222:22       # works through gateway too
+  alogin access ssh web-01 -R 2222:127.0.0.1:22       # remote→local reverse tunnel
 
 Other options:
-  alogin connect web-01 --cmd "tail -f /var/log/app.log"`,
+  alogin access ssh web-01 --cmd "tail -f /var/log/app.log"`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
@@ -428,6 +428,7 @@ func parseUserHost(arg string) (user, host string) {
 //	localPort:remotePort          → 127.0.0.1:LPORT → defaultRemoteHost:RPORT
 //	localPort:remoteHost:remotePort
 //	localHost:localPort:remoteHost:remotePort
+//
 // checkCLIPolicy loads the global agent-policy.yaml (falling back to built-in
 // destructive-command patterns when the file is absent) and enforces it for
 // commands run via "alogin access ssh --cmd".

@@ -2,14 +2,14 @@
 
 alogin v2 supports two types of SSH port-forwarding:
 
-1. **Ad-hoc** — `-L`/`-R` flags on `alogin connect` (lives only while the session is open)
+1. **Ad-hoc** — `-L`/`-R` flags on `alogin access` (lives only while the session is open)
 2. **Persistent (named tunnels)** — `alogin tunnel` subcommand; kept alive by a detached tmux session
 
 ---
 
-## Ad-hoc Port Forwarding (`alogin connect -L/-R`)
+## Ad-hoc Port Forwarding (`alogin access -L/-R`)
 
-Flags are accepted on `alogin connect` and work through multi-hop gateway chains.
+Flags are accepted on `alogin access` and work through multi-hop gateway chains.
 
 ### `-L` Local forward (your machine → remote)
 
@@ -23,9 +23,9 @@ Flags are accepted on `alogin connect` and work through multi-hop gateway chains
 Examples:
 
 ```bash
-alogin connect db.prod -L 5432:5432           # local:5432 → db.prod:5432
-alogin connect web-01 -L 8080:localhost:80    # local:8080 → web-01's localhost:80
-alogin connect web-01 --auto-gw -L 2222:22   # through gateway + local:2222 → web-01:22
+alogin access db.prod -L 5432:5432           # local:5432 → db.prod:5432
+alogin access web-01 -L 8080:localhost:80    # local:8080 → web-01's localhost:80
+alogin access web-01 --auto-gw -L 2222:22   # through gateway + local:2222 → web-01:22
 ```
 
 ### `-R` Reverse / remote forward (remote → your machine)
@@ -38,7 +38,7 @@ alogin connect web-01 --auto-gw -L 2222:22   # through gateway + local:2222 → 
 Examples:
 
 ```bash
-alogin connect web-01 -R 2222:127.0.0.1:22   # web-01's :2222 → local:22
+alogin access web-01 -R 2222:127.0.0.1:22   # web-01's :2222 → local:22
 ```
 
 ### Shell-chain fallback warning

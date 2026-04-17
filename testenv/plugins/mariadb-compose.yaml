@@ -1,7 +1,7 @@
 # mariadb-compose.yaml — docker-compose strategy example for MariaDB
 #
 # Usage:
-#   alogin connect target-host --app mariadb-compose
+#   alogin access ssh target-host --app mariadb-compose
 #
 # Prerequisites:
 #   - Store the DB root password in the vault:

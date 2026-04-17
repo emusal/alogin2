@@ -11,29 +11,34 @@ You have access to alogin, a secure SSH gateway for agentic infrastructure acces
 
 Core workflow:
 1. DISCOVER — call list_servers or list_clusters before acting on any host
-2. INSPECT — call inspect_node to understand a server's current state before making changes
-3. ACT — use exec_command or exec_on_cluster with a clear intent parameter
-4. VERIFY — re-inspect or run a read-only check to confirm the change took effect
+2. SHELL — call remote_shell(target) to open a persistent session (get session_id), then
+           call remote_shell(target, session_id, command) for each subsequent command.
+           This is the PREFERRED tool for all remote work. Use exec_command only as fallback.
+3. INSPECT — call inspect_node to understand a server's current state before making changes
+4. ACT — use remote_shell for sequences; exec_command only for single one-shot commands
+5. VERIFY — re-inspect or run a read-only check to confirm the change took effect
+6. CLEANUP — call remote_shell(target, session_id, command="exit") when done
 
 Safety rules:
-- Always provide an "intent" parameter when calling exec_command or exec_on_cluster
+- Always provide an "intent" parameter when calling exec_command, exec_on_cluster, or remote_shell
 - Do not run destructive commands (rm -rf, shutdown, reboot, DROP TABLE) without explicit user confirmation
 - Prefer read-only inspection before any write operation
 - If a server has device_type "router", "switch", or "firewall", do not assume standard Linux commands work
 - When managing tunnels, check list_tunnels first to avoid starting duplicates
+- For any remote shell task, always try remote_shell first before exec_command
 ```
 
 ---
 
 ## Overview
 
-alogin exposes 11 MCP tools over stdio (JSON-RPC 2.0). It manages:
+alogin exposes 12 MCP tools over stdio (JSON-RPC 2.0). It manages:
 - A server registry with encrypted credential vault
 - Multi-hop SSH gateway routing
 - Cluster session groups
 - Persistent named SSH tunnels (tmux-backed)
 
-All `exec_command` and `exec_on_cluster` calls are logged to `~/.config/alogin/audit.jsonl`.
+All `exec_command`, `exec_on_cluster`, `inspect_node`, and `remote_shell` calls are logged to `~/.config/alogin/audit.jsonl`.
 
 ---
 
@@ -167,6 +172,43 @@ Run SSH commands on all servers in a cluster in parallel. Individual failures ar
 
 ---
 
+#### `remote_shell`
+**Primary and preferred tool for ALL remote shell access.** Use this first for any remote server interaction. Provides a persistent SSH connection identified by a `session_id` — call it repeatedly with the same `session_id` to run multiple commands on the same server.
+
+> **Note:** Each command opens a fresh SSH channel on the persistent connection (SSH multiplexing). This means `cd` does not carry over between calls. Chain state into one command: `cd /path && ls`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `target` | string/number | yes | Server ID from list_servers |
+| `command` | string | no | Command to run. Omit to establish session only. Use `"exit"` to close. |
+| `session_id` | string | no | Reuse an existing session. Omit to create a new one. |
+| `pty` | boolean | no | Allocate a PTY. Required for TUI programs: `top`, `watch`, `vi`, `htop`, etc. Default false. |
+| `timeout_sec` | number | no | Per-command timeout in seconds (default 120). PTY commands are sent SIGINT after this duration. |
+| `agent_id` | string | no | Agent identifier (logged to audit) |
+| `intent` | string | no | Human-readable intent (logged to audit) |
+
+Session lifecycle example:
+```json
+// Step 1: establish session
+{"tool": "remote_shell", "arguments": {"target": "3", "intent": "deploy app"}}
+// → {"session_id": "abc-123", "status": "created"}
+
+// Step 2: run commands (reuse session_id)
+{"tool": "remote_shell", "arguments": {"target": "3", "session_id": "abc-123", "command": "ls /var/log"}}
+{"tool": "remote_shell", "arguments": {"target": "3", "session_id": "abc-123", "command": "cd /app && python manage.py migrate"}}
+
+// Step 3: close when done
+{"tool": "remote_shell", "arguments": {"target": "3", "session_id": "abc-123", "command": "exit"}}
+// → {"session_id": "abc-123", "status": "closed"}
+```
+
+Returns on command execution:
+```json
+{"session_id": "abc-123", "results": [{"command": "ls /var/log", "output": "...", "exit_code": 0}]}
+```
+
+---
+
 ### Tunnel lifecycle tools
 
 #### `start_tunnel`
@@ -224,7 +266,7 @@ Returns: `{"status": "stopped"}`
 
 ## Audit Trail
 
-All `exec_command`, `exec_on_cluster`, and `inspect_node` calls are appended to:
+All `exec_command`, `exec_on_cluster`, `inspect_node`, and `remote_shell` calls are appended to:
 
 ```
 ~/.config/alogin/audit.jsonl

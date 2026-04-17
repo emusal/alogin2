@@ -1,7 +1,7 @@
 # postgres.yaml — Application-Aware Plugin for PostgreSQL psql client
 #
 # Usage:
-#   alogin connect <pg-host> --app postgres
+#   alogin access ssh <pg-host> --app postgres
 #
 # Prerequisites:
 #   - Store the DB password in the vault:

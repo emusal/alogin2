@@ -22,7 +22,7 @@ func newTUICmd() *cobra.Command {
 	}
 }
 
-// runConnectTUIFull launches the TUI directly at the server list (used by `alogin connect`).
+// runConnectTUIFull launches the TUI directly at the server list (used by `alogin access`).
 func runConnectTUIFull(ctx context.Context, opts *model.ConnectOptions) error {
 	return runTUIAtWithOpts(ctx, tui.StartAtList, opts)
 }

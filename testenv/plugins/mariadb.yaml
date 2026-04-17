@@ -1,7 +1,7 @@
 # mariadb.yaml — Application-Aware Plugin for MariaDB / MySQL client
 #
 # Usage:
-#   alogin connect target-mariadb --app mariadb
+#   alogin access ssh target-mariadb --app mariadb
 #
 # Prerequisites:
 #   - Store the DB root password in the vault:

@@ -44,10 +44,10 @@ Connecting with 't' (direct) ignores the gateway and connects straight to the ho
 
 Examples:
   # Direct-only server (t web-01 connects directly)
-  alogin server add --host web-01 --user admin
+  alogin compute add --host web-01 --user admin
 
   # Server reachable only via a gateway (r web-01 goes gw → web-01)
-  alogin server add --host web-01 --user admin --gateway corp-gw
+  alogin compute add --host web-01 --user admin --gateway corp-gw
 
   # Explicit multi-hop with t (no gateway needed in registry):
   # t gw-01 web-01   →  connects gw-01 then web-01`,

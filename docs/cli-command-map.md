@@ -62,7 +62,7 @@ alogin access ssh [user@]host... [flags]
 
 Port-forward spec: `PORT` | `LPORT:RPORT` | `LPORT:HOST:RPORT` | `LHOST:LPORT:RHOST:RPORT`
 
-Legacy aliases: `alogin connect`, `alogin t` (direct), `alogin r` (auto-gateway)
+Legacy aliases: `alogin connect` → `alogin access`, `alogin t` (direct), `alogin r` (auto-gateway)
 
 ### `access sftp`
 File: `internal/cli/sftp.go`

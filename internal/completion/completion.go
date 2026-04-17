@@ -27,13 +27,13 @@ const ZshScript = `#compdef alogin
 
 _alogin_hosts() {
   local -a hosts
-  hosts=(${(f)"$(alogin server list 2>/dev/null | awk 'NR>2{print $3}')"})
+  hosts=(${(f)"$(alogin compute list 2>/dev/null | awk 'NR>2{print $3}')"})
   _describe 'host' hosts
 }
 
 _alogin_users_at_hosts() {
   local -a targets
-  targets=(${(f)"$(alogin server list 2>/dev/null | awk 'NR>2{print $4"@"$3}')"})
+  targets=(${(f)"$(alogin compute list 2>/dev/null | awk 'NR>2{print $4"@"$3}')"})
   _describe 'user@host' targets
 }
 
@@ -527,7 +527,7 @@ _alogin_completion() {
 
   # Helpers
   _alogin_hosts() {
-    alogin server list 2>/dev/null | awk 'NR>2{print $3}'
+    alogin compute list 2>/dev/null | awk 'NR>2{print $3}'
   }
   _alogin_gateways() {
     alogin auth gateway list 2>/dev/null | awk 'NR>2{print $1}'

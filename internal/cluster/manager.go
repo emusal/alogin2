@@ -57,7 +57,7 @@ func (m *Manager) Open(ctx context.Context, clusterName string, hosts []HostEntr
 
 // buildConnCmd returns the command string to run in a pane/window for one host.
 //
-// When binPath is set, it uses "alogin connect [--auto-gw] user@host" so that
+// When binPath is set, it uses "alogin access [--auto-gw] user@host" so that
 // the alogin process handles vault lookup and SSH password injection
 // programmatically — no terminal password prompt, which eliminates the
 // synchronize-panes cross-contamination bug.

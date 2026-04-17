@@ -3,7 +3,7 @@
 ## Connection flow
 
 ```
-alogin connect [host]
+alogin access [host]
   │
   ├─ internal/cli/connect.go     — parse args, resolve user/host
   ├─ internal/db/server_repo.go  — look up server record + gateway chain

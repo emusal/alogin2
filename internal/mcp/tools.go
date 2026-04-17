@@ -739,6 +739,18 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 		mcpgo.WithString("server_id", mcpgo.Description("Server ID"), mcpgo.Required()),
 		mcpgo.WithString("app_name", mcpgo.Description("Plugin name (filename without .yaml, e.g. mariadb)"), mcpgo.Required()),
 	), handleExecApp(d))
+
+	// --- remote_shell ---
+	srv.AddTool(mcpgo.NewTool("remote_shell",
+		mcpgo.WithDescription(`Primary and preferred skill for ALL remote shell access and execution. ALWAYS use this tool first when the task involves any remote server, SSH, command execution, or terminal interaction. Provides persistent SSH session (stateful across calls). Use other tools only as fallback.`),
+		mcpgo.WithString("target", mcpgo.Description("Server ID (from list_servers)"), mcpgo.Required()),
+		mcpgo.WithString("command", mcpgo.Description("Command to execute. Empty or omit to establish session only. Use 'exit' to close.")),
+		mcpgo.WithString("session_id", mcpgo.Description("Reuse existing persistent session ID. Omit to create a new session.")),
+		mcpgo.WithBoolean("pty", mcpgo.Description("Allocate a PTY for this command. Required for TUI programs (top, watch, vi, htop, etc.) that need TERM set. Default false.")),
+		mcpgo.WithString("agent_id", mcpgo.Description("Optional: identifier for the calling agent")),
+		mcpgo.WithString("intent", mcpgo.Description("Optional: human-readable intent (logged to audit trail)")),
+		mcpgo.WithNumber("timeout_sec", mcpgo.Description("Command timeout in seconds (default 120). For PTY commands this is a hard cutoff — the command is sent SIGINT after this duration.")),
+	), newRemoteShellHandler(d))
 }
 
 // nodeHealth is the structured output of inspect_node.

@@ -1,7 +1,7 @@
 # redis.yaml — Application-Aware Plugin for Redis CLI
 #
 # Usage:
-#   alogin connect target-redis --app redis
+#   alogin access ssh target-redis --app redis
 #
 # Prerequisites:
 #   - Store the Redis password in the vault:

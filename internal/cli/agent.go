@@ -50,7 +50,7 @@ func newAgentMCPCmd() *cobra.Command {
 		SilenceUsage: true,
 		Long: `Run alogin as an MCP (Model Context Protocol) server over stdio.
 
-LLMs can use this server to query and manage alogin servers, tunnels,
+LLMs can use this server to query and manage alogin compute entries, tunnels,
 and clusters. Communicates using JSON-RPC 2.0 over stdin/stdout.
 
 All exec_command, exec_on_cluster, inspect_node, and log_analyzer calls are logged to the audit trail

@@ -11,7 +11,7 @@ go build -race ./cmd/alogin
 go test ./...
 
 # Build + run
-go run ./cmd/alogin connect
+go run ./cmd/alogin access
 
 # Cross-compile
 GOOS=linux  GOARCH=amd64 go build -o alogin-linux-amd64  ./cmd/alogin

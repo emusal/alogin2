@@ -83,7 +83,7 @@ match:
 
 ### `server_ids` — 서버 ID 목록 (정수)
 
-`alogin server list`에서 확인하는 서버 ID (정확히 일치).
+`alogin compute list`에서 확인하는 서버 ID (정확히 일치).
 
 ```yaml
 match:

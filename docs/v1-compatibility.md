@@ -3,19 +3,19 @@
 The shell shim `completions/alogin.zsh` provides backward-compatible functions:
 
 ```
-t            → alogin connect
-r            → alogin connect --auto-gw
+t            → alogin access
+r            → alogin access --auto-gw
 s            → alogin sftp
 f            → alogin ftp
 m            → alogin mount
 ct           → alogin cluster
 cr           → alogin cluster --gateway
-addsvr       → alogin server add
-delsvr       → alogin server delete
-dissvr       → alogin server show
-dissvrlist   → alogin server list
-chgsvr       → alogin server update
-chgpwd       → alogin server passwd
+addsvr       → alogin compute add
+delsvr       → alogin compute delete
+dissvr       → alogin compute show
+dissvrlist   → alogin compute list
+chgsvr       → alogin compute update
+chgpwd       → alogin compute passwd
 addalias     → alogin alias add
 disalias     → alogin alias show
 tver         → alogin version

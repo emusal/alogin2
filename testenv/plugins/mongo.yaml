@@ -1,7 +1,7 @@
 # mongo.yaml — Application-Aware Plugin for MongoDB mongosh client
 #
 # Usage:
-#   alogin connect <mongo-host> --app mongo
+#   alogin access ssh <mongo-host> --app mongo
 #
 # Prerequisites:
 #   - Store the MongoDB admin password in the vault:
