@@ -22,6 +22,8 @@ const emptyForm = (): ServerFormData => ({
   locale: '',
   device_type: '',
   note: '',
+  auth_method: 'password',
+  identity_file: '',
 })
 
 export function ServerFormModal({ initial, gateways, onSave, onClose }: Props) {
@@ -38,6 +40,8 @@ export function ServerFormModal({ initial, gateways, onSave, onClose }: Props) {
           locale: initial.locale,
           device_type: initial.device_type,
           note: initial.note,
+          auth_method: initial.auth_method || 'password',
+          identity_file: initial.identity_file || '',
         }
       : emptyForm()
   )
@@ -148,6 +152,25 @@ export function ServerFormModal({ initial, gateways, onSave, onClose }: Props) {
               placeholder="e.g. ko_KR.eucKR"
             />
           </div>
+          <div className="form-row">
+            <label>Auth Method</label>
+            <select value={form.auth_method} onChange={e => set('auth_method', e.target.value)}>
+              <option value="password">password</option>
+              <option value="key">key</option>
+            </select>
+            <span className="form-hint">password = use stored password; key = SSH public key only</span>
+          </div>
+          {form.auth_method === 'key' && (
+            <div className="form-row">
+              <label>Identity File</label>
+              <input
+                type="text"
+                value={form.identity_file}
+                onChange={e => set('identity_file', e.target.value)}
+                placeholder="e.g. ~/.ssh/id_ed25519 (leave empty for default)"
+              />
+            </div>
+          )}
           {error && <div className="modal-error">{error}</div>}
           <div className="modal-actions">
             <button type="button" onClick={onClose}>Cancel</button>

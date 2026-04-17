@@ -42,12 +42,13 @@ func (e *ErrDialViaEOF) Error() string {
 
 // HopConfig holds everything needed to authenticate at one SSH hop.
 type HopConfig struct {
-	Host     string
-	Port     int
-	User     string
-	Password string // empty = try key auth only
-	KeyPath  string // path to private key; empty = use ssh-agent
-	Timeout  time.Duration
+	Host       string
+	Port       int
+	User       string
+	Password   string // empty = try key auth only
+	KeyPath    string // path to private key; empty = use ssh-agent
+	AuthMethod string // "password" | "key"; empty = auto (try both)
+	Timeout    time.Duration
 }
 
 // Addr returns "host:port".
@@ -121,8 +122,9 @@ func makeSSHConfig(cfg HopConfig) (*gossh.ClientConfig, error) {
 	}
 
 	var authMethods []gossh.AuthMethod
+	keyOnly := cfg.AuthMethod == "key"
 
-	// 1. Try SSH agent
+	// 1. Try SSH agent (always, unless we end up with a specific key below)
 	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
 		if conn, err := net.Dial("unix", sock); err == nil {
 			authMethods = append(authMethods, gossh.PublicKeysCallback(
@@ -130,13 +132,12 @@ func makeSSHConfig(cfg HopConfig) (*gossh.ClientConfig, error) {
 		}
 	}
 
-	// 2. Try explicit key file
+	// 2. Try explicit key file or default key locations
 	if cfg.KeyPath != "" {
 		if am, err := publicKeyAuth(cfg.KeyPath); err == nil {
 			authMethods = append(authMethods, am)
 		}
 	} else {
-		// Try default key locations
 		for _, kp := range defaultKeyPaths() {
 			if am, err := publicKeyAuth(kp); err == nil {
 				authMethods = append(authMethods, am)
@@ -145,8 +146,8 @@ func makeSSHConfig(cfg HopConfig) (*gossh.ClientConfig, error) {
 		}
 	}
 
-	// 3. Password auth
-	if cfg.Password != "" {
+	// 3. Password auth — skipped when auth_method is explicitly "key"
+	if !keyOnly && cfg.Password != "" {
 		authMethods = append(authMethods,
 			gossh.Password(cfg.Password),
 			gossh.KeyboardInteractive(passwordKeyboardInteractive(cfg.Password)),

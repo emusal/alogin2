@@ -107,7 +107,9 @@ _alogin_server_args() {
             '--user[login user]:user:' \
             '--port[port (0=default)]:port:' \
             '--gateway[gateway route name]:gateway:_alogin_gateways' \
-            '--locale[locale (e.g. ko_KR.eucKR)]:locale:'
+            '--locale[locale (e.g. ko_KR.eucKR)]:locale:' \
+            '--auth-method[authentication method]:method:(password key)' \
+            '--identity-file[path to SSH private key]:key:_files'
           ;;
         list) _arguments '--format[output format]:format:(table json)' ;;
         alias) _alogin_alias_args ;;
@@ -712,7 +714,7 @@ _alogin_completion() {
           show|delete|passwd|getpwd)
             COMPREPLY=($(compgen -W "$(_alogin_hosts)" -- "$cur")) ;;
           add)
-            COMPREPLY=($(compgen -W "--proto --host --user --port --gateway --locale" -- "$cur")) ;;
+            COMPREPLY=($(compgen -W "--proto --host --user --port --gateway --locale --auth-method --identity-file" -- "$cur")) ;;
           list)
             COMPREPLY=($(compgen -W "--format" -- "$cur")) ;;
           alias)

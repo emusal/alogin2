@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS servers (
     note              TEXT    NOT NULL DEFAULT '',
     policy_yaml       TEXT,
     system_prompt     TEXT,
+    auth_method       TEXT    NOT NULL DEFAULT 'password',
+    identity_file     TEXT    NOT NULL DEFAULT '',
     created_at        TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
     updated_at        TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
     UNIQUE(host, user)

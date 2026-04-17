@@ -345,10 +345,15 @@ func (h *Handler) createServer(w http.ResponseWriter, r *http.Request) {
 		DeviceType     string `json:"device_type"`
 		Note           string `json:"note"`
 		GatewayRouteID *int64 `json:"gateway_route_id"`
+		AuthMethod     string `json:"auth_method"`
+		IdentityFile   string `json:"identity_file"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+	if req.AuthMethod == "" {
+		req.AuthMethod = "password"
 	}
 	srv := &model.Server{
 		Protocol:       model.Protocol(req.Protocol),
@@ -359,6 +364,8 @@ func (h *Handler) createServer(w http.ResponseWriter, r *http.Request) {
 		DeviceType:     model.DeviceType(req.DeviceType),
 		Note:           req.Note,
 		GatewayRouteID: req.GatewayRouteID,
+		AuthMethod:     req.AuthMethod,
+		IdentityFile:   req.IdentityFile,
 	}
 	if err := h.db.Servers.Create(r.Context(), srv, req.Password); err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
@@ -398,6 +405,8 @@ func (h *Handler) updateServer(w http.ResponseWriter, r *http.Request) {
 		DeviceType     string          `json:"device_type"`
 		Note           string          `json:"note"`
 		GatewayRouteID json.RawMessage `json:"gateway_route_id"`
+		AuthMethod     string          `json:"auth_method"`
+		IdentityFile   string          `json:"identity_file"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
@@ -418,6 +427,14 @@ func (h *Handler) updateServer(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	authMethod := req.AuthMethod
+	if authMethod == "" {
+		authMethod = existing.AuthMethod
+	}
+	identityFile := req.IdentityFile
+	if req.AuthMethod == "" {
+		identityFile = existing.IdentityFile
+	}
 	srv := &model.Server{
 		ID:             id,
 		Protocol:       model.Protocol(req.Protocol),
@@ -428,6 +445,8 @@ func (h *Handler) updateServer(w http.ResponseWriter, r *http.Request) {
 		DeviceType:     model.DeviceType(req.DeviceType),
 		Note:           req.Note,
 		GatewayRouteID: gwRouteID,
+		AuthMethod:     authMethod,
+		IdentityFile:   identityFile,
 	}
 	if err := h.db.Servers.Update(r.Context(), srv, req.Password); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)

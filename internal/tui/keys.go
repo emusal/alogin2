@@ -33,7 +33,8 @@ func (m Model) isServerFormDirty() bool {
 		}
 	}
 	return !int64PtrEq(m.srvFormSelectedGwID, m.snapSrvGwID) ||
-		!int64PtrEq(m.srvFormSelectedSrvGwID, m.snapSrvSrvGwID)
+		!int64PtrEq(m.srvFormSelectedSrvGwID, m.snapSrvSrvGwID) ||
+		m.srvFormAuthMethod != m.snapSrvAuthMethod
 }
 
 func (m Model) isGatewayFormDirty() bool {
@@ -613,13 +614,42 @@ func (m Model) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // ── server form / delete confirm ──────────────────────────────────────────────
 
-// tabCount is the total number of Tab stops in the server form:
-// 0..4 = text fields, 5 = gateway picker row, 6 = locale field.
-const srvFormTabCount = 7
+// Tab stops in the server form:
+// 0-4 = text fields (Protocol/Host/User/Password/Port)
+// 5   = Gateway picker (virtual)
+// 6   = Locale → formFields[5]
+// 7   = Auth Method picker (virtual)
+// 8   = Identity File → formFields[6]  (shown only when auth_method == "key")
+const srvFormTabCount = 9
+
+var authMethods = []string{"password", "key"}
 
 func (m Model) updateServerForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.formEscConfirm {
 		return m.handleFormEscConfirm(msg, stateList, m.submitServerForm)
+	}
+
+	// Auth method picker is open — handle navigation
+	if m.srvFormAuthPickerOpen {
+		switch msg.String() {
+		case "ctrl+c":
+			m.quitting = true
+			return m, tea.Quit
+		case "esc":
+			m.srvFormAuthPickerOpen = false
+		case "up":
+			if m.srvFormAuthPickerCursor > 0 {
+				m.srvFormAuthPickerCursor--
+			}
+		case "down":
+			if m.srvFormAuthPickerCursor < len(authMethods)-1 {
+				m.srvFormAuthPickerCursor++
+			}
+		case "enter", " ":
+			m.srvFormAuthMethod = authMethods[m.srvFormAuthPickerCursor]
+			m.srvFormAuthPickerOpen = false
+		}
+		return m, nil
 	}
 
 	// Gateway picker is open — handle search + navigation
@@ -652,10 +682,8 @@ func (m Model) updateServerForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.srvFormGwSearch.SetValue("")
 			m.srvFormGwSearch.Blur()
 		default:
-			// Forward all other keys to the search input
 			var cmd tea.Cmd
 			m.srvFormGwSearch, cmd = m.srvFormGwSearch.Update(msg)
-			// Clamp cursor after filter change
 			entries := m.gwPickerEntries()
 			if m.srvFormGwPickerCursor >= len(entries) {
 				m.srvFormGwPickerCursor = len(entries) - 1
@@ -668,24 +696,30 @@ func (m Model) updateServerForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Normal form navigation
-	// formFocusIdx: 0-4 = text fields, 5 = gateway row, 6 = locale text field
+	// Normal form navigation.
+	// Virtual rows (5=Gateway, 7=AuthMethod) are not backed by formFields.
+	// Tab-index → formFields index mapping:
+	//   0-4 → 0-4, 6 → 5 (Locale), 8 → 6 (IdentityFile)
+	isVirtualRow := func(idx int) bool { return idx == 5 || idx == 7 }
+	tabToFieldIdx := func(tabIdx int) int {
+		switch {
+		case tabIdx < 5:
+			return tabIdx
+		case tabIdx == 6:
+			return 5 // Locale
+		case tabIdx == 8:
+			return 6 // IdentityFile
+		}
+		return tabIdx
+	}
 	blurCurrent := func() {
-		if m.formFocusIdx != 5 {
-			idx := m.formFocusIdx
-			if idx > 5 {
-				idx-- // formFields[5] is Locale (Tab-index 6)
-			}
-			m.formFields[idx].Blur()
+		if !isVirtualRow(m.formFocusIdx) {
+			m.formFields[tabToFieldIdx(m.formFocusIdx)].Blur()
 		}
 	}
 	focusCurrent := func() {
-		if m.formFocusIdx != 5 {
-			idx := m.formFocusIdx
-			if idx > 5 {
-				idx--
-			}
-			m.formFields[idx].Focus()
+		if !isVirtualRow(m.formFocusIdx) {
+			m.formFields[tabToFieldIdx(m.formFocusIdx)].Focus()
 		}
 	}
 
@@ -702,20 +736,36 @@ func (m Model) updateServerForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.state = stateList
 		return m, nil
 	case "enter":
-		if m.formFocusIdx == 5 {
-			// Open gateway picker
+		switch m.formFocusIdx {
+		case 5:
 			m.srvFormGwPickerOpen = true
 			m.srvFormGwPickerCursor = 0
 			m.srvFormGwSearch.SetValue("")
 			m.srvFormGwSearch.Focus()
 			return m, nil
+		case 7:
+			// sync cursor to current value, then open picker
+			m.srvFormAuthPickerCursor = 0
+			for i, v := range authMethods {
+				if v == m.srvFormAuthMethod {
+					m.srvFormAuthPickerCursor = i
+					break
+				}
+			}
+			m.srvFormAuthPickerOpen = true
+			return m, nil
+		default:
+			return m, m.submitServerForm()
 		}
-		return m, m.submitServerForm()
 	case "tab":
 		blurCurrent()
 		next := (m.formFocusIdx + 1) % srvFormTabCount
 		if m.formMode == fmEdit && next == 1 {
 			next = 2
+		}
+		// Skip Identity File (index 8) when auth_method != "key"
+		if next == 8 && m.srvFormAuthMethod != "key" {
+			next = 0
 		}
 		m.formFocusIdx = next
 		focusCurrent()
@@ -726,19 +776,20 @@ func (m Model) updateServerForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.formMode == fmEdit && prev == 1 {
 			prev = 0
 		}
+		// Skip Identity File (index 8) when auth_method != "key"
+		if prev == 8 && m.srvFormAuthMethod != "key" {
+			prev = 7
+		}
 		m.formFocusIdx = prev
 		focusCurrent()
 		return m, nil
 	default:
-		if m.formFocusIdx == 5 {
+		if isVirtualRow(m.formFocusIdx) {
 			return m, nil
 		}
-		idx := m.formFocusIdx
-		if idx > 5 {
-			idx--
-		}
 		var cmd tea.Cmd
-		m.formFields[idx], cmd = m.formFields[idx].Update(msg)
+		fi := tabToFieldIdx(m.formFocusIdx)
+		m.formFields[fi], cmd = m.formFields[fi].Update(msg)
 		return m, cmd
 	}
 }

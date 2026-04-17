@@ -25,8 +25,12 @@ This skill focuses on concepts and canonical workflows.
 # 1. Install
 curl -fsSL https://raw.githubusercontent.com/emusal/alogin2/main/install.sh | sh
 
-# 2. Add a server to the encrypted registry
+# 2. Add a server (password auth, default)
 alogin server add --host 10.0.0.10 --user admin
+
+# 2b. Add a key-only server
+alogin server add --host bastion.example.com --user ops \
+  --auth-method key --identity-file ~/.ssh/id_ed25519
 
 # 3. Connect instantly
 alogin ssh connect 10.0.0.10
@@ -49,6 +53,8 @@ Canonical flow:
 alogin server list                                           # table (default)
 alogin server list --format json                             # machine-readable
 alogin server add --host prod-db --user dbadmin --note "Primary DB"
+alogin server add --host bastion --user ops \
+  --auth-method key --identity-file ~/.ssh/bastion_ed25519   # key-only server
 alogin server show prod-db                                   # human-readable detail
 alogin server show prod-db --format json                     # full detail as JSON
 alogin server passwd prod-db                                 # update vault password
@@ -57,6 +63,16 @@ alogin server passwd prod-db                                 # update vault pass
 alogin server alias add prod admin@prod-db
 alogin server alias list --format json
 ```
+
+`auth_method` controls how alogin authenticates:
+
+| value | behaviour |
+|-------|-----------|
+| `password` (default) | use vault password; fall back to SSH agent / default keys |
+| `key` | SSH public key only — vault password is never sent; connection fails if the server prompts for a password |
+
+`identity_file` pins a specific private key (absolute path on the local machine).
+When empty, alogin tries the SSH agent (`SSH_AUTH_SOCK`) then `~/.ssh/id_ed25519`, `id_rsa`, `id_ecdsa`.
 
 ### [SSH (Remote Connectivity)](https://github.com/emusal/alogin2#ssh--remote-connectivity)
 

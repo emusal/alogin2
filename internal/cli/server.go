@@ -16,7 +16,7 @@ import (
 
 
 func newServerAddCmd() *cobra.Command {
-	var proto, host, user, password, locale, gateway string
+	var proto, host, user, password, locale, gateway, authMethod, identityFile string
 	var port int
 
 	cmd := &cobra.Command{
@@ -37,8 +37,8 @@ Examples:
   # Server requiring an extra internal jump after the profile gateway
   alogin server add --host db-01 --user admin --gateway internal-jump
 
-  # Explicit multi-hop (no gateway needed in registry):
-  # alogin ssh connect gw-01 web-01   →  connects gw-01 then web-01`,
+  # Key-only server with explicit identity file
+  alogin server add --host db-01 --user admin --auth-method key --identity-file ~/.ssh/id_ed25519`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			r := bufio.NewReader(os.Stdin)
@@ -55,16 +55,27 @@ Examples:
 			if user == "" {
 				user = prompt(r, "User: ")
 			}
-			if password == "" {
+			if authMethod == "" {
+				authMethod = prompt(r, "Auth method [password/key] (default: password): ")
+				if authMethod == "" {
+					authMethod = "password"
+				}
+			}
+			if authMethod == "password" && password == "" {
 				password = promptSecret("Password (leave empty to use SSH key): ")
+			}
+			if authMethod == "key" && identityFile == "" {
+				identityFile = prompt(r, "Identity file (leave empty to use default key): ")
 			}
 
 			srv := &model.Server{
-				Protocol: model.Protocol(proto),
-				Host:     host,
-				User:     user,
-				Port:     port,
-				Locale:   locale,
+				Protocol:     model.Protocol(proto),
+				Host:         host,
+				User:         user,
+				Port:         port,
+				Locale:       locale,
+				AuthMethod:   authMethod,
+				IdentityFile: identityFile,
 			}
 
 			if gateway != "" {
@@ -86,7 +97,7 @@ Examples:
 				}
 			}
 
-			fmt.Printf("Added: %s@%s\n", user, host)
+			fmt.Printf("Added: %s@%s (auth: %s)\n", user, host, authMethod)
 			return nil
 		},
 	}
@@ -98,6 +109,8 @@ Examples:
 	cmd.Flags().IntVar(&port, "port", 0, "port (0 = protocol default)")
 	cmd.Flags().StringVar(&locale, "locale", "", "locale (e.g. ko_KR.eucKR)")
 	cmd.Flags().StringVar(&gateway, "gateway", "", "internal gateway route name (applied after profile gateway)")
+	cmd.Flags().StringVar(&authMethod, "auth-method", "", "authentication method: password|key (default: password)")
+	cmd.Flags().StringVar(&identityFile, "identity-file", "", "path to SSH private key (used when --auth-method=key)")
 	return cmd
 }
 
@@ -124,15 +137,19 @@ func newServerListCmd() *cobra.Command {
 					DeviceType     string `json:"device_type"`
 					Note           string `json:"note"`
 					GatewayRouteID *int64 `json:"gateway_route_id,omitempty"`
+					AuthMethod     string `json:"auth_method"`
+					IdentityFile   string `json:"identity_file,omitempty"`
 				}
 				out := make([]serverJSON, 0, len(servers))
 				for _, s := range servers {
 					out = append(out, serverJSON{
 						ID: s.ID, Protocol: string(s.Protocol),
 						Host: s.Host, User: s.User, Port: s.Port,
-						Locale: s.Locale,
-						DeviceType: string(s.DeviceType), Note: s.Note,
+						Locale:         s.Locale,
+						DeviceType:     string(s.DeviceType), Note: s.Note,
 						GatewayRouteID: s.GatewayRouteID,
+						AuthMethod:     s.AuthMethod,
+						IdentityFile:   s.IdentityFile,
 					})
 				}
 				return printJSON(out)
@@ -201,6 +218,8 @@ func newServerShowCmd() *cobra.Command {
 					"device_type":      string(srv.DeviceType), "note": srv.Note,
 					"gateway_route_id": srv.GatewayRouteID,
 					"has_password":     hasPassword,
+					"auth_method":      srv.AuthMethod,
+					"identity_file":    srv.IdentityFile,
 					"policy_yaml":      srv.PolicyYAML,
 					"system_prompt":    srv.SystemPrompt,
 				})
@@ -224,6 +243,10 @@ func newServerShowCmd() *cobra.Command {
 				fmt.Printf("Gateway:  (none)\n")
 			}
 
+			fmt.Printf("Auth:     %s\n", srv.AuthMethod)
+			if srv.IdentityFile != "" {
+				fmt.Printf("Key:      %s\n", srv.IdentityFile)
+			}
 			pwd, err := vlt.Get(vaultKey(srv))
 			if err == nil && pwd != "" {
 				fmt.Printf("Password: ****\n")

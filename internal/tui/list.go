@@ -487,9 +487,27 @@ func (m Model) renderServerForm() string {
 	// Locale (index 6)
 	body.WriteString(m.formRow("Locale", m.formFields[5].View(), m.formFocusIdx == 6))
 
+	// Auth Method (index 7) — picker row
+	authLabel := m.srvFormAuthMethod
+	if m.formFocusIdx == 7 && !m.srvFormAuthPickerOpen {
+		body.WriteString(m.formRow("Auth Method",
+			lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true).Render(authLabel)+
+				m.dimStyle.Render("  [Enter] change"), true))
+	} else {
+		body.WriteString(m.formRow("Auth Method", m.dimStyle.Render(authLabel), false))
+	}
+	if m.srvFormAuthPickerOpen {
+		body.WriteString(m.renderAuthPicker())
+	}
+
+	// Identity File (index 8) — only shown when auth_method == "key"
+	if m.srvFormAuthMethod == "key" {
+		body.WriteString(m.formRow("Identity File", m.formFields[6].View(), m.formFocusIdx == 8))
+	}
+
 	hint := "Tab next  Shift+Tab prev  Enter save  Esc cancel"
-	if m.srvFormGwPickerOpen {
-		hint = "↑↓ navigate  type to search  Enter select  Esc close picker"
+	if m.srvFormGwPickerOpen || m.srvFormAuthPickerOpen {
+		hint = "↑↓ navigate  Enter select  Esc close picker"
 	}
 	bodyStr := body.String()
 	if m.formEscConfirm {
@@ -539,6 +557,20 @@ func (m Model) renderGwPicker() string {
 	}
 	if total > viewport {
 		sb.WriteString(m.dimStyle.Render(fmt.Sprintf("    %d/%d", m.srvFormGwPickerCursor+1, total)))
+		sb.WriteString("\n")
+	}
+	return sb.String()
+}
+
+func (m Model) renderAuthPicker() string {
+	var sb strings.Builder
+	sb.WriteString("\n")
+	for i, v := range authMethods {
+		if i == m.srvFormAuthPickerCursor {
+			sb.WriteString(m.selectedStyle.Render("  > " + v))
+		} else {
+			sb.WriteString(m.normalStyle.Render("    " + v))
+		}
 		sb.WriteString("\n")
 	}
 	return sb.String()

@@ -131,17 +131,20 @@ func ShellChain(hops []HopConfig, opts ShellOptions) error {
 	// ── chain through hops[1..N] via shell commands ───────────────────────────
 	for i := 1; i < len(hops); i++ {
 		hop := hops[i]
-		// Build ssh command — identical to v1 conn.exp for non-first hops:
-		//   send "$proto $user@$host -p $port\r"
+		// Build ssh command — identical to v1 conn.exp for non-first hops.
 		// -tt forces a PTY on the next hop; StrictHostKeyChecking=no mirrors
 		// DialVia's InsecureIgnoreHostKey (inner hop hostnames are relative to
 		// the proxy's network, so local known_hosts is meaningless).
 		cmd := fmt.Sprintf("ssh -tt -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p %d %s@%s\r",
 			hop.Port, hop.User, hop.Host)
+		if hop.KeyPath != "" {
+			cmd = fmt.Sprintf("ssh -tt -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i %s -p %d %s@%s\r",
+				hop.KeyPath, hop.Port, hop.User, hop.Host)
+		}
 		if _, err := fmt.Fprint(stdinW, cmd); err != nil {
 			return fmt.Errorf("hop %d send cmd: %w", i, err)
 		}
-		if err := shellConductHop(cr, &acc, hop.Password, 30*time.Second, stdinW); err != nil {
+		if err := shellConductHop(cr, &acc, hop.Password, hop.AuthMethod, 30*time.Second, stdinW); err != nil {
 			return fmt.Errorf("hop %d (%s): %w", i, hop.Host, err)
 		}
 	}
@@ -185,7 +188,8 @@ func shellWaitPrompt(cr *shellChunkReader, acc *bytes.Buffer, timeout time.Durat
 
 // shellConductHop handles authentication after sending "ssh user@host" in a shell.
 // Mirrors v1 conn.exp's expect loop for non-first hops.
-func shellConductHop(cr *shellChunkReader, acc *bytes.Buffer, password string, timeout time.Duration, w io.Writer) error {
+// authMethod "key" causes the hop to fail immediately if a password prompt appears.
+func shellConductHop(cr *shellChunkReader, acc *bytes.Buffer, password, authMethod string, timeout time.Duration, w io.Writer) error {
 	patterns := []*regexp.Regexp{
 		reShellPrompt, // 0 — reached shell: success
 		reShellPass,   // 1 — password prompt
@@ -209,6 +213,9 @@ func shellConductHop(cr *shellChunkReader, acc *bytes.Buffer, password string, t
 		case 0:
 			return nil // shell prompt — connected
 		case 1:
+			if authMethod == "key" {
+				return fmt.Errorf("server requested password but auth_method is key")
+			}
 			fmt.Fprintf(w, "%s\r", password)
 		case 2:
 			fmt.Fprintf(w, "yes\r")

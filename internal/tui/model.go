@@ -150,6 +150,11 @@ type Model struct {
 	srvFormSelectedGwID    *int64 // GatewayRoute ID
 	srvFormSelectedSrvGwID *int64 // direct Server-as-gateway ID
 
+	// Server form auth method picker
+	srvFormAuthMethod       string // "password" | "key"
+	srvFormAuthPickerOpen   bool
+	srvFormAuthPickerCursor int
+
 	// Delete confirm
 	deleteTarget *model.Server
 
@@ -250,6 +255,7 @@ type Model struct {
 	snapFormFields     []string // server form field values
 	snapSrvGwID        *int64   // server form gateway ID
 	snapSrvSrvGwID     *int64   // server form server-as-gateway ID
+	snapSrvAuthMethod  string   // server form auth method
 	snapGwName         string   // gateway form name
 	snapGwHops         []int64  // gateway form hop list
 	snapClName         string   // cluster form name
@@ -428,9 +434,10 @@ func (m Model) filteredCommands() []tuiCommand {
 // ── server form ──────────────────────────────────────────────────────────────
 
 func (m *Model) initServerForm(srv *model.Server) tea.Cmd {
-	// 6 text fields: Protocol(0) Host(1) User(2) Password(3) Port(4) Locale(5)
-	// Gateway is handled by the picker (index 5 is the virtual gateway row in Tab order)
-	fields := make([]textinput.Model, 6)
+	// 7 text fields: Protocol(0) Host(1) User(2) Password(3) Port(4) Locale(5) IdentityFile(6)
+	// Gateway picker: virtual Tab-index 5 (between Port and Locale)
+	// Auth Method picker: virtual Tab-index 7 (between Locale and IdentityFile)
+	fields := make([]textinput.Model, 7)
 	for i := range fields {
 		fields[i] = textinput.New()
 		fields[i].CharLimit = 256
@@ -443,6 +450,7 @@ func (m *Model) initServerForm(srv *model.Server) tea.Cmd {
 	fields[4].Placeholder = "0"
 	fields[4].CharLimit = 5
 	fields[5].Placeholder = "e.g. ko_KR.eucKR"
+	fields[6].Placeholder = "e.g. ~/.ssh/id_ed25519 (optional)"
 
 	// Gateway picker state
 	gwSearch := textinput.New()
@@ -452,6 +460,10 @@ func (m *Model) initServerForm(srv *model.Server) tea.Cmd {
 	m.srvFormGwPickerOpen = false
 	m.srvFormGwPickerCursor = 0
 
+	// Auth method picker state
+	m.srvFormAuthPickerOpen = false
+	m.srvFormAuthPickerCursor = 0
+
 	if srv != nil {
 		fields[0].SetValue(string(srv.Protocol))
 		fields[1].SetValue(srv.Host)
@@ -460,6 +472,12 @@ func (m *Model) initServerForm(srv *model.Server) tea.Cmd {
 			fields[4].SetValue(strconv.Itoa(srv.Port))
 		}
 		fields[5].SetValue(srv.Locale)
+		fields[6].SetValue(srv.IdentityFile)
+		if srv.AuthMethod != "" {
+			m.srvFormAuthMethod = srv.AuthMethod
+		} else {
+			m.srvFormAuthMethod = "password"
+		}
 		m.srvFormSelectedGwID = srv.GatewayRouteID
 		m.formTarget = srv
 		m.formMode = fmEdit
@@ -468,6 +486,7 @@ func (m *Model) initServerForm(srv *model.Server) tea.Cmd {
 		m.formMode = fmAdd
 		m.formTarget = nil
 		fields[0].SetValue("ssh")
+		m.srvFormAuthMethod = "password"
 	}
 
 	fields[0].Focus()
@@ -485,6 +504,7 @@ func (m *Model) initServerForm(srv *model.Server) tea.Cmd {
 	m.snapSrvGwID = gwID
 	srvGwID := m.srvFormSelectedSrvGwID
 	m.snapSrvSrvGwID = srvGwID
+	m.snapSrvAuthMethod = m.srvFormAuthMethod
 	return m.loadGatewaysForPickerCmd()
 }
 
@@ -499,7 +519,11 @@ func (m Model) submitServerForm() tea.Cmd {
 		password := m.formFields[3].Value()
 		portStr := m.formFields[4].Value()
 		locale := m.formFields[5].Value()
-
+		identityFile := m.formFields[6].Value()
+		authMethod := m.srvFormAuthMethod
+		if authMethod == "" {
+			authMethod = "password"
+		}
 		port, _ := strconv.Atoi(portStr)
 
 		srv := &model.Server{
@@ -509,6 +533,8 @@ func (m Model) submitServerForm() tea.Cmd {
 			Port:           port,
 			Locale:         locale,
 			GatewayRouteID: m.srvFormSelectedGwID,
+			AuthMethod:     authMethod,
+			IdentityFile:   identityFile,
 		}
 
 		var opErr error

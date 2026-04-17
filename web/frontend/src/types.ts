@@ -8,6 +8,8 @@ export interface Server {
   locale: string
   device_type: string
   note: string
+  auth_method: string
+  identity_file: string
   created_at: string
   updated_at: string
 }
@@ -22,6 +24,8 @@ export interface ServerFormData {
   locale: string
   device_type: string
   note: string
+  auth_method: string
+  identity_file: string
 }
 
 export interface GatewayFormData {

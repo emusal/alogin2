@@ -247,10 +247,12 @@ func buildHopChain(ctx context.Context, srv *model.Server, user string, profileO
 					}
 					pwd, _ := vlt.Get(vaultKey(hopSrv))
 					hops = append(hops, internalssh.HopConfig{
-						Host:     resolveHost(ctx, hopSrv.Host),
-						Port:     hopSrv.EffectivePort(),
-						User:     hopSrv.User,
-						Password: pwd,
+						Host:       resolveHost(ctx, hopSrv.Host),
+						Port:       hopSrv.EffectivePort(),
+						User:       hopSrv.User,
+						Password:   pwd,
+						AuthMethod: hopSrv.AuthMethod,
+						KeyPath:    hopSrv.IdentityFile,
 					})
 				}
 			}
@@ -278,10 +280,12 @@ func buildHopChain(ctx context.Context, srv *model.Server, user string, profileO
 			}
 			pwd, _ := vlt.Get(vaultKey(hopSrv))
 			hops = append(hops, internalssh.HopConfig{
-				Host:     resolveHost(ctx, hopSrv.Host),
-				Port:     hopSrv.EffectivePort(),
-				User:     hopSrv.User,
-				Password: pwd,
+				Host:       resolveHost(ctx, hopSrv.Host),
+				Port:       hopSrv.EffectivePort(),
+				User:       hopSrv.User,
+				Password:   pwd,
+				AuthMethod: hopSrv.AuthMethod,
+				KeyPath:    hopSrv.IdentityFile,
 			})
 		}
 	}
@@ -289,10 +293,12 @@ func buildHopChain(ctx context.Context, srv *model.Server, user string, profileO
 	// Destination hop
 	pwd, _ := vlt.Get(vaultKey(srv))
 	hops = append(hops, internalssh.HopConfig{
-		Host:     resolveHost(ctx, srv.Host),
-		Port:     srv.EffectivePort(),
-		User:     user,
-		Password: pwd,
+		Host:       resolveHost(ctx, srv.Host),
+		Port:       srv.EffectivePort(),
+		User:       user,
+		Password:   pwd,
+		AuthMethod: srv.AuthMethod,
+		KeyPath:    srv.IdentityFile,
 	})
 
 	return hops, nil
@@ -332,10 +338,12 @@ func doConnectChain(ctx context.Context, hostArgs []string, opts *model.ConnectO
 		}
 		pwd, _ := vlt.Get(vaultKey(srv))
 		hops = append(hops, internalssh.HopConfig{
-			Host:     resolveHost(ctx, srv.Host),
-			Port:     srv.EffectivePort(),
-			User:     user,
-			Password: pwd,
+			Host:       resolveHost(ctx, srv.Host),
+			Port:       srv.EffectivePort(),
+			User:       user,
+			Password:   pwd,
+			AuthMethod: srv.AuthMethod,
+			KeyPath:    srv.IdentityFile,
 		})
 	}
 
