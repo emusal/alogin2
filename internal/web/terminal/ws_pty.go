@@ -129,27 +129,17 @@ func (h *Handler) runSession(ctx context.Context, ws *websocket.Conn, serverID i
 	var ptyRules []plugin.PTYRule
 	if appName != "" && h.pluginDir != "" {
 		p, loadErr := plugin.LoadFromFile(filepath.Join(h.pluginDir, appName+".yaml"))
-		if loadErr == nil && p != nil && p.Runtime.Environments.Native != nil {
-			strategy := &plugin.Strategy{
-				Kind:    "native",
-				Command: p.Runtime.Environments.Native.Command,
-				Args:    p.Runtime.Environments.Native.Args,
-			}
-			if strategy.Command != "" {
-				// Resolve secrets and build PTY automation rules.
-				if secrets, sErr := plugin.ResolveSecrets(p, h.vlt); sErr == nil {
-					sess := &plugin.Session{Plugin: p, Strategy: strategy, Secrets: secrets}
-					ptyRules = sess.BuildPTYRules()
-				}
-				cmd := strategy.BuildCommand()
+		if loadErr == nil && p != nil {
+			runner := &wsRunner{client: client}
+			if pluginSess, prepErr := plugin.Prepare(ctx, p, h.vlt, runner); prepErr == nil {
+				ptyRules = pluginSess.BuildPTYRules()
+				cmd := pluginSess.Strategy.BuildCommand()
 				if err := sess.Start(cmd); err != nil {
 					return fmt.Errorf("start plugin %s: %w", appName, err)
 				}
 				goto sessionStarted
 			}
 		}
-		// Plugin load failed — fall through to shell with a notice
-		stdinPipe.Write([]byte("# plugin '" + appName + "' not loaded, opening shell\r\n"))
 	}
 	if err := sess.Shell(); err != nil {
 		return err
@@ -337,4 +327,77 @@ func (h *Handler) buildHops(ctx context.Context, srv *model.Server, profileOverr
 		Password: pwd,
 	})
 	return hops, nil
+}
+
+// wsRunner adapts *internalssh.Client to plugin.RemoteRunner for web terminal sessions.
+// RunInteractive is not used in this path (PTY is managed by the WebSocket handler directly).
+type wsRunner struct {
+	client *internalssh.Client
+}
+
+func (r *wsRunner) Run(_ context.Context, cmd string) (string, int, error) {
+	out, err := r.client.Run(cmd)
+	if err != nil {
+		if exitErr, ok := err.(*gossh.ExitError); ok {
+			return string(out), exitErr.ExitStatus(), nil
+		}
+		return string(out), -1, err
+	}
+	return string(out), 0, nil
+}
+
+func (r *wsRunner) RunPTY(_ context.Context, cmd string, rules []plugin.PTYRule) (string, error) {
+	sess, err := r.client.NewSession()
+	if err != nil {
+		return "", err
+	}
+	defer sess.Close()
+	if err := sess.RequestPty("xterm-256color", 24, 80, gossh.TerminalModes{
+		gossh.ECHO: 1, gossh.TTY_OP_ISPEED: 14400, gossh.TTY_OP_OSPEED: 14400,
+	}); err != nil {
+		return "", err
+	}
+	stdinPipe, err := sess.StdinPipe()
+	if err != nil {
+		return "", err
+	}
+	var buf bytes.Buffer
+	var mu sync.Mutex
+	sess.Stdout = &expectWriter{buf: &buf, mu: &mu, stdin: stdinPipe, rules: rules}
+	sess.Stderr = sess.Stdout
+	if err := sess.Start(cmd); err != nil {
+		return "", err
+	}
+	_ = sess.Wait()
+	return buf.String(), nil
+}
+
+func (r *wsRunner) RunInteractive(_ context.Context, _ string, _ []plugin.PTYRule, _ map[string]string) error {
+	return nil // not used: web handler manages the PTY directly
+}
+
+type expectWriter struct {
+	buf   *bytes.Buffer
+	mu    *sync.Mutex
+	stdin io.Writer
+	rules []plugin.PTYRule
+}
+
+func (w *expectWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	n, err := w.buf.Write(p)
+	combined := w.buf.String()
+	for i := range w.rules {
+		r := &w.rules[i]
+		if r.Pattern != "" && strings.Contains(combined, r.Pattern) {
+			send := r.Send
+			if r.SendNewline {
+				send += "\n"
+			}
+			_, _ = w.stdin.Write([]byte(send))
+			r.Pattern = ""
+		}
+	}
+	return n, err
 }

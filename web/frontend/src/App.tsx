@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ComputeList } from './components/ComputeList'
+import { ServerList } from './components/ServerList'
 import { GatewayList } from './components/GatewayList'
 import { ClusterList } from './components/ClusterList'
 import { ClusterDashboard } from './components/ClusterDashboard'
@@ -13,7 +13,7 @@ import { PageBanner } from './components/PageBanner'
 import type { Server, Cluster, Profile } from './types'
 import './App.css'
 
-type View = 'compute' | 'gateways' | 'clusters' | 'hosts' | 'tunnels' | 'plugins' | 'app-servers' | 'profiles' | string
+type View = 'servers' | 'gateways' | 'clusters' | 'hosts' | 'tunnels' | 'plugins' | 'app-servers' | 'profiles' | string
 
 interface TerminalTab {
   id: string
@@ -29,14 +29,14 @@ interface ClusterDashTab {
 let tabCounter = 0
 
 export default function App() {
-  const [view, setView] = useState<View>('compute')
+  const [view, setView] = useState<View>('servers')
   const [terminals, setTerminals] = useState<TerminalTab[]>([])
   const [clusterDashTabs, setClusterDashTabs] = useState<ClusterDashTab[]>([])
   const [servers, setServers] = useState<Server[]>([])
   const [activeProfile, setActiveProfile] = useState<Profile | null>(null)
 
   useEffect(() => {
-    fetch('/api/compute')
+    fetch('/api/servers')
       .then(r => r.json())
       .then(data => setServers(Array.isArray(data) ? data : []))
       .catch(() => {})
@@ -56,15 +56,22 @@ export default function App() {
     setView(id)
   }
 
-  const connectAppServer = (serverId: number, app: string) => {
-    const server = servers.find(s => s.id === serverId)
+  const connectAppServer = async (serverId: number, app: string) => {
+    let server = servers.find(s => s.id === serverId)
+    if (!server) {
+      try {
+        const r = await fetch(`/api/servers/${serverId}`)
+        if (r.ok) server = await r.json()
+      } catch { /* ignore */ }
+    }
     if (!server) return
+    console.log('[connectAppServer] server=', server, 'app=', app)
     connect(server, app)
   }
 
   const closeTab = (id: string) => {
     setTerminals(tabs => tabs.filter(t => t.id !== id))
-    setView(prev => prev === id ? 'compute' : prev)
+    setView(prev => prev === id ? 'servers' : prev)
   }
 
   const openClusterDash = (cluster: Cluster) => {
@@ -92,10 +99,10 @@ export default function App() {
         )}
         <nav className="nav">
           <button
-            className={`nav-btn ${view === 'compute' ? 'active' : ''}`}
-            onClick={() => setView('compute')}
+            className={`nav-btn ${view === 'servers' ? 'active' : ''}`}
+            onClick={() => setView('servers')}
           >
-            Compute
+            Servers
           </button>
           <button
             className={`nav-btn ${view === 'gateways' ? 'active' : ''}`}
@@ -177,7 +184,7 @@ export default function App() {
       </header>
 
       <main className="main">
-        {view === 'compute'  && <PageBanner page="compute" />}
+        {view === 'servers'  && <PageBanner page="servers" />}
         {view === 'gateways' && <PageBanner page="gateways" />}
         {view === 'profiles' && <PageBanner page="profiles" />}
         {view === 'clusters' && <PageBanner page="clusters" />}
@@ -187,7 +194,7 @@ export default function App() {
         {view === 'app-servers' && <PageBanner page="app-servers" />}
         {terminals.some(t => t.id === view) && <PageBanner page="terminal" />}
 
-        {view === 'compute'  && <ComputeList onConnect={connect} />}
+        {view === 'servers'  && <ServerList onConnect={connect} />}
         {view === 'gateways' && <GatewayList servers={servers} />}
         {view === 'profiles' && <ProfileList onActiveProfileChange={setActiveProfile} />}
         {view === 'clusters' && <ClusterList servers={servers} onOpenDashboard={openClusterDash} />}

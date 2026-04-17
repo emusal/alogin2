@@ -12,6 +12,142 @@ import (
 	tunnelpkg "github.com/emusal/alogin2/internal/tunnel"
 )
 
+// int64PtrEq returns true if both pointers point to the same value (or both nil).
+func int64PtrEq(a, b *int64) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return *a == *b
+}
+
+func (m Model) isServerFormDirty() bool {
+	if len(m.snapFormFields) != len(m.formFields) {
+		return true
+	}
+	for i, f := range m.formFields {
+		if f.Value() != m.snapFormFields[i] {
+			return true
+		}
+	}
+	return !int64PtrEq(m.srvFormSelectedGwID, m.snapSrvGwID) ||
+		!int64PtrEq(m.srvFormSelectedSrvGwID, m.snapSrvSrvGwID)
+}
+
+func (m Model) isGatewayFormDirty() bool {
+	if m.gwFormName.Value() != m.snapGwName {
+		return true
+	}
+	if len(m.gwFormHops) != len(m.snapGwHops) {
+		return true
+	}
+	for i, h := range m.gwFormHops {
+		if h != m.snapGwHops[i] {
+			return true
+		}
+	}
+	return false
+}
+
+func (m Model) isClusterFormDirty() bool {
+	if m.clFormName.Value() != m.snapClName {
+		return true
+	}
+	if len(m.clFormMembers) != len(m.snapClMembers) {
+		return true
+	}
+	for i, mem := range m.clFormMembers {
+		if mem != m.snapClMembers[i] {
+			return true
+		}
+	}
+	return false
+}
+
+func (m Model) isHostFormDirty() bool {
+	if len(m.snapHostFields) != len(m.hostFormFields) {
+		return true
+	}
+	for i, f := range m.hostFormFields {
+		if f.Value() != m.snapHostFields[i] {
+			return true
+		}
+	}
+	return false
+}
+
+func (m Model) isTunnelFormDirty() bool {
+	if m.tnFormServerID != m.snapTnServerID {
+		return true
+	}
+	if len(m.snapTnFields) != len(m.tnFormFields) {
+		return true
+	}
+	for i, f := range m.tnFormFields {
+		if f.Value() != m.snapTnFields[i] {
+			return true
+		}
+	}
+	return false
+}
+
+func (m Model) isAppServerFormDirty() bool {
+	if m.asFormServerID != m.snapAsServerID {
+		return true
+	}
+	if len(m.snapAsFields) != len(m.asFormFields) {
+		return true
+	}
+	for i, f := range m.asFormFields {
+		if f.Value() != m.snapAsFields[i] {
+			return true
+		}
+	}
+	return false
+}
+
+func (m Model) isProfileFormDirty() bool {
+	if !int64PtrEq(m.pfFormGatewayID, m.snapPfGatewayID) {
+		return true
+	}
+	if len(m.snapPfFields) != len(m.pfFormFields) {
+		return true
+	}
+	for i, f := range m.pfFormFields {
+		if f.Value() != m.snapPfFields[i] {
+			return true
+		}
+	}
+	return false
+}
+
+// handleFormEscConfirm processes key events for the "Save before leaving?" dialog.
+// submitFn is called when the user chooses Save; backState is set when Cancel is chosen.
+func (m Model) handleFormEscConfirm(msg tea.KeyMsg, backState state, submitFn func() tea.Cmd) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		m.quitting = true
+		return m, tea.Quit
+	case "esc":
+		// Back to form
+		m.formEscConfirm = false
+		return m, nil
+	case "tab", "shift+tab", "left", "right", "h", "l":
+		m.formEscConfirmSave = !m.formEscConfirmSave
+		return m, nil
+	case "enter", " ":
+		m.formEscConfirm = false
+		if m.formEscConfirmSave {
+			return m, submitFn()
+		}
+		m.state = backState
+		return m, nil
+	}
+	return m, nil
+}
+
 // Update implements tea.Model — handles all key events.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Non-key messages first
@@ -106,6 +242,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case asErrMsg:
 		m.statusMsg = "Error: " + msg.err.Error()
 		return m, nil
+	case pfDoneMsg:
+		m.profiles = msg.profiles
+		m.state = stateProfileList
+		if msg.msg != "" {
+			m.statusMsg = msg.msg
+		}
+		return m, nil
+	case pfErrMsg:
+		m.statusMsg = "Error: " + msg.err.Error()
+		return m, nil
 	}
 
 	keyMsg, ok := msg.(tea.KeyMsg)
@@ -148,6 +294,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateAppServerList(keyMsg)
 	case stateAppServerForm:
 		return m.updateAppServerForm(keyMsg)
+	case stateProfileList:
+		return m.updateProfileList(keyMsg)
+	case stateProfileForm:
+		return m.updateProfileForm(keyMsg)
 	}
 	return m, nil
 }
@@ -344,11 +494,13 @@ func (m Model) updateCommandPalette(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) executeCommand(trigger string) (tea.Model, tea.Cmd) {
 	m.statusMsg = ""
 	switch trigger {
-	case "/compute":
+	case "/server":
 		m.state = stateList
 		return m, nil
 	case "/gateway":
 		return m, m.loadGatewaysCmd()
+	case "/profile":
+		return m, m.loadProfilesCmd()
 	case "/cluster":
 		return m, m.loadClustersCmd()
 	case "/hosts":
@@ -466,6 +618,10 @@ func (m Model) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 const srvFormTabCount = 7
 
 func (m Model) updateServerForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.formEscConfirm {
+		return m.handleFormEscConfirm(msg, stateList, m.submitServerForm)
+	}
+
 	// Gateway picker is open — handle search + navigation
 	if m.srvFormGwPickerOpen {
 		switch msg.String() {
@@ -538,6 +694,11 @@ func (m Model) updateServerForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.quitting = true
 		return m, tea.Quit
 	case "esc":
+		if m.isServerFormDirty() {
+			m.formEscConfirm = true
+			m.formEscConfirmSave = false
+			return m, nil
+		}
 		m.state = stateList
 		return m, nil
 	case "enter":
@@ -631,6 +792,10 @@ func (m Model) updateGatewayList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateGatewayForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.formEscConfirm {
+		return m.handleFormEscConfirm(msg, stateGatewayList, m.submitGatewayForm)
+	}
+
 	switch msg.String() {
 	case "ctrl+c":
 		m.quitting = true
@@ -640,6 +805,11 @@ func (m Model) updateGatewayForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		if m.gwFormPickerOpen {
 			m.gwFormPickerOpen = false
+			return m, nil
+		}
+		if m.isGatewayFormDirty() {
+			m.formEscConfirm = true
+			m.formEscConfirmSave = false
 			return m, nil
 		}
 		m.state = stateGatewayList
@@ -731,6 +901,11 @@ func (m Model) updateClusterList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.clCursor < len(m.clusters)-1 {
 			m.clCursor++
 		}
+	case "enter":
+		if len(m.clusters) > 0 {
+			m.choiceCluster = &SelectedCluster{Cluster: m.clusters[m.clCursor]}
+			return m, tea.Quit
+		}
 	case "a":
 		m.initClusterForm(nil)
 	case "e":
@@ -750,6 +925,10 @@ func (m Model) updateClusterList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateClusterForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.formEscConfirm {
+		return m.handleFormEscConfirm(msg, stateClusterList, m.submitClusterForm)
+	}
+
 	switch msg.String() {
 	case "ctrl+c":
 		m.quitting = true
@@ -763,6 +942,11 @@ func (m Model) updateClusterForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if m.clFormPickerOpen {
 			m.clFormPickerOpen = false
+			return m, nil
+		}
+		if m.isClusterFormDirty() {
+			m.formEscConfirm = true
+			m.formEscConfirmSave = false
 			return m, nil
 		}
 		m.state = stateClusterList
@@ -900,11 +1084,20 @@ func (m Model) updateHostList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateHostForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.formEscConfirm {
+		return m.handleFormEscConfirm(msg, stateHostList, m.submitHostForm)
+	}
+
 	switch msg.String() {
 	case "ctrl+c":
 		m.quitting = true
 		return m, tea.Quit
 	case "esc":
+		if m.isHostFormDirty() {
+			m.formEscConfirm = true
+			m.formEscConfirmSave = false
+			return m, nil
+		}
 		m.state = stateHostList
 		return m, nil
 	case "ctrl+s", "enter":
@@ -1017,6 +1210,10 @@ const tnFormTabCount = 7
 const tnFormIdxServer = 1
 
 func (m Model) updateTunnelForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.formEscConfirm {
+		return m.handleFormEscConfirm(msg, stateTunnelList, m.submitTunnelForm)
+	}
+
 	// Handle server picker overlay first
 	if m.tnFormPickerOpen {
 		switch msg.String() {
@@ -1047,6 +1244,11 @@ func (m Model) updateTunnelForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.quitting = true
 		return m, tea.Quit
 	case "esc":
+		if m.isTunnelFormDirty() {
+			m.formEscConfirm = true
+			m.formEscConfirmSave = false
+			return m, nil
+		}
 		m.state = stateTunnelList
 		return m, nil
 	case "ctrl+s":
@@ -1210,6 +1412,10 @@ const asFormTabCount = 4
 const asFormIdxServer = 3
 
 func (m Model) updateAppServerForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.formEscConfirm {
+		return m.handleFormEscConfirm(msg, stateAppServerList, m.submitAppServerForm)
+	}
+
 	// Handle server picker overlay first
 	if m.asFormPickerOpen {
 		switch msg.String() {
@@ -1240,6 +1446,11 @@ func (m Model) updateAppServerForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.quitting = true
 		return m, tea.Quit
 	case "esc":
+		if m.isAppServerFormDirty() {
+			m.formEscConfirm = true
+			m.formEscConfirmSave = false
+			return m, nil
+		}
 		m.state = stateAppServerList
 		return m, nil
 	case "ctrl+s":
@@ -1283,6 +1494,145 @@ func (m Model) updateAppServerForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.asFormFocus < len(m.asFormFields) {
 		var cmd tea.Cmd
 		m.asFormFields[m.asFormFocus], cmd = m.asFormFields[m.asFormFocus].Update(msg)
+		return m, cmd
+	}
+	return m, nil
+}
+
+// ── profile list ──────────────────────────────────────────────────────────────
+
+func (m Model) updateProfileList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c", "q":
+		m.quitting = true
+		return m, tea.Quit
+	case "esc":
+		m.state = stateList
+		return m, nil
+	case "up", "k":
+		if m.profileCursor > 0 {
+			m.profileCursor--
+		}
+	case "down", "j":
+		if m.profileCursor < len(m.profiles)-1 {
+			m.profileCursor++
+		}
+	case "a":
+		return m, m.initProfileForm(nil)
+	case "e":
+		if len(m.profiles) > 0 {
+			return m, m.initProfileForm(m.profiles[m.profileCursor])
+		}
+	case "d":
+		if len(m.profiles) > 0 {
+			p := m.profiles[m.profileCursor]
+			return m, m.deleteProfileCmd(p.ID)
+		}
+	case "enter", "u":
+		if len(m.profiles) > 0 {
+			p := m.profiles[m.profileCursor]
+			if p.IsActive {
+				return m, m.deactivateProfileCmd()
+			}
+			return m, m.activateProfileCmd(p.ID)
+		}
+	case "n":
+		return m, m.deactivateProfileCmd()
+	}
+	return m, nil
+}
+
+// ── profile form ──────────────────────────────────────────────────────────────
+
+// pfFormTabCount: 2 text fields (name, desc) + 1 gateway picker row = 3 stops
+const pfFormTabCount = 3
+
+// pfFormIdxGateway is the tab-stop index for the gateway picker row.
+const pfFormIdxGateway = 2
+
+func (m Model) updateProfileForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.formEscConfirm {
+		return m.handleFormEscConfirm(msg, stateProfileList, m.submitProfileForm)
+	}
+
+	// Handle gateway picker overlay first
+	if m.pfFormPickerOpen {
+		entries := m.gwPickerEntries()
+		switch msg.String() {
+		case "ctrl+c":
+			m.quitting = true
+			return m, tea.Quit
+		case "esc":
+			m.pfFormPickerOpen = false
+		case "up", "k":
+			if m.pfFormPickerCursor > 0 {
+				m.pfFormPickerCursor--
+			}
+		case "down", "j":
+			if m.pfFormPickerCursor < len(entries)-1 {
+				m.pfFormPickerCursor++
+			}
+		case "enter":
+			if len(entries) > 0 {
+				sel := entries[m.pfFormPickerCursor]
+				m.pfFormGatewayID = sel.gwID // nil for "(none)" or server entries
+			}
+			m.pfFormPickerOpen = false
+		default:
+			var cmd tea.Cmd
+			m.srvFormGwSearch, cmd = m.srvFormGwSearch.Update(msg)
+			m.pfFormPickerCursor = 0
+			return m, cmd
+		}
+		return m, nil
+	}
+
+	switch msg.String() {
+	case "ctrl+c":
+		m.quitting = true
+		return m, tea.Quit
+	case "esc":
+		if m.isProfileFormDirty() {
+			m.formEscConfirm = true
+			m.formEscConfirmSave = false
+			return m, nil
+		}
+		m.state = stateProfileList
+		return m, nil
+	case "ctrl+s":
+		return m, m.submitProfileForm()
+	case "enter":
+		if m.pfFormFocus == pfFormIdxGateway {
+			m.pfFormPickerOpen = true
+			m.pfFormPickerCursor = 0
+			m.srvFormGwSearch.SetValue("")
+			return m, nil
+		}
+		m.pfFormFields[m.pfFormFocus].Blur()
+		m.pfFormFocus = (m.pfFormFocus + 1) % pfFormTabCount
+		if m.pfFormFocus < len(m.pfFormFields) {
+			m.pfFormFields[m.pfFormFocus].Focus()
+		}
+		return m, nil
+	case "tab":
+		m.pfFormFields[m.pfFormFocus%len(m.pfFormFields)].Blur()
+		m.pfFormFocus = (m.pfFormFocus + 1) % pfFormTabCount
+		if m.pfFormFocus < len(m.pfFormFields) {
+			m.pfFormFields[m.pfFormFocus].Focus()
+		}
+		return m, nil
+	case "shift+tab":
+		m.pfFormFields[m.pfFormFocus%len(m.pfFormFields)].Blur()
+		m.pfFormFocus = (m.pfFormFocus - 1 + pfFormTabCount) % pfFormTabCount
+		if m.pfFormFocus < len(m.pfFormFields) {
+			m.pfFormFields[m.pfFormFocus].Focus()
+		}
+		return m, nil
+	}
+
+	if m.pfFormFocus < len(m.pfFormFields) {
+		var cmd tea.Cmd
+		m.pfFormFields[m.pfFormFocus], cmd = m.pfFormFields[m.pfFormFocus].Update(msg)
 		return m, cmd
 	}
 	return m, nil

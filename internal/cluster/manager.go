@@ -66,7 +66,7 @@ func (m *Manager) Open(ctx context.Context, clusterName string, hosts []HostEntr
 // When binPath is empty (fallback), it builds a plain ssh command.
 func buildConnCmd(binPath string, h HostEntry) string {
 	if binPath != "" {
-		cmd := binPath + " access ssh"
+		cmd := binPath + " ssh connect"
 		cmd += " " + h.User + "@" + h.Host
 		if h.Command != "" {
 			cmd += " --cmd " + shellQuote(h.Command)

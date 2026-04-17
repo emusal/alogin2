@@ -23,6 +23,11 @@ type SelectedServer struct {
 	Plugin string // non-empty = launch this plugin after connecting (plugin name)
 }
 
+// SelectedCluster is the result returned when the user picks a cluster to connect.
+type SelectedCluster struct {
+	Cluster *model.Cluster
+}
+
 // state tracks what the TUI is currently doing.
 type state int
 
@@ -45,6 +50,8 @@ const (
 	statePluginDetail               // read-only detail view of one plugin
 	stateAppServerList              // app-server management list
 	stateAppServerForm              // add/edit app-server form
+	stateProfileList                // profile management list
+	stateProfileForm                // add/edit profile form
 )
 
 // StartAt specifies which section to open when launching the TUI.
@@ -58,6 +65,7 @@ const (
 	StartAtHosts                  // jump to local hosts management
 	StartAtTunnel                 // jump to tunnel management
 	StartAtAppServer              // jump to app-server management
+	StartAtProfile                // jump to profile management
 )
 
 type formMode int
@@ -74,8 +82,9 @@ type tuiCommand struct {
 }
 
 var globalCommands = []tuiCommand{
-	{"/compute", "Manage servers"},
+	{"/server", "Manage servers"},
 	{"/gateway", "Manage gateways"},
+	{"/profile", "Manage network profiles"},
 	{"/cluster", "Manage clusters"},
 	{"/hosts", "Manage local hostname mappings"},
 	{"/tunnel", "Manage SSH tunnels"},
@@ -118,11 +127,12 @@ type Model struct {
 	clCount int
 
 	// List state
-	cursor   int
-	query    string
-	state    state
-	choice   *SelectedServer
-	quitting bool
+	cursor        int
+	query         string
+	state         state
+	choice        *SelectedServer
+	choiceCluster *SelectedCluster
+	quitting      bool
 
 	// Slash-command palette (active when query starts with "/")
 	cmdCursor int
@@ -205,6 +215,19 @@ type Model struct {
 	// Plugin detail state
 	pluginDetail *pluginpkg.Plugin // currently viewed plugin; FilePath field is the stable edit target
 
+	// Profile list
+	profiles      []*model.Profile
+	profileCursor int
+
+	// Profile form: [0]=name [1]=description
+	pfFormMode         formMode
+	pfFormFields       []textinput.Model
+	pfFormFocus        int
+	pfFormGatewayID    *int64
+	pfFormTarget       *model.Profile
+	pfFormPickerOpen   bool
+	pfFormPickerCursor int
+
 	// App-server list
 	appServers      []*model.AppServer
 	appServerCursor int
@@ -217,6 +240,27 @@ type Model struct {
 	asFormTarget       *model.AppServer
 	asFormPickerOpen   bool
 	asFormPickerCursor int
+
+	// ESC confirmation dialog (shown when pressing Esc inside any form with unsaved changes)
+	formEscConfirm     bool // true = dialog visible
+	formEscConfirmSave bool // true = "Save" button focused; false = "Cancel" focused
+
+	// Dirty-check snapshots: values captured when a form is opened.
+	// Used to detect whether anything changed before showing the ESC dialog.
+	snapFormFields     []string // server form field values
+	snapSrvGwID        *int64   // server form gateway ID
+	snapSrvSrvGwID     *int64   // server form server-as-gateway ID
+	snapGwName         string   // gateway form name
+	snapGwHops         []int64  // gateway form hop list
+	snapClName         string   // cluster form name
+	snapClMembers      []memberEntry
+	snapHostFields     []string
+	snapTnFields       []string
+	snapTnServerID     int64
+	snapAsFields       []string
+	snapAsServerID     int64
+	snapPfFields       []string
+	snapPfGatewayID    *int64
 
 	// Status/error message
 	statusMsg string
@@ -256,6 +300,8 @@ func NewModelAt(servers []*model.Server, database *db.DB, start StartAt, version
 		initialState = stateTunnelList
 	case StartAtAppServer:
 		initialState = stateAppServerList
+	case StartAtProfile:
+		initialState = stateProfileList
 	}
 
 	m := Model{
@@ -321,6 +367,9 @@ func NewModelAt(servers []*model.Server, database *db.DB, start StartAt, version
 // Choice returns the selected server, or nil if none was chosen.
 func (m Model) Choice() *SelectedServer { return m.choice }
 
+// ChoiceCluster returns the selected cluster, or nil if none was chosen.
+func (m Model) ChoiceCluster() *SelectedCluster { return m.choiceCluster }
+
 // Init implements tea.Model — triggers async data loading based on start section.
 func (m Model) Init() tea.Cmd {
 	switch m.startAt {
@@ -334,6 +383,8 @@ func (m Model) Init() tea.Cmd {
 		return m.loadTunnelsCmd()
 	case StartAtAppServer:
 		return m.loadAppServersCmd()
+	case StartAtProfile:
+		return m.loadProfilesCmd()
 	default:
 		return m.loadStatsCmd()
 	}
@@ -424,6 +475,16 @@ func (m *Model) initServerForm(srv *model.Server) tea.Cmd {
 	m.formFocusIdx = 0
 	m.state = stateServerForm
 	m.statusMsg = ""
+	m.formEscConfirm = false
+	snap := make([]string, len(fields))
+	for i, f := range fields {
+		snap[i] = f.Value()
+	}
+	m.snapFormFields = snap
+	gwID := m.srvFormSelectedGwID
+	m.snapSrvGwID = gwID
+	srvGwID := m.srvFormSelectedSrvGwID
+	m.snapSrvSrvGwID = srvGwID
 	return m.loadGatewaysForPickerCmd()
 }
 
@@ -538,6 +599,11 @@ func (m *Model) initGatewayForm(gw *model.GatewayRoute) {
 	m.gwFormPickerCursor = 0
 	m.state = stateGatewayForm
 	m.statusMsg = ""
+	m.formEscConfirm = false
+	m.snapGwName = inp.Value()
+	hopsSnap := make([]int64, len(m.gwFormHops))
+	copy(hopsSnap, m.gwFormHops)
+	m.snapGwHops = hopsSnap
 }
 
 func (m Model) submitGatewayForm() tea.Cmd {
@@ -610,6 +676,11 @@ func (m *Model) initClusterForm(cl *model.Cluster) {
 	m.clFormUserInput.Placeholder = "user override (empty = default)"
 	m.state = stateClusterForm
 	m.statusMsg = ""
+	m.formEscConfirm = false
+	m.snapClName = inp.Value()
+	membersSnap := make([]memberEntry, len(m.clFormMembers))
+	copy(membersSnap, m.clFormMembers)
+	m.snapClMembers = membersSnap
 }
 
 func (m Model) submitClusterForm() tea.Cmd {
@@ -683,6 +754,12 @@ func (m *Model) initHostForm(h *model.LocalHost) {
 	m.hostFormFields = fields
 	m.state = stateHostForm
 	m.statusMsg = ""
+	m.formEscConfirm = false
+	snap := make([]string, len(fields))
+	for i, f := range fields {
+		snap[i] = f.Value()
+	}
+	m.snapHostFields = snap
 }
 
 func (m Model) submitHostForm() tea.Cmd {
@@ -785,6 +862,13 @@ func (m *Model) initTunnelForm(t *model.Tunnel) {
 	m.tnFormPickerCursor = 0
 	m.state = stateTunnelForm
 	m.statusMsg = ""
+	m.formEscConfirm = false
+	snap := make([]string, len(fields))
+	for i, f := range fields {
+		snap[i] = f.Value()
+	}
+	m.snapTnFields = snap
+	m.snapTnServerID = m.tnFormServerID
 }
 
 func (m Model) submitTunnelForm() tea.Cmd {
@@ -846,6 +930,114 @@ func (m Model) deleteTunnelCmd(id int64) tea.Cmd {
 
 // ── app-server ────────────────────────────────────────────────────────────────
 
+// ── profile ───────────────────────────────────────────────────────────────────
+
+func (m Model) loadProfilesCmd() tea.Cmd {
+	return func() tea.Msg {
+		list, err := m.db.Profiles.ListAll(context.Background())
+		if err != nil {
+			return pfErrMsg{err}
+		}
+		return pfDoneMsg{list, ""}
+	}
+}
+
+func (m *Model) initProfileForm(p *model.Profile) tea.Cmd {
+	// fields: [0]=name [1]=description
+	fields := make([]textinput.Model, 2)
+	for i := range fields {
+		fields[i] = textinput.New()
+		fields[i].CharLimit = 256
+	}
+	fields[0].Placeholder = "profile name (unique)"
+	fields[1].Placeholder = "description (optional)"
+
+	if p != nil {
+		fields[0].SetValue(p.Name)
+		fields[1].SetValue(p.Description)
+		m.pfFormTarget = p
+		m.pfFormMode = fmEdit
+		m.pfFormGatewayID = p.GatewayRouteID
+	} else {
+		m.pfFormTarget = nil
+		m.pfFormMode = fmAdd
+		m.pfFormGatewayID = nil
+	}
+
+	fields[0].Focus()
+	m.pfFormFields = fields
+	m.pfFormFocus = 0
+	m.pfFormPickerOpen = false
+	m.pfFormPickerCursor = 0
+	m.state = stateProfileForm
+	m.statusMsg = ""
+	m.formEscConfirm = false
+	snap := make([]string, len(fields))
+	for i, f := range fields {
+		snap[i] = f.Value()
+	}
+	m.snapPfFields = snap
+	m.snapPfGatewayID = m.pfFormGatewayID
+	return m.loadGatewaysForPickerCmd()
+}
+
+func (m Model) submitProfileForm() tea.Cmd {
+	return func() tea.Msg {
+		name := m.pfFormFields[0].Value()
+		desc := m.pfFormFields[1].Value()
+		if name == "" {
+			return pfErrMsg{fmt.Errorf("name is required")}
+		}
+		var opErr error
+		if m.pfFormMode == fmAdd {
+			_, opErr = m.db.Profiles.Create(context.Background(), name, desc, m.pfFormGatewayID)
+		} else {
+			p := &model.Profile{
+				ID:          m.pfFormTarget.ID,
+				Name:        name,
+				Description: desc,
+				IsActive:    m.pfFormTarget.IsActive,
+			}
+			opErr = m.db.Profiles.Update(context.Background(), p, m.pfFormGatewayID)
+		}
+		if opErr != nil {
+			return pfErrMsg{opErr}
+		}
+		list, _ := m.db.Profiles.ListAll(context.Background())
+		return pfDoneMsg{list, "Saved."}
+	}
+}
+
+func (m Model) deleteProfileCmd(id int64) tea.Cmd {
+	return func() tea.Msg {
+		if err := m.db.Profiles.Delete(context.Background(), id); err != nil {
+			return pfErrMsg{err}
+		}
+		list, _ := m.db.Profiles.ListAll(context.Background())
+		return pfDoneMsg{list, "Deleted."}
+	}
+}
+
+func (m Model) activateProfileCmd(id int64) tea.Cmd {
+	return func() tea.Msg {
+		if err := m.db.Profiles.SetActive(context.Background(), id); err != nil {
+			return pfErrMsg{err}
+		}
+		list, _ := m.db.Profiles.ListAll(context.Background())
+		return pfDoneMsg{list, "Activated."}
+	}
+}
+
+func (m Model) deactivateProfileCmd() tea.Cmd {
+	return func() tea.Msg {
+		if err := m.db.Profiles.SetActive(context.Background(), 0); err != nil {
+			return pfErrMsg{err}
+		}
+		list, _ := m.db.Profiles.ListAll(context.Background())
+		return pfDoneMsg{list, "Deactivated."}
+	}
+}
+
 func (m Model) loadAppServersCmd() tea.Cmd {
 	return func() tea.Msg {
 		list, err := m.db.AppServers.ListAll(context.Background())
@@ -887,6 +1079,13 @@ func (m *Model) initAppServerForm(as *model.AppServer) {
 	m.asFormPickerCursor = 0
 	m.state = stateAppServerForm
 	m.statusMsg = ""
+	m.formEscConfirm = false
+	snap := make([]string, len(fields))
+	for i, f := range fields {
+		snap[i] = f.Value()
+	}
+	m.snapAsFields = snap
+	m.snapAsServerID = m.asFormServerID
 }
 
 func (m Model) submitAppServerForm() tea.Cmd {

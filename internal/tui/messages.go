@@ -61,3 +61,9 @@ type tnDoneMsg struct {
 type tnErrMsg struct{ err error }
 
 type tnStatusMsg struct{ statuses map[int64]bool }
+
+type pfDoneMsg struct {
+	profiles []*model.Profile
+	msg      string
+}
+type pfErrMsg struct{ err error }

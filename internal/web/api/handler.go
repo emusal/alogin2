@@ -43,12 +43,12 @@ func (h *Handler) WithPluginDir(dir string) *Handler {
 func (h *Handler) Router() http.Handler {
 	r := chi.NewRouter()
 
-	// Compute
-	r.Get("/compute", h.listServers)
-	r.Post("/compute", h.createServer)
-	r.Get("/compute/{id}", h.getServer)
-	r.Put("/compute/{id}", h.updateServer)
-	r.Delete("/compute/{id}", h.deleteServer)
+	// Servers
+	r.Get("/servers", h.listServers)
+	r.Post("/servers", h.createServer)
+	r.Get("/servers/{id}", h.getServer)
+	r.Put("/servers/{id}", h.updateServer)
+	r.Delete("/servers/{id}", h.deleteServer)
 
 	// Gateways
 	r.Get("/gateways", h.listGateways)

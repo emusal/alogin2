@@ -99,11 +99,9 @@ export function ClusterList({ servers, onOpenDashboard }: Props) {
                 <td><span className="host">{c.name}</span></td>
                 <td><span className="dim">{membersSummary(c)}</span></td>
                 <td className="actions-cell">
-                  {c.members.length >= 5 && (
-                    <button className="connect-btn" onClick={() => setDashConfirm(c)}>
-                      Dashboard
-                    </button>
-                  )}
+                  <button className="connect-btn" onClick={() => setDashConfirm(c)}>
+                    Dashboard
+                  </button>
                   <button
                     className="action-btn"
                     onClick={() => { setEditingCluster(c); setModalMode('edit') }}

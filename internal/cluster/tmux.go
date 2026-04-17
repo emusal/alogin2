@@ -18,11 +18,13 @@ func openTmux(ctx context.Context, name string, hosts []HostEntry, tileX int, bi
 
 	sessionName := "alogin-" + name
 
-	// Create new detached session with the first host
+	// Create new detached session with the first host.
+	// Ignore error only if the session already exists.
 	firstCmd := buildConnCmd(binPath, hosts[0])
 	if err := tmuxRun("new-session", "-d", "-s", sessionName, "-x", "220", "-y", "50", firstCmd); err != nil {
-		// Session may already exist
-		_ = err
+		if exec.Command("tmux", "has-session", "-t", sessionName).Run() != nil {
+			return fmt.Errorf("failed to create tmux session %q: %w", sessionName, err)
+		}
 	}
 
 	// Add remaining hosts as split panes
@@ -38,10 +40,13 @@ func openTmux(ctx context.Context, name string, hosts []HostEntry, tileX int, bi
 
 	// Enable synchronize-panes after a delay so all sessions finish connecting
 	// (and password injection completes) before keystrokes are broadcast.
-	// Using tmux run-shell lets the delay happen in the background while we attach.
+	// Run in a background OS process so tmux has a valid server context.
 	delay := syncDelay(len(hosts))
-	_ = tmuxRun("run-shell", "-t", sessionName,
-		fmt.Sprintf("sleep %d && tmux set-window-option -t %s synchronize-panes on", delay, sessionName))
+	go func() {
+		_ = exec.Command("sh", "-c",
+			fmt.Sprintf("sleep %d && tmux set-window-option -t %s synchronize-panes on", delay, sessionName),
+		).Run()
+	}()
 
 	// Attach to session
 	cmd := exec.CommandContext(ctx, "tmux", "attach-session", "-t", sessionName)

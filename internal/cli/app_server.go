@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/emusal/alogin2/internal/model"
@@ -116,6 +117,12 @@ func newAppServerAddCmd() *cobra.Command {
 				return fmt.Errorf("--name, --server, and --app are required")
 			}
 			ctx := context.Background()
+			if at := strings.IndexByte(serverHost, '@'); at >= 0 {
+				if serverUser == "" {
+					serverUser = serverHost[:at]
+				}
+				serverHost = serverHost[at+1:]
+			}
 			srv, err := database.Servers.GetByHost(ctx, serverHost, serverUser)
 			if err != nil || srv == nil {
 				return fmt.Errorf("server %q not found in registry", serverHost)

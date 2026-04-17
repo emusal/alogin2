@@ -1,7 +1,7 @@
 import { getPageInfo } from '../i18n'
 import './PageBanner.css'
 
-type PageKey = 'compute' | 'gateways' | 'profiles' | 'clusters' | 'hosts' | 'tunnels' | 'plugins' | 'app-servers' | 'terminal'
+type PageKey = 'servers' | 'gateways' | 'profiles' | 'clusters' | 'hosts' | 'tunnels' | 'plugins' | 'app-servers' | 'terminal'
 
 interface Props {
   page: PageKey

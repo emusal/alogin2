@@ -9,10 +9,10 @@ export interface PageInfo {
   lines: string[]
 }
 
-type PageKey = 'compute' | 'gateways' | 'profiles' | 'clusters' | 'hosts' | 'tunnels' | 'plugins' | 'app-servers' | 'terminal'
+type PageKey = 'servers' | 'gateways' | 'profiles' | 'clusters' | 'hosts' | 'tunnels' | 'plugins' | 'app-servers' | 'terminal'
 
 const translations: Record<PageKey, { ko: PageInfo; en: PageInfo }> = {
-  compute: {
+  servers: {
     ko: {
       title: '서버 목록',
       lines: [
@@ -22,7 +22,7 @@ const translations: Record<PageKey, { ko: PageInfo; en: PageInfo }> = {
       ],
     },
     en: {
-      title: 'Compute',
+      title: 'Servers',
       lines: [
         'Browse and connect to registered SSH servers. Double-click a row or click Connect to open a session.',
         'Servers with a gateway show a GW button for bastion-routed connections.',
