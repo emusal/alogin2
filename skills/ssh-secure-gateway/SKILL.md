@@ -377,6 +377,10 @@ alogin agent policy dry-run --cmd "rm -rf /" --json   # machine-readable output
 alogin agent server-policy set <id> --file policy.yaml
 alogin agent server-policy show <id>
 alogin agent server-prompt set <id> --text "Only run read-only commands."
+
+> **IMPORTANT: Server Prompts**
+> The `server-prompt` contains critical, server-specific operational instructions and restrictions.
+> **Before connecting to any server to perform tasks, you MUST read its `server-prompt`** (via `alogin server show <id>`) and strictly adhere to those instructions during your session.
 ```
 
 ### [App (Named Application Bindings)](https://github.com/emusal/alogin2#app--named-application-bindings)

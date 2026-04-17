@@ -225,6 +225,28 @@ func RegisterTools(srv *server.MCPServer, d Deps) {
 		return toolJSON(s)
 	})
 
+	// --- get_server_prompt ---
+	srv.AddTool(mcpgo.NewTool("get_server_prompt",
+		mcpgo.WithDescription("Get the system_prompt for a single server by ID. The system_prompt contains critical, server-specific operational instructions and restrictions that must be read and adhered to before connecting to the server."),
+		mcpgo.WithString("id", mcpgo.Description("Server ID"), mcpgo.Required()),
+	), func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		id, err := parseID(req, "id")
+		if err != nil {
+			return toolError(err.Error()), nil
+		}
+		s, err := d.DB.Servers.GetByID(ctx, id)
+		if err != nil {
+			return toolError(fmt.Sprintf("get server: %v", err)), nil
+		}
+		if s == nil {
+			return toolError(fmt.Sprintf("server %d not found", id)), nil
+		}
+		return toolJSON(map[string]any{
+			"server_id":     id,
+			"system_prompt": s.SystemPrompt,
+		})
+	})
+
 	// --- list_tunnels ---
 	srv.AddTool(mcpgo.NewTool("list_tunnels",
 		mcpgo.WithDescription("List all saved tunnel configurations with their current running status."),
