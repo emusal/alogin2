@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -145,6 +146,109 @@ func ListPending(configDir string) ([]*PendingRequest, error) {
 		}
 	}
 	return pending, nil
+}
+
+// --- Trust Window ---
+
+// TrustWindow records a temporary grant that auto-approves HITL requests
+// matching the given scope until ExpiresAt.
+type TrustWindow struct {
+	Scope     string    `json:"scope"`      // "global", "agent:<id>", "server:<id>"
+	GrantedAt time.Time `json:"granted_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+	GrantedBy string    `json:"granted_by,omitempty"`
+}
+
+func trustDir(configDir string) string { return filepath.Join(HITLDir(configDir), "trust") }
+
+func trustFile(configDir, scope string) string {
+	safe := strings.NewReplacer(":", "_", "/", "_").Replace(scope)
+	return filepath.Join(trustDir(configDir), "trust_"+safe+".json")
+}
+
+// GrantTrust writes a trust window for scope that expires after duration.
+func GrantTrust(configDir, scope string, duration time.Duration, grantedBy string) (*TrustWindow, error) {
+	if err := os.MkdirAll(trustDir(configDir), 0700); err != nil {
+		return nil, fmt.Errorf("hitl: mkdir trust: %w", err)
+	}
+	tw := TrustWindow{
+		Scope:     scope,
+		GrantedAt: time.Now(),
+		ExpiresAt: time.Now().Add(duration),
+		GrantedBy: grantedBy,
+	}
+	data, err := json.MarshalIndent(tw, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(trustFile(configDir, scope), data, 0600); err != nil {
+		return nil, fmt.Errorf("hitl: write trust: %w", err)
+	}
+	return &tw, nil
+}
+
+// RevokeTrust removes the trust window for scope.
+func RevokeTrust(configDir, scope string) error {
+	err := os.Remove(trustFile(configDir, scope))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
+}
+
+// CheckTrusted returns the active TrustWindow if a valid (non-expired) window
+// exists for any of the provided scopes, or nil if none match.
+func CheckTrusted(configDir string, scopes []string) *TrustWindow {
+	now := time.Now()
+	for _, scope := range scopes {
+		data, err := os.ReadFile(trustFile(configDir, scope))
+		if err != nil {
+			continue
+		}
+		var tw TrustWindow
+		if err := json.Unmarshal(data, &tw); err != nil {
+			continue
+		}
+		if tw.ExpiresAt.After(now) {
+			return &tw
+		}
+		// Expired — clean up silently.
+		_ = os.Remove(trustFile(configDir, scope))
+	}
+	return nil
+}
+
+// ListTrust returns all active (non-expired) trust windows.
+func ListTrust(configDir string) ([]*TrustWindow, error) {
+	dir := trustDir(configDir)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	now := time.Now()
+	var active []*TrustWindow
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		if err != nil {
+			continue
+		}
+		var tw TrustWindow
+		if err := json.Unmarshal(data, &tw); err != nil {
+			continue
+		}
+		if tw.ExpiresAt.After(now) {
+			active = append(active, &tw)
+		} else {
+			_ = os.Remove(filepath.Join(dir, entry.Name()))
+		}
+	}
+	return active, nil
 }
 
 func fileExists(path string) bool {

@@ -202,6 +202,27 @@ CREATE TABLE IF NOT EXISTS profile_gateways (
 CREATE INDEX IF NOT EXISTS idx_profile_gateways_profile ON profile_gateways(profile_id);
 
 -- ----------------------------------------------------------------
+-- bg_jobs: background SSH command execution records (v13)
+-- status: pending | running | done | failed | cancelled
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS bg_jobs (
+    id          TEXT    PRIMARY KEY,   -- UUID
+    session_id  TEXT    NOT NULL,
+    server_host TEXT    NOT NULL DEFAULT '',
+    command     TEXT    NOT NULL,
+    status      TEXT    NOT NULL DEFAULT 'pending'
+                        CHECK(status IN ('pending','running','done','failed','cancelled')),
+    exit_code   INTEGER,
+    output      TEXT    NOT NULL DEFAULT '',
+    created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    started_at  TEXT,
+    finished_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_bg_jobs_session ON bg_jobs(session_id);
+CREATE INDEX IF NOT EXISTS idx_bg_jobs_status  ON bg_jobs(status);
+
+-- ----------------------------------------------------------------
 -- schema_migrations: version tracking
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -221,3 +242,4 @@ INSERT OR IGNORE INTO schema_migrations(version) VALUES (9);
 INSERT OR IGNORE INTO schema_migrations(version) VALUES (10);
 INSERT OR IGNORE INTO schema_migrations(version) VALUES (11);
 INSERT OR IGNORE INTO schema_migrations(version) VALUES (12);
+INSERT OR IGNORE INTO schema_migrations(version) VALUES (13);

@@ -25,6 +25,9 @@ func newAgentCmd() *cobra.Command {
   alogin agent approve        — approve a pending HITL request
   alogin agent deny           — deny a pending HITL request
   alogin agent pending        — list pending HITL approval requests
+  alogin agent trust          — grant a temporary trust window (auto-approve HITL for N minutes/hours)
+  alogin agent untrust        — revoke an active trust window
+  alogin agent trust-list     — list active trust windows
   alogin agent server-policy  — manage per-server policy overrides (set/show/clear)
   alogin agent server-prompt  — manage per-server LLM system prompt overrides (set/show/clear)`,
 	}
@@ -36,6 +39,9 @@ func newAgentCmd() *cobra.Command {
 		newAgentApproveCmd(),
 		newAgentDenyCmd(),
 		newAgentPendingCmd(),
+		newAgentTrustCmd(),
+		newAgentUntrustCmd(),
+		newAgentTrustListCmd(),
 		newAgentServerPolicyCmd(),
 		newAgentServerPromptCmd(),
 	)

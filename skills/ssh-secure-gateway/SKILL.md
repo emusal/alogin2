@@ -108,6 +108,50 @@ Use `--timeout N` (seconds, default 30) on `exec` for long-running commands.
 
 **When to use one-shot `--cmd` instead:** only when you need a single, truly stateless command and no follow-up commands are expected (e.g., a quick health check in a CI script).
 
+### [Background Execution (bg-exec)](https://github.com/emusal/alogin2#ssh-session)
+
+For long-running commands (package installs, data migrations, large backups) that would time out, use `bg-exec` to fire-and-poll instead of blocking.
+
+`bg-exec` spawns a detached tmux session that outlives the CLI process — the job keeps running even after the terminal closes.
+
+```bash
+id=$(alogin ssh session start web-01)
+
+# Fire-and-forget: prints a job ID immediately, execution continues in the background
+job=$(alogin ssh session bg-exec "$id" "apt-get upgrade -y")
+job=$(alogin ssh session bg-exec "$id" "backup.sh" --timeout 7200)
+
+# Poll status (job-id can be the full UUID or a unique prefix — 8 chars is enough)
+alogin ssh session job status "$job"          # pending | running | done | failed
+alogin ssh session job status "$job" --json   # machine-readable
+
+# Fetch captured output (available while running and after completion)
+alogin ssh session job logs "$job"
+
+# List all jobs (optionally filter by session)
+alogin ssh session job list
+alogin ssh session job list --session "$id"
+alogin ssh session job list --json
+
+# Cancel a pending or running job
+alogin ssh session job cancel "$job"
+
+# Delete a single job record (any status, by prefix or full UUID)
+alogin ssh session job delete "$job"
+
+# Bulk-delete finished jobs (done / failed / cancelled)
+alogin ssh session job purge
+
+# Delete every job record including pending and running
+alogin ssh session job purge --all
+```
+
+Job statuses: `pending` → `running` → `done` | `failed` | `cancelled`
+
+**When to use bg-exec vs exec:**
+- `exec`: short commands where you need the output immediately (≤ timeout, default 30 s)
+- `bg-exec`: anything that may exceed the timeout, or when you want to launch multiple jobs in parallel and poll later
+
 ### [SCP (File Transfer)](https://github.com/emusal/alogin2#scp)
 
 Copy files between local and remote hosts via SFTP. Credentials and multi-hop routing follow the same profile/gateway chain as `alogin ssh connect`.
@@ -120,9 +164,13 @@ alogin scp push ./script.py admin@web-01:/tmp/
 # Download remote file to local
 alogin scp pull web-01:/var/log/app.log ./
 alogin scp pull admin@web-01:/etc/nginx/nginx.conf ./nginx.conf.bak
+
+# Recursive directory transfer (use -r / --recursive)
+alogin scp push --recursive ./dist/ web-01:/var/www/app/
+alogin scp pull -r web-01:/var/log/nginx/ ./logs/
 ```
 
-If the destination path ends with `/`, the source filename is appended automatically.
+If the destination path ends with `/`, the source filename (or directory name) is appended automatically.
 
 ### [Net (Gateway, Profile, Tunnels & DNS)](https://github.com/emusal/alogin2#multi-hop-gateway-routing)
 
@@ -195,6 +243,14 @@ alogin agent audit tail --format json    # stream new events
 alogin agent pending                     # list pending approvals
 alogin agent approve <token>
 alogin agent deny <token>
+
+# Trust window — auto-approve HITL for a period of time (no token needed per-request)
+alogin agent trust --duration 1h                          # global: all agents & servers
+alogin agent trust --duration 30m --agent claude-dev      # only requests from claude-dev
+alogin agent trust --duration 2h --server 3               # only requests targeting server 3
+alogin agent trust-list                                    # show active trust windows
+alogin agent untrust                                       # revoke global window immediately
+alogin agent untrust --agent claude-dev                    # revoke agent-scoped window
 
 # Policy dry-run — check if a command would be allowed before running it
 alogin agent policy dry-run --cmd "rm -rf /"

@@ -126,6 +126,11 @@ func applyPolicyResult(ctx context.Context, d Deps, eng *policy.Engine, result p
 		if d.ConfigDir == "" {
 			return toolError("HITL required but ConfigDir not set")
 		}
+		// Check trust windows before blocking for human approval.
+		scopes := trustScopes(req)
+		if tw := policy.CheckTrusted(d.ConfigDir, scopes); tw != nil {
+			return nil // auto-approved via trust window
+		}
 		token := uuid.New().String()
 		pending := policy.PendingRequest{
 			Token:     token,
@@ -153,6 +158,23 @@ func applyPolicyResult(ctx context.Context, d Deps, eng *policy.Engine, result p
 // eng is the effective engine for the target server (may differ from d.Policy).
 func checkPolicy(ctx context.Context, d Deps, eng *policy.Engine, req policy.CheckRequest) *mcpgo.CallToolResult {
 	return applyPolicyResult(ctx, d, eng, evalPolicy(eng, req), req)
+}
+
+// trustScopes returns the ordered list of trust-window scopes to check for req:
+// specific agent/server scopes first, then global as a fallback.
+func trustScopes(req policy.CheckRequest) []string {
+	var scopes []string
+	if req.AgentID != "" {
+		scopes = append(scopes, "agent:"+req.AgentID)
+	}
+	if req.ServerID != 0 {
+		scopes = append(scopes, fmt.Sprintf("server:%d", req.ServerID))
+	}
+	if req.ClusterID != 0 {
+		scopes = append(scopes, fmt.Sprintf("cluster:%d", req.ClusterID))
+	}
+	scopes = append(scopes, "global")
+	return scopes
 }
 
 func hitlTimeout(eng *policy.Engine) time.Duration {

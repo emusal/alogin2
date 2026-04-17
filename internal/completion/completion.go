@@ -423,6 +423,8 @@ _alogin() {
                   session_subcmds=(
                     'start:Start a new stateful session'
                     'exec:Execute a command in a session'
+                    'bg-exec:Run a command in the background and return a job ID'
+                    'job:Inspect and manage background jobs'
                     'stop:Stop a session'
                     'list:List active sessions'
                   )
@@ -431,10 +433,34 @@ _alogin() {
                     session_sub) _describe 'subcommand' session_subcmds ;;
                     session_args)
                       case $words[1] in
-                        start) _arguments '1: :_alogin_hosts' '--id[session name]:name:' ;;
-                        exec)  _arguments '1:session-id:' '2:command:' '--timeout[timeout seconds]:seconds:' ;;
-                        stop)  _arguments '1:session-id:' ;;
-                        list)  ;;
+                        start)   _arguments '1: :_alogin_hosts' '--id[session name]:name:' ;;
+                        exec)    _arguments '1:session-id:' '2:command:' '--timeout[timeout seconds]:seconds:' ;;
+                        bg-exec) _arguments '1:session-id:' '2:command:' '--timeout[max execution seconds]:seconds:' ;;
+                        stop)    _arguments '1:session-id:' ;;
+                        list)    ;;
+                        job)
+                          local -a job_subcmds
+                          job_subcmds=(
+                            'status:Show job status'
+                            'logs:Print job output'
+                            'list:List all background jobs'
+                            'cancel:Cancel a pending or running job'
+                            'delete:Force-delete a job record (any status)'
+                            'purge:Bulk-delete finished jobs'
+                          )
+                          _arguments -C '1: :->jsub' '*:: :->jsub_args'
+                          case $state in
+                            jsub) _describe 'subcommand' job_subcmds ;;
+                            jsub_args)
+                              case $words[1] in
+                                status) _arguments '1:job-id:' '--json[JSON output]' ;;
+                                logs)   _arguments '1:job-id:' ;;
+                                list)   _arguments '--session[filter by session ID]:id:' '--json[JSON output]' ;;
+                                cancel) _arguments '1:job-id:' ;;
+                                delete) _arguments '1:job-id:' ;;
+                                purge)  _arguments '--all[delete every job including pending and running]' ;;
+                              esac ;;
+                          esac ;;
                       esac
                       ;;
                   esac
@@ -448,16 +474,16 @@ _alogin() {
         scp)
           local -a scp_subcmds
           scp_subcmds=(
-            'push:Upload a local file to a remote host'
-            'pull:Download a remote file to the local host'
+            'push:Upload a local file or directory to a remote host'
+            'pull:Download a remote file or directory to the local host'
           )
           _arguments -C '1: :->sub' '*:: :->sub_args'
           case $state in
             sub) _describe 'subcommand' scp_subcmds ;;
             sub_args)
               case $words[1] in
-                push) _arguments '1:local file:_files' '2:remote (host:/path):' ;;
-                pull) _arguments '1:remote (host:/path):' '2:local path:_files' ;;
+                push) _arguments '(-r --recursive)'{-r,--recursive}'[recursively upload a directory]' '1:local path:_files' '2:remote (host:/path):' ;;
+                pull) _arguments '(-r --recursive)'{-r,--recursive}'[recursively download a directory]' '1:remote (host:/path):' '2:local path:_files' ;;
               esac
               ;;
           esac
@@ -516,6 +542,9 @@ _alogin() {
             'approve:Approve a pending HITL request'
             'deny:Deny a pending HITL request'
             'pending:List pending HITL approval requests'
+            'trust:Grant a temporary trust window (auto-approve HITL)'
+            'untrust:Revoke an active trust window'
+            'trust-list:List active trust windows'
             'server-policy:Manage per-server policy overrides'
             'server-prompt:Manage per-server LLM system prompt overrides'
           )
@@ -540,6 +569,17 @@ _alogin() {
                   local -a audit_subcmds
                   audit_subcmds=('list:List recent audit events' 'tail:Stream new audit events')
                   _describe 'subcommand' audit_subcmds ;;
+                trust)
+                  _arguments \
+                    '--duration[trust duration (e.g. 30m, 1h, 2h)]:duration:' \
+                    '--agent[restrict to this agent ID]:agent:' \
+                    '--server[restrict to this server ID]:server:' ;;
+                untrust)
+                  _arguments \
+                    '--agent[agent scope to revoke]:agent:' \
+                    '--server[server scope to revoke]:server:' ;;
+                trust-list)
+                  _arguments '--json[JSON output]' ;;
                 server-policy|server-prompt)
                   local -a sp_subcmds
                   sp_subcmds=('set:Set value' 'show:Show value' 'clear:Clear value')
@@ -738,12 +778,21 @@ _alogin_completion() {
             fi
             ;;
           session)
+            local sub3="${words[4]}"
             if [[ $cword -eq 3 ]]; then
-              COMPREPLY=($(compgen -W "start exec stop list" -- "$cur"))
-            elif [[ $cword -ge 4 ]]; then
+              COMPREPLY=($(compgen -W "start exec bg-exec job stop list" -- "$cur"))
+            elif [[ $cword -eq 4 ]]; then
               case "$sub2" in
-                start) COMPREPLY=($(compgen -W "$(_alogin_hosts) --id" -- "$cur")) ;;
-                exec)  COMPREPLY=($(compgen -W "--timeout" -- "$cur")) ;;
+                start)   COMPREPLY=($(compgen -W "$(_alogin_hosts) --id" -- "$cur")) ;;
+                exec)    COMPREPLY=($(compgen -W "--timeout" -- "$cur")) ;;
+                bg-exec) COMPREPLY=($(compgen -W "--timeout" -- "$cur")) ;;
+                job)     COMPREPLY=($(compgen -W "status logs list cancel delete purge" -- "$cur")) ;;
+              esac
+            elif [[ $cword -ge 5 && "$sub2" == "job" ]]; then
+              case "$sub3" in
+                status) COMPREPLY=($(compgen -W "--json" -- "$cur")) ;;
+                list)   COMPREPLY=($(compgen -W "--session --json" -- "$cur")) ;;
+                purge)  COMPREPLY=($(compgen -W "--all" -- "$cur")) ;;
               esac
             fi
             ;;
@@ -755,6 +804,11 @@ _alogin_completion() {
     scp)
       if [[ $cword -eq 2 ]]; then
         COMPREPLY=($(compgen -W "push pull" -- "$cur"))
+      elif [[ $cword -ge 3 ]]; then
+        case "$sub" in
+          push) COMPREPLY=($(compgen -W "--recursive -r" -- "$cur")) ;;
+          pull) COMPREPLY=($(compgen -W "--recursive -r" -- "$cur")) ;;
+        esac
       fi
       ;;
 
@@ -820,7 +874,7 @@ _alogin_completion() {
     # ── agent ───────────────────────────────────────────────────────────────
     agent)
       if [[ $cword -eq 2 ]]; then
-        COMPREPLY=($(compgen -W "mcp setup policy audit approve deny pending server-policy server-prompt" -- "$cur"))
+        COMPREPLY=($(compgen -W "mcp setup policy audit approve deny pending trust untrust trust-list server-policy server-prompt" -- "$cur"))
       elif [[ $cword -ge 3 ]]; then
         case "$sub" in
           policy)
@@ -839,6 +893,12 @@ _alogin_completion() {
               esac
             fi
             ;;
+          trust)
+            COMPREPLY=($(compgen -W "--duration --agent --server" -- "$cur")) ;;
+          untrust)
+            COMPREPLY=($(compgen -W "--agent --server" -- "$cur")) ;;
+          trust-list)
+            COMPREPLY=($(compgen -W "--json" -- "$cur")) ;;
           server-policy|server-prompt)
             if [[ $cword -eq 3 ]]; then
               COMPREPLY=($(compgen -W "set show clear" -- "$cur"))

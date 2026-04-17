@@ -15,7 +15,7 @@ var schemaSQL string
 
 // CurrentSchemaVersion is the schema version this binary expects.
 // Increment when adding a new migration.
-const CurrentSchemaVersion = 12
+const CurrentSchemaVersion = 13
 
 // migrationDescriptions maps each migration version to a human-readable summary.
 var migrationDescriptions = map[int]string{
@@ -30,6 +30,7 @@ var migrationDescriptions = map[int]string{
 	10: "app_servers table (named server+plugin bindings)",
 	11: "profiles table (network context profiles replacing per-server gateway_id and auto_gw)",
 	12: "servers.gateway_route_id column (per-server internal gateway route, applied after profile gateway)",
+	13: "bg_jobs table (background SSH command execution tracking)",
 }
 
 // MigrationDescription returns a human-readable description for a schema version.
@@ -51,6 +52,7 @@ type DB struct {
 	AppServers AppServerRepo
 	AuditLog   AuditRepo
 	Profiles   ProfileRepo
+	Jobs       JobRepo
 
 	// AppliedMigrations holds the schema versions that were actually applied
 	// during this Open() call (i.e. were pending before the call).
@@ -89,6 +91,7 @@ func Open(path string) (*DB, error) {
 	db.AppServers = &appServerRepo{db: sqlDB}
 	db.AuditLog = &auditRepo{db: sqlDB}
 	db.Profiles = &profileRepo{db: sqlDB}
+	db.Jobs = &jobRepo{db: sqlDB}
 	return db, nil
 }
 
@@ -437,6 +440,37 @@ func applyMigrations(db *sql.DB) ([]int, error) {
 		}
 		_, _ = db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version) VALUES (12)`)
 		applied = append(applied, 12)
+	}
+
+	if version < 13 {
+		_, err := db.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS bg_jobs (
+				id          TEXT    PRIMARY KEY,
+				session_id  TEXT    NOT NULL,
+				server_host TEXT    NOT NULL DEFAULT '',
+				command     TEXT    NOT NULL,
+				status      TEXT    NOT NULL DEFAULT 'pending'
+				            CHECK(status IN ('pending','running','done','failed','cancelled')),
+				exit_code   INTEGER,
+				output      TEXT    NOT NULL DEFAULT '',
+				created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+				started_at  TEXT,
+				finished_at TEXT
+			)
+		`)
+		if err != nil && !strings.Contains(err.Error(), "already exists") {
+			return applied, fmt.Errorf("migration v13: %w", err)
+		}
+		for _, idx := range []string{
+			`CREATE INDEX IF NOT EXISTS idx_bg_jobs_session ON bg_jobs(session_id)`,
+			`CREATE INDEX IF NOT EXISTS idx_bg_jobs_status  ON bg_jobs(status)`,
+		} {
+			if _, err := db.ExecContext(ctx, idx); err != nil && !strings.Contains(err.Error(), "already exists") {
+				return applied, fmt.Errorf("migration v13 index: %w", err)
+			}
+		}
+		_, _ = db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version) VALUES (13)`)
+		applied = append(applied, 13)
 	}
 
 	return applied, nil

@@ -16,8 +16,8 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/google/uuid"
 	internalssh "github.com/emusal/alogin2/internal/ssh"
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 )
 
@@ -65,9 +65,12 @@ Examples:
 	cmd.AddCommand(
 		newSessionStartCmd(),
 		newSessionExecCmd(),
+		newSessionBgExecCmd(),
+		newSessionJobCmd(),
 		newSessionStopCmd(),
 		newSessionListCmd(),
-		newSessionRunCmd(), // hidden: called by tmux
+		newSessionRunCmd(),    // hidden: called by tmux (session bridge)
+		newSessionJobRunCmd(), // hidden: called by tmux (bg job executor)
 	)
 	return cmd
 }

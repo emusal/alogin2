@@ -143,29 +143,40 @@ alogin ssh cluster list
 | `--format` | | Output format when using `--cmd`: table\|json |
 
 ### `ssh session`
-File: `internal/cli/session.go`
+File: `internal/cli/session.go`, `internal/cli/session_job.go`
 
 Manage persistent stateful SSH sessions. A session holds a single bash process on the remote server so that cwd, environment variables, and shell variables persist across commands.
 
-**Note:** sessions are process-local (live only for the duration of the CLI invocation).
+**Note:** sessions are backed by tmux and persist across separate `alogin` invocations.
 
 ```
-alogin ssh session start [user@]host [--id NAME]   # start session, prints session ID
-alogin ssh session exec  <id> <command>             # run command in session
-alogin ssh session stop  <id>                       # terminate session
-alogin ssh session list                             # list active sessions
+alogin ssh session start   [user@]host [--id NAME]         # start session, prints session ID
+alogin ssh session exec    <id> <command> [--timeout N]    # run command, wait for output
+alogin ssh session bg-exec <id> <command> [--timeout N]    # run in background, print job ID
+alogin ssh session job status <job-id> [--json]            # poll job state
+alogin ssh session job logs   <job-id>                     # fetch captured output
+alogin ssh session job list   [--session <id>] [--json]    # list all jobs
+alogin ssh session job cancel <job-id>                     # cancel pending/running job
+alogin ssh session stop  <id>                              # terminate session
+alogin ssh session list                                    # list active sessions
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--id` | Session name (default: generated UUID) |
-| `--timeout` | Command timeout in seconds (exec only, default 30) |
+| `--timeout` | Command timeout in seconds (`exec` default 30, `bg-exec` default 3600) |
+
+Job statuses: `pending` → `running` → `done` \| `failed` \| `cancelled`. Output is captured incrementally and available via `job logs` while the job is still running.
 
 Example:
 ```bash
 id=$(alogin ssh session start web-01)
 alogin ssh session exec "$id" "cd /var/log"
 alogin ssh session exec "$id" "pwd"    # outputs /var/log
+
+job=$(alogin ssh session bg-exec "$id" "apt-get upgrade -y")
+alogin ssh session job status "$job"
+alogin ssh session job logs   "$job"
 alogin ssh session stop "$id"
 ```
 
@@ -173,23 +184,30 @@ alogin ssh session stop "$id"
 
 ## scp — File transfer
 
-File: `internal/cli/scp.go`
+File: `internal/cli/scp.go`, `internal/ssh/sftp.go`
 
 Copy files between local and remote hosts via SFTP. Source first, destination second (same convention as `scp(1)`).
 
 ```
-alogin scp push <local-path> <[user@]host:/remote-path>   # upload
-alogin scp pull <[user@]host:/remote-path> <local-path>   # download
+alogin scp push [-r] <local-path>              <[user@]host:/remote-path>   # upload
+alogin scp pull [-r] <[user@]host:/remote-path> <local-path>                # download
 ```
 
-If the remote path ends with `/`, the local filename is appended automatically.
-If the local path ends with `/`, the remote filename is appended automatically.
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--recursive` | `-r` | Recursively transfer a directory tree |
+
+If the destination path ends with `/`, the source filename (or directory name) is appended automatically.
 
 Examples:
 ```bash
 alogin scp push ./deploy.tar.gz web-01:/opt/releases/
 alogin scp pull web-01:/var/log/app.log ./
 alogin scp pull admin@web-01:/etc/nginx/nginx.conf ./nginx.conf.bak
+
+# Recursive directory transfer
+alogin scp push --recursive ./dist/ web-01:/var/www/app/
+alogin scp pull -r web-01:/var/log/nginx/ ./logs/
 ```
 
 Credentials and multi-hop routing follow the same profile/gateway chain as `alogin ssh connect`.
@@ -341,6 +359,25 @@ alogin agent approve <token>
 alogin agent deny    <token>
 alogin agent pending [--json]
 ```
+
+### `agent trust / untrust / trust-list`
+Grant a temporary trust window so that `require_approval` requests are auto-approved without waiting for a human. Skips DB init.
+
+```
+alogin agent trust       [--duration D] [--agent ID] [--server ID]
+alogin agent untrust     [--agent ID] [--server ID]
+alogin agent trust-list  [--json]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--duration` | Window length: `30m`, `1h`, `2h`, etc. (default `1h`) |
+| `--agent` | Restrict auto-approval to this agent ID only |
+| `--server` | Restrict auto-approval to this server ID only |
+| (no flags) | Global scope — applies to all agents and servers |
+
+Scope priority (most specific wins): `agent:<id>` > `server:<id>` > `global`.
+Trust window state is stored in `~/.config/alogin/hitl/trust/` and checked in `applyPolicyResult` before falling through to interactive HITL.
 
 ### `agent server-policy`
 Manage per-server policy YAML overrides stored in the database. When set, replaces the global `agent-policy.yaml` for commands targeting that server.
