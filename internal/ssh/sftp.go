@@ -55,10 +55,28 @@ func InteractiveSFTP(hops []HopConfig) error {
 	return cmd.Run()
 }
 
+// expandRemoteTilde resolves a leading ~ or ~/ in a remote path to the SFTP
+// server's working directory (which is the home directory for most servers).
+func (s *SFTPClient) expandRemoteTilde(p string) string {
+	if p == "~" {
+		if home, err := s.cl.Getwd(); err == nil {
+			return home
+		}
+		return p
+	}
+	if strings.HasPrefix(p, "~/") {
+		if home, err := s.cl.Getwd(); err == nil {
+			return home + "/" + p[2:]
+		}
+	}
+	return p
+}
+
 // Upload copies a local file to the remote path.
 // If remotePath is an existing directory (or ends with / or .), the local
 // filename is appended automatically, mirroring scp(1) behaviour.
 func (s *SFTPClient) Upload(localPath, remotePath string) error {
+	remotePath = s.expandRemoteTilde(remotePath)
 	// Resolve remote path: if it points to a directory, append the filename.
 	if info, err := s.cl.Stat(remotePath); err == nil && info.IsDir() {
 		remotePath = path.Join(remotePath, filepath.Base(localPath))
@@ -92,6 +110,7 @@ func (s *SFTPClient) Upload(localPath, remotePath string) error {
 
 // Download copies a remote file to a local path.
 func (s *SFTPClient) Download(remotePath, localPath string) error {
+	remotePath = s.expandRemoteTilde(remotePath)
 	src, err := s.cl.Open(remotePath)
 	if err != nil {
 		return fmt.Errorf("open remote %s: %w", remotePath, err)

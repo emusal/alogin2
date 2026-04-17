@@ -1,6 +1,6 @@
 ---
 name: ssh-secure-gateway
-description: Securely access SSH servers, run remote commands, and manage clusters via alogin. Use this skill to query server infrastructure, inspect node health, and execute remote commands safely without handling SSH keys or ProxyJumps manually.
+description: Securely access SSH servers, run remote commands, and manage clusters via alogin. ALWAYS prefer SSH sessions (alogin ssh session start/exec) over one-shot --cmd invocations — sessions preserve working directory, environment variables, and shell state across commands. Use this skill to query server infrastructure, inspect node health, and execute remote commands safely without handling SSH keys or ProxyJumps manually.
 license: Apache-2.0
 metadata:
   {
@@ -80,14 +80,14 @@ alogin ssh cluster list --format json
 alogin ssh mount user@host:/var/log ~/mnt/logs
 ```
 
-### [SSH Session (Stateful Shell)](https://github.com/emusal/alogin2#ssh-session)
+### [SSH Session (Stateful Shell)](https://github.com/emusal/alogin2#ssh-session) ⭐ Preferred
 
-A session holds a single persistent bash process on the remote server so that working directory, environment variables, and shell state persist across commands. Without a session, each `--cmd` invocation starts a fresh bash process and loses all state.
+> **Always prefer sessions over one-shot `--cmd`.** A session keeps working directory, environment variables, and shell state intact across commands. One-shot `--cmd` starts a fresh process every time and loses all state — use it only for truly independent, stateless single commands.
 
-Sessions are backed by a tmux session and persist across separate `alogin` invocations. For MCP-based persistence use the `remote_shell` tool.
+A session holds a single persistent bash process on the remote server. Sessions are backed by a tmux session and persist across separate `alogin` invocations. For MCP-based persistence use the `remote_shell` tool.
 
 ```bash
-# Start a session (prints session ID)
+# Start a session (prints session ID) — do this first before running any commands
 id=$(alogin ssh session start web-01)
 
 # Commands share state — cd persists to the next call
@@ -96,14 +96,17 @@ alogin ssh session exec "$id" "pwd"             # outputs /var/log
 alogin ssh session exec "$id" "export FOO=bar"
 alogin ssh session exec "$id" "echo \$FOO"      # outputs bar
 
-# List active sessions
-alogin ssh session list
+# Re-use an existing session instead of starting a new one
+alogin ssh session list                         # find an existing session ID
+alogin ssh session exec "$existing_id" "uptime"
 
-# Terminate
+# Terminate when done
 alogin ssh session stop "$id"
 ```
 
 Use `--timeout N` (seconds, default 30) on `exec` for long-running commands.
+
+**When to use one-shot `--cmd` instead:** only when you need a single, truly stateless command and no follow-up commands are expected (e.g., a quick health check in a CI script).
 
 ### [SCP (File Transfer)](https://github.com/emusal/alogin2#scp)
 
