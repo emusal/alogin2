@@ -168,6 +168,14 @@ func newSessionJobRunCmd() *cobra.Command {
 	return cmd
 }
 
+// shortID safely returns up to the first 8 characters of an ID.
+func shortID(id string) string {
+	if len(id) > 8 {
+		return id[:8]
+	}
+	return id
+}
+
 // resolveJobID resolves a full UUID or prefix to a full job ID, printing a
 // helpful error when ambiguous or not found.
 func resolveJobID(ctx context.Context, prefix string) (string, error) {
@@ -267,7 +275,7 @@ func newSessionJobLogsCmd() *cobra.Command {
 					printed = len(j.Output)
 				}
 				if j.Status != db.JobPending && j.Status != db.JobRunning {
-					fmt.Fprintf(os.Stderr, "\n[job %s: %s", id[:8], j.Status)
+					fmt.Fprintf(os.Stderr, "\n[job %s: %s", shortID(id), j.Status)
 					if j.ExitCode != nil {
 						fmt.Fprintf(os.Stderr, ", exit %d", *j.ExitCode)
 					}
@@ -314,8 +322,8 @@ func newSessionJobListCmd() *cobra.Command {
 					cmdShort = cmdShort[:37] + "..."
 				}
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
-					j.ID[:8],
-					j.SessionID[:8],
+					shortID(j.ID),
+					shortID(j.SessionID),
 					j.ServerHost,
 					j.Status,
 					cmdShort,
@@ -344,7 +352,7 @@ func newSessionJobCancelCmd() *cobra.Command {
 			if err := database.Jobs.Cancel(ctx, id); err != nil {
 				return err
 			}
-			fmt.Printf("Job %s cancelled.\n", id[:8])
+			fmt.Printf("Job %s cancelled.\n", shortID(id))
 			return nil
 		},
 	}
@@ -364,7 +372,7 @@ func newSessionJobDeleteCmd() *cobra.Command {
 			if err := database.Jobs.Delete(ctx, id); err != nil {
 				return err
 			}
-			fmt.Printf("Job %s deleted.\n", id[:8])
+			fmt.Printf("Job %s deleted.\n", shortID(id))
 			return nil
 		},
 	}
