@@ -223,6 +223,19 @@ CREATE INDEX IF NOT EXISTS idx_bg_jobs_session ON bg_jobs(session_id);
 CREATE INDEX IF NOT EXISTS idx_bg_jobs_status  ON bg_jobs(status);
 
 -- ----------------------------------------------------------------
+-- agent_memory: free-form natural language notes per server (v15)
+-- Append-only log of AI agent observations, stored per server.
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS agent_memory (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    server_id  INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    content    TEXT    NOT NULL,
+    created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_memory_server ON agent_memory(server_id);
+
+-- ----------------------------------------------------------------
 -- schema_migrations: version tracking
 -- ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -243,3 +256,5 @@ INSERT OR IGNORE INTO schema_migrations(version) VALUES (10);
 INSERT OR IGNORE INTO schema_migrations(version) VALUES (11);
 INSERT OR IGNORE INTO schema_migrations(version) VALUES (12);
 INSERT OR IGNORE INTO schema_migrations(version) VALUES (13);
+INSERT OR IGNORE INTO schema_migrations(version) VALUES (14);
+INSERT OR IGNORE INTO schema_migrations(version) VALUES (15);

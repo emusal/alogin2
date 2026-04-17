@@ -29,7 +29,8 @@ func newAgentCmd() *cobra.Command {
   alogin agent untrust        — revoke an active trust window
   alogin agent trust-list     — list active trust windows
   alogin agent server-policy  — manage per-server policy overrides (set/show/clear)
-  alogin agent server-prompt  — manage per-server LLM system prompt overrides (set/show/clear)`,
+  alogin agent server-prompt  — manage per-server LLM system prompt overrides (set/show/clear)
+  alogin agent server-memory  — manage per-server AI agent memory notes (add/list/del)`,
 	}
 	cmd.AddCommand(
 		newAgentMCPCmd(),
@@ -44,6 +45,7 @@ func newAgentCmd() *cobra.Command {
 		newAgentTrustListCmd(),
 		newAgentServerPolicyCmd(),
 		newAgentServerPromptCmd(),
+		newAgentServerMemoryCmd(),
 	)
 	return cmd
 }

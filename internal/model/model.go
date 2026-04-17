@@ -54,6 +54,8 @@ type Server struct {
 	Locale     string     `json:"locale"`      // e.g. "ko_KR.eucKR"; "-" or "" = system default
 	DeviceType DeviceType `json:"device_type"` // linux|windows|router|switch|firewall|other
 	Note       string     `json:"note"`        // free-form description (LLM context)
+	AuthMethod string     `json:"auth_method"` // "password" or "key"
+	IdentityFile string   `json:"identity_file,omitempty"` // Explicit SSH private key path
 	// GatewayRouteID is the internal gateway route applied after the profile gateway.
 	// Full path: profile.gateway_hops → server.gateway_route_hops → server
 	// nil means connect directly from the profile gateway (or directly if no profile).
@@ -189,4 +191,12 @@ type Profile struct {
 	GatewayRouteID *int64    `json:"gateway_route_id,omitempty"` // nil = no gateway (direct connections)
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+// AgentMemory is a free-form natural language note stored by an AI agent for a specific server.
+type AgentMemory struct {
+	ID        int64     `json:"id"`
+	ServerID  int64     `json:"server_id"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
 }

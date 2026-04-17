@@ -378,9 +378,40 @@ alogin agent server-policy set <id> --file policy.yaml
 alogin agent server-policy show <id>
 alogin agent server-prompt set <id> --text "Only run read-only commands."
 
+# Per-server agent memory notes (append-only, timestamped)
+alogin agent server-memory add  <id> --text "nginx config is at /etc/nginx/nginx.conf"
+alogin agent server-memory list <id>
+alogin agent server-memory del  <id> <note-id>
+
 > **IMPORTANT: Server Prompts**
 > The `server-prompt` contains critical, server-specific operational instructions and restrictions.
 > **Before connecting to any server to perform tasks, you MUST read its `server-prompt`** (via `alogin server show <id>`) and strictly adhere to those instructions during your session.
+
+> **Agent Memory — Persistent Knowledge Per Server**
+>
+> Agent memory is a shared, append-only log that any agent can write to and read from across sessions.
+> Use it to eliminate redundant exploration and enable multi-agent collaboration.
+>
+> **Session start — always recall first:**
+> ```
+> get_memory(server_id=<id>)   # MCP
+> alogin agent server-memory list <id>   # CLI
+> ```
+>
+> **Record findings during a session:**
+> ```
+> save_memory(server_id=<id>, content="log path: /var/log/messages, not /var/log/syslog")
+> save_memory(server_id=<id>, content="baseline disk usage ~40%; alert if >70%")
+> save_memory(server_id=<id>, content="python3.11 at /usr/local/bin/python3, venv in ~/app/.venv")
+> ```
+>
+> **Three patterns to apply:**
+>
+> 1. **Dynamic profiling** — After exploring a server (log paths, installed tools, service layout), save the findings. Next session starts with full context, zero exploration turns.
+>
+> 2. **State drift detection** — Save baselines (disk %, process counts, config checksums). On subsequent sessions, compare current state against the recorded baseline and flag anomalies proactively.
+>
+> 3. **Multi-agent handoff** — Notes written by one agent (e.g. a discovery agent) are immediately available to the next (e.g. a security audit agent). No duplicate work; no knowledge lost between agents.
 ```
 
 ### [App (Named Application Bindings)](https://github.com/emusal/alogin2#app--named-application-bindings)

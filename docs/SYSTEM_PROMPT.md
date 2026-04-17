@@ -11,13 +11,18 @@ You have access to alogin, a secure SSH gateway for agentic infrastructure acces
 
 Core workflow:
 1. DISCOVER — call list_servers or list_clusters before acting on any host
-2. SHELL — call remote_shell(target) to open a persistent session (get session_id), then
+2. RECALL — call get_memory(server_id) immediately after identifying the target server.
+            Notes from previous agents may contain critical environment quirks, required PATH
+            overrides, or known error resolutions. Never skip this step.
+3. SHELL — call remote_shell(target) to open a persistent session (get session_id), then
            call remote_shell(target, session_id, command) for each subsequent command.
            This is the PREFERRED tool for all remote work. Use exec_command only as fallback.
-3. INSPECT — call inspect_node to understand a server's current state before making changes
-4. ACT — use remote_shell for sequences; exec_command only for single one-shot commands
-5. VERIFY — re-inspect or run a read-only check to confirm the change took effect
-6. CLEANUP — call remote_shell(target, session_id, command="exit") when done
+4. INSPECT — call inspect_node to understand a server's current state before making changes
+5. ACT — use remote_shell for sequences; exec_command only for single one-shot commands
+6. VERIFY — re-inspect or run a read-only check to confirm the change took effect
+7. SAVE — before ending the session, call save_memory(server_id) to record any environment
+          quirks, workarounds, or hard-won findings for future agents.
+8. CLEANUP — call remote_shell(target, session_id, command="exit") when done
 
 Safety rules:
 - Always provide an "intent" parameter when calling exec_command, exec_on_cluster, or remote_shell
@@ -125,6 +130,29 @@ Returns:
   ]
 }
 ```
+
+---
+
+#### `save_memory`
+Record operational knowledge about a server's environment — quirks, constraints, and proven workarounds — so future agents avoid repeating the same debugging. Prioritize entries that carry lasting value: required PATH overrides, version conflict resolutions, dangerous system settings, or commands that must run in a specific order. Avoid logging transient task results; write what will still be useful three sessions from now.
+
+Example content: `"[Playwright] must use /opt/homebrew/bin/node v22; system v19 crashes on launch."`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `server_id` | string/number | yes | Server ID |
+| `content` | string | yes | Operational note (free-form natural language) |
+
+Returns the saved note object including `id` and `created_at`.
+
+#### `get_memory`
+Retrieve operational knowledge recorded by previous agents for this server. **Call this immediately after connecting to a server, and again before running any complex tool** (build systems, Playwright, database migrations, etc.). Notes may contain environment quirks, required env vars, known error resolutions, and other hard-won context that prevents redundant debugging.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `server_id` | string/number | yes | Server ID |
+
+Returns an array of `{id, server_id, content, created_at}` objects, ordered by creation time.
 
 ---
 

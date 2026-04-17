@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS servers (
     port       INTEGER NOT NULL DEFAULT 0,
     gateway_id INTEGER REFERENCES gateway_routes(id) ON DELETE SET NULL,
     locale     TEXT    NOT NULL DEFAULT '-',
+    auth_method TEXT   NOT NULL DEFAULT 'password',
+    identity_file TEXT NOT NULL DEFAULT '',
     created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
     updated_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
     UNIQUE(host, user)
@@ -121,4 +123,18 @@ CREATE TABLE IF NOT EXISTS tunnels (
 
 CREATE INDEX IF NOT EXISTS idx_tunnels_name ON tunnels(name);
 
-INSERT OR IGNORE INTO schema_migrations(version) VALUES (5);
+INSERT OR IGNORE INTO schema_migrations(version) VALUES (14);
+
+-- ----------------------------------------------------------------
+-- agent_memory: free-form natural language notes per server (v15)
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS agent_memory (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    server_id  INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    content    TEXT    NOT NULL,
+    created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_memory_server ON agent_memory(server_id);
+
+INSERT OR IGNORE INTO schema_migrations(version) VALUES (15);

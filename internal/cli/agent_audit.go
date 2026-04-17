@@ -118,9 +118,14 @@ func newAgentAuditTailCmd() *cobra.Command {
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt)
 			defer stop()
 
-			lastSeen := time.Now()
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			// Seed lastSeenID from the current max so we only show entries
+			// that arrive after tail starts.
+			var lastSeenID int64
+			if seed, err := database.AuditLog.List(ctx, db.AuditListOpts{Limit: 1}); err == nil && len(seed) > 0 {
+				lastSeenID = seed[0].ID
+			}
 
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 			fmt.Fprintln(os.Stderr, "Tailing audit log (Ctrl+C to stop)...")
 
 			for {
@@ -130,20 +135,19 @@ func newAgentAuditTailCmd() *cobra.Command {
 				case <-time.After(2 * time.Second):
 				}
 
-				opts := db.AuditListOpts{
-					Since: lastSeen,
-					Limit: 100,
-				}
-				entries, err := database.AuditLog.List(ctx, opts)
+				entries, err := database.AuditLog.List(ctx, db.AuditListOpts{
+					AfterID: lastSeenID,
+					Limit:   100,
+				})
 				if err != nil {
 					return err
 				}
 
-				// List returns newest-first; reverse for tail display.
+				// List returns newest-first; reverse for chronological display.
 				for i := len(entries) - 1; i >= 0; i-- {
 					e := entries[i]
-					if e.CreatedAt.After(lastSeen) {
-						lastSeen = e.CreatedAt
+					if e.ID > lastSeenID {
+						lastSeenID = e.ID
 					}
 					if flagFormat == "json" {
 						enc := json.NewEncoder(os.Stdout)

@@ -37,7 +37,8 @@ type AuditListOpts struct {
 	ServerID  *int64
 	EventType string
 	Since     time.Time
-	Limit     int // 0 = default 50
+	AfterID   int64 // exclusive lower bound on id; used by tail to avoid re-emitting entries
+	Limit     int   // 0 = default 50
 	Offset    int
 }
 
@@ -111,6 +112,10 @@ func (r *auditRepo) List(ctx context.Context, opts AuditListOpts) ([]*AuditEntry
 	if !opts.Since.IsZero() {
 		where = append(where, "created_at >= ?")
 		args = append(args, opts.Since.UTC().Format(time.RFC3339))
+	}
+	if opts.AfterID > 0 {
+		where = append(where, "id > ?")
+		args = append(args, opts.AfterID)
 	}
 
 	q := `SELECT id, timestamp, event, agent_id, server_id, server_host, cluster_id, cluster_name,

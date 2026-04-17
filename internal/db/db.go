@@ -15,7 +15,7 @@ var schemaSQL string
 
 // CurrentSchemaVersion is the schema version this binary expects.
 // Increment when adding a new migration.
-const CurrentSchemaVersion = 13
+const CurrentSchemaVersion = 15
 
 // migrationDescriptions maps each migration version to a human-readable summary.
 var migrationDescriptions = map[int]string{
@@ -31,6 +31,8 @@ var migrationDescriptions = map[int]string{
 	11: "profiles table (network context profiles replacing per-server gateway_id and auto_gw)",
 	12: "servers.gateway_route_id column (per-server internal gateway route, applied after profile gateway)",
 	13: "bg_jobs table (background SSH command execution tracking)",
+	14: "servers.auth_method, servers.identity_file columns (explicit SSH key authentication)",
+	15: "agent_memory table (free-form AI notes per server)",
 }
 
 // MigrationDescription returns a human-readable description for a schema version.
@@ -48,11 +50,12 @@ type DB struct {
 	Clusters ClusterRepo
 	Themes   ThemeRepo
 	Hosts    HostRepo
-	Tunnels    TunnelRepo
-	AppServers AppServerRepo
-	AuditLog   AuditRepo
-	Profiles   ProfileRepo
-	Jobs       JobRepo
+	Tunnels     TunnelRepo
+	AppServers  AppServerRepo
+	AuditLog    AuditRepo
+	Profiles    ProfileRepo
+	Jobs        JobRepo
+	AgentMemory AgentMemoryRepo
 
 	// AppliedMigrations holds the schema versions that were actually applied
 	// during this Open() call (i.e. were pending before the call).
@@ -92,6 +95,7 @@ func Open(path string) (*DB, error) {
 	db.AuditLog = &auditRepo{db: sqlDB}
 	db.Profiles = &profileRepo{db: sqlDB}
 	db.Jobs = &jobRepo{db: sqlDB}
+	db.AgentMemory = &agentMemoryRepo{db: sqlDB}
 	return db, nil
 }
 
@@ -471,6 +475,42 @@ func applyMigrations(db *sql.DB) ([]int, error) {
 		}
 		_, _ = db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version) VALUES (13)`)
 		applied = append(applied, 13)
+	}
+
+	if version < 14 || !columnExists(db, ctx, "servers", "auth_method") {
+		for _, col := range []struct{ name, def string }{
+			{"auth_method", "TEXT NOT NULL DEFAULT 'password'"},
+			{"identity_file", "TEXT NOT NULL DEFAULT ''"},
+		} {
+			_, err := db.ExecContext(ctx,
+				`ALTER TABLE servers ADD COLUMN `+col.name+` `+col.def)
+			if err != nil && !strings.Contains(err.Error(), "duplicate column") {
+				return applied, fmt.Errorf("migration v14 (%s): %w", col.name, err)
+			}
+		}
+		_, _ = db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version) VALUES (14)`)
+		applied = append(applied, 14)
+	}
+
+	if version < 15 {
+		_, err := db.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS agent_memory (
+				id         INTEGER PRIMARY KEY AUTOINCREMENT,
+				server_id  INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+				content    TEXT    NOT NULL,
+				created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+			)
+		`)
+		if err != nil && !strings.Contains(err.Error(), "already exists") {
+			return applied, fmt.Errorf("migration v15: %w", err)
+		}
+		_, err = db.ExecContext(ctx,
+			`CREATE INDEX IF NOT EXISTS idx_agent_memory_server ON agent_memory(server_id)`)
+		if err != nil && !strings.Contains(err.Error(), "already exists") {
+			return applied, fmt.Errorf("migration v15 index: %w", err)
+		}
+		_, _ = db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version) VALUES (15)`)
+		applied = append(applied, 15)
 	}
 
 	return applied, nil

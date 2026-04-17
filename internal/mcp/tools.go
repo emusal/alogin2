@@ -208,20 +208,39 @@ func RegisterTools(srv *server.MCPServer, d Deps) {
 
 	// --- get_server ---
 	srv.AddTool(mcpgo.NewTool("get_server",
-		mcpgo.WithDescription("Get detailed information about a single server by ID."),
-		mcpgo.WithString("id", mcpgo.Description("Server ID"), mcpgo.Required()),
+		mcpgo.WithDescription("Get detailed information about a single server. Accepts a numeric server ID or a host string in the form 'host' or 'user@host'."),
+		mcpgo.WithString("id", mcpgo.Description("Server ID (number), hostname, or user@host"), mcpgo.Required()),
 	), func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-		id, err := parseID(req, "id")
-		if err != nil {
-			return toolError(err.Error()), nil
+		args := req.GetArguments()
+
+		var s *model.Server
+		var err error
+
+		// id may arrive as float64 (JSON number) or string (host / user@host).
+		switch v := args["id"].(type) {
+		case float64:
+			s, err = d.DB.Servers.GetByID(ctx, int64(v))
+		case string:
+			raw := strings.TrimSpace(v)
+			if numID, parseErr := strconv.ParseInt(raw, 10, 64); parseErr == nil {
+				s, err = d.DB.Servers.GetByID(ctx, numID)
+			} else {
+				host, user := raw, ""
+				if at := strings.IndexByte(raw, '@'); at >= 0 {
+					user, host = raw[:at], raw[at+1:]
+				}
+				s, err = d.DB.Servers.GetByHost(ctx, host, user)
+			}
+		default:
+			return toolError("id must be a server ID (number) or hostname (string)"), nil
 		}
-		s, err := d.DB.Servers.GetByID(ctx, id)
 		if err != nil {
 			return toolError(fmt.Sprintf("get server: %v", err)), nil
 		}
 		if s == nil {
-			return toolError(fmt.Sprintf("server %d not found", id)), nil
+			return toolError(fmt.Sprintf("server %q not found", args["id"])), nil
 		}
+
 		return toolJSON(s)
 	})
 
@@ -592,7 +611,7 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 
 	// --- inspect_node ---
 	srv.AddTool(mcpgo.NewTool("inspect_node",
-		mcpgo.WithDescription("Get a structured health snapshot of a server: CPU load, memory usage, disk space, and top processes. Falls back to raw output if parsing fails."),
+		mcpgo.WithDescription("Get a structured health snapshot of a server: CPU load, memory usage, disk space, top processes, and agent memory notes from previous sessions. Call this before starting work on a server — the memories field contains operational knowledge recorded by past agents."),
 		mcpgo.WithString("server_id", mcpgo.Description("Server ID"), mcpgo.Required()),
 		mcpgo.WithNumber("timeout_sec", mcpgo.Description("Execution timeout in seconds (default 30)")),
 		mcpgo.WithString("agent_id", mcpgo.Description("Optional: identifier for the calling agent")),
@@ -616,8 +635,8 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 		commands := []string{
 			"cat /proc/loadavg 2>/dev/null || uptime",
 			"free -b 2>/dev/null || vm_stat",
-			"df -P / 2>/dev/null",
-			"ps aux --sort=-%cpu 2>/dev/null | head -6 || ps aux | head -6",
+			"df -P / 2>/dev/null || df /",
+			"{ ps aux --sort=-%cpu 2>/dev/null || ps aux; } | head -6",
 		}
 
 		inspectEv := auditEvent{
@@ -652,11 +671,17 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 			}
 		}
 
+		memories, err := d.DB.AgentMemory.ListByServer(ctx, id)
+		if err != nil || memories == nil {
+			memories = []*model.AgentMemory{}
+		}
+
 		health := nodeHealth{ServerID: id, Host: host}
 		health.CPU = parseCPU(outputs[0], &raw)
 		health.Memory = parseMemory(outputs[1], &raw)
 		health.Disk = parseDisk(outputs[2], &raw)
 		health.Processes = parseProcesses(outputs[3], &raw)
+		health.Memories = memories
 		if len(raw) > 0 {
 			health.RawOutputs = raw
 		}
@@ -852,18 +877,60 @@ Set recursive=true to download a directory tree.`),
 		mcpgo.WithBoolean("recursive", mcpgo.Description("Recursively download a directory tree. Default false.")),
 		mcpgo.WithString("agent_id", mcpgo.Description("Optional: identifier for the calling agent")),
 	), newPullFileHandler(d))
+
+	// --- save_memory ---
+	srv.AddTool(mcpgo.NewTool("save_memory",
+		mcpgo.WithDescription("Record operational knowledge about a server's environment — quirks, constraints, and proven workarounds — so future agents avoid repeating the same debugging. Prioritize entries like: required PATH overrides to run a tool, version conflict resolutions, dangerous system settings to watch out for, or commands that must be run in a specific order. Example: '[Playwright] must use /opt/homebrew/bin/node v22; system v19 crashes on launch.'"),
+		mcpgo.WithString("server_id", mcpgo.Description("Server ID (from list_servers)"), mcpgo.Required()),
+		mcpgo.WithString("content", mcpgo.Description("The note to save (free-form natural language)"), mcpgo.Required()),
+	), func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		args := req.GetArguments()
+		id, err := parseID(req, "server_id")
+		if err != nil {
+			return toolError(err.Error()), nil
+		}
+		content, _ := args["content"].(string)
+		if strings.TrimSpace(content) == "" {
+			return toolError("content must not be empty"), nil
+		}
+		entry, err := d.DB.AgentMemory.Add(ctx, id, content)
+		if err != nil {
+			return toolError(fmt.Sprintf("save memory: %v", err)), nil
+		}
+		return toolJSON(entry)
+	})
+
+	// --- get_memory ---
+	srv.AddTool(mcpgo.NewTool("get_memory",
+		mcpgo.WithDescription("Retrieve operational knowledge recorded by previous agents for this server. Call this immediately after connecting to a server, and again before running any complex tool (build systems, Playwright, database migrations, etc.). The notes may contain environment quirks, required env vars, known error resolutions, and other hard-won context that prevents redundant debugging."),
+		mcpgo.WithString("server_id", mcpgo.Description("Server ID (from list_servers)"), mcpgo.Required()),
+	), func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		id, err := parseID(req, "server_id")
+		if err != nil {
+			return toolError(err.Error()), nil
+		}
+		entries, err := d.DB.AgentMemory.ListByServer(ctx, id)
+		if err != nil {
+			return toolError(fmt.Sprintf("get memory: %v", err)), nil
+		}
+		if entries == nil {
+			entries = []*model.AgentMemory{}
+		}
+		return toolJSON(entries)
+	})
 }
 
 // nodeHealth is the structured output of inspect_node.
 type nodeHealth struct {
-	ServerID   int64             `json:"server_id"`
-	Host       string            `json:"host"`
-	CPU        cpuInfo           `json:"cpu"`
-	Memory     memInfo           `json:"memory"`
-	Disk       diskInfo          `json:"disk"`
-	Processes  []processEntry    `json:"top_processes"`
-	RawOutputs map[string]string `json:"raw,omitempty"`
-	Error      string            `json:"error,omitempty"`
+	ServerID   int64                `json:"server_id"`
+	Host       string               `json:"host"`
+	CPU        cpuInfo              `json:"cpu"`
+	Memory     memInfo              `json:"memory"`
+	Disk       diskInfo             `json:"disk"`
+	Processes  []processEntry       `json:"top_processes"`
+	Memories   []*model.AgentMemory `json:"memories"`
+	RawOutputs map[string]string    `json:"raw,omitempty"`
+	Error      string               `json:"error,omitempty"`
 }
 
 type cpuInfo struct {
@@ -922,14 +989,14 @@ func parseCPU(out string, raw *map[string]string) cpuInfo {
 	return cpuInfo{}
 }
 
-// parseMemory parses `free -b` output (Linux).
+// parseMemory parses `free -b` (Linux) or `vm_stat` (macOS) output.
 func parseMemory(out string, raw *map[string]string) memInfo {
+	// Linux: free -b  →  "Mem: total used free ..."
 	for _, line := range strings.Split(out, "\n") {
 		if !strings.HasPrefix(line, "Mem:") {
 			continue
 		}
 		f := strings.Fields(line)
-		// free -b: Mem: total used free shared buff/cache available
 		if len(f) >= 4 {
 			total, e1 := strconv.ParseInt(f[1], 10, 64)
 			used, e2 := strconv.ParseInt(f[2], 10, 64)
@@ -944,6 +1011,60 @@ func parseMemory(out string, raw *map[string]string) memInfo {
 			}
 		}
 	}
+
+	// macOS: vm_stat  →  "page size of N bytes" + "Pages free: N." etc.
+	if strings.Contains(out, "Mach Virtual Memory Statistics") {
+		var pageSize, free, active, inactive, wired, compressed int64
+		for _, line := range strings.Split(out, "\n") {
+			line = strings.TrimSpace(line)
+			// Extract page size from header: "page size of 16384 bytes"
+			if strings.Contains(line, "page size of") {
+				fmt.Sscanf(line, "Mach Virtual Memory Statistics: (page size of %d bytes)", &pageSize)
+				continue
+			}
+			// Parse "Pages <label>: <number>."
+			colonIdx := strings.IndexByte(line, ':')
+			if colonIdx < 0 {
+				continue
+			}
+			key := strings.TrimSpace(line[:colonIdx])
+			valStr := strings.TrimSpace(strings.TrimRight(line[colonIdx+1:], "."))
+			val, err := strconv.ParseInt(valStr, 10, 64)
+			if err != nil {
+				continue
+			}
+			switch key {
+			case "Pages free":
+				free = val
+			case "Pages active":
+				active = val
+			case "Pages inactive":
+				inactive = val
+			case "Pages wired down":
+				wired = val
+			case "Pages occupied by compressor":
+				compressed = val
+			}
+		}
+		if pageSize > 0 {
+			totalPages := free + active + inactive + wired + compressed
+			usedPages := active + inactive + wired + compressed
+			total := totalPages * pageSize
+			used := usedPages * pageSize
+			freeBytes := free * pageSize
+			usedPct := float64(0)
+			if total > 0 {
+				usedPct = float64(used) / float64(total) * 100
+			}
+			return memInfo{
+				TotalBytes: total,
+				UsedBytes:  used,
+				FreeBytes:  freeBytes,
+				UsedPct:    usedPct,
+			}
+		}
+	}
+
 	(*raw)["memory"] = out
 	return memInfo{}
 }

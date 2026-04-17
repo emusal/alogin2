@@ -547,6 +547,7 @@ _alogin() {
             'trust-list:List active trust windows'
             'server-policy:Manage per-server policy overrides'
             'server-prompt:Manage per-server LLM system prompt overrides'
+            'server-memory:Manage per-server AI agent memory notes'
           )
           _arguments -C '1: :->sub' '*:: :->sub_args'
           case $state in
@@ -584,6 +585,10 @@ _alogin() {
                   local -a sp_subcmds
                   sp_subcmds=('set:Set value' 'show:Show value' 'clear:Clear value')
                   _describe 'subcommand' sp_subcmds ;;
+                server-memory)
+                  local -a sm_subcmds
+                  sm_subcmds=('add:Add a memory note' 'list:List memory notes' 'del:Delete a memory note')
+                  _describe 'subcommand' sm_subcmds ;;
               esac
               ;;
           esac
@@ -874,7 +879,7 @@ _alogin_completion() {
     # ── agent ───────────────────────────────────────────────────────────────
     agent)
       if [[ $cword -eq 2 ]]; then
-        COMPREPLY=($(compgen -W "mcp setup policy audit approve deny pending trust untrust trust-list server-policy server-prompt" -- "$cur"))
+        COMPREPLY=($(compgen -W "mcp setup policy audit approve deny pending trust untrust trust-list server-policy server-prompt server-memory" -- "$cur"))
       elif [[ $cword -ge 3 ]]; then
         case "$sub" in
           policy)
@@ -902,6 +907,11 @@ _alogin_completion() {
           server-policy|server-prompt)
             if [[ $cword -eq 3 ]]; then
               COMPREPLY=($(compgen -W "set show clear" -- "$cur"))
+            fi
+            ;;
+          server-memory)
+            if [[ $cword -eq 3 ]]; then
+              COMPREPLY=($(compgen -W "add list del" -- "$cur"))
             fi
             ;;
         esac
