@@ -186,10 +186,11 @@ func newAgentPolicyCmd() *cobra.Command {
 		Long: `Manage the agent safety policy file (~/.config/alogin/agent-policy.yaml).
 
   alogin agent policy show      — print the active policy file
-  alogin agent policy validate  — validate the policy file for syntax errors`,
+  alogin agent policy validate  — validate the policy file for syntax errors
+  alogin agent policy dry-run   — check if a command would be allowed, denied, or held for approval`,
 		Annotations: map[string]string{skipDBAnnotation: "true"},
 	}
-	cmd.AddCommand(newAgentPolicyShowCmd(), newAgentPolicyValidateCmd())
+	cmd.AddCommand(newAgentPolicyShowCmd(), newAgentPolicyValidateCmd(), newAgentPolicyDryRunCmd())
 	return cmd
 }
 
@@ -235,6 +236,119 @@ func newAgentPolicyValidateCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func newAgentPolicyDryRunCmd() *cobra.Command {
+	var (
+		cmds     []string
+		agentID  string
+		serverID int64
+		jsonOut  bool
+	)
+	cmd := &cobra.Command{
+		Use:   "dry-run",
+		Short: "Check if a command would be allowed, denied, or held for approval",
+		Long: `Evaluate the active policy against one or more commands without executing them.
+Prints the policy decision (allow / deny / require_approval) and which rule matched.
+
+Examples:
+  alogin agent policy dry-run --cmd "rm -rf /"
+  alogin agent policy dry-run --cmd "ls -la" --cmd "df -h"
+  alogin agent policy dry-run --cmd "shutdown now" --agent claude-dev --server 3
+  alogin agent policy dry-run --cmd "rm -rf /" --json`,
+		Annotations: map[string]string{skipDBAnnotation: "true"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(cmds) == 0 {
+				return fmt.Errorf("at least one --cmd is required")
+			}
+
+			policyPath := policyFilePath()
+			eng, err := policy.LoadFile(policyPath)
+			if err != nil {
+				return fmt.Errorf("load policy: %w", err)
+			}
+
+			result := policy.EvalPolicy(eng, policy.CheckRequest{
+				AgentID:  agentID,
+				Commands: cmds,
+				ServerID: serverID,
+			})
+
+			policySource := policyPath
+			if eng == nil {
+				policySource = "built-in defaults (no policy file)"
+			}
+
+			if jsonOut {
+				ruleField := ""
+				if result.RuleName != "" {
+					ruleField = fmt.Sprintf(`, "rule": %q`, result.RuleName)
+				}
+				fmt.Printf(`{"action":%q,"commands":%s,"agent_id":%q,"server_id":%d,"policy":%q%s}`+"\n",
+					result.Action,
+					fmtStringSliceJSON(cmds),
+					agentID,
+					serverID,
+					policySource,
+					ruleField,
+				)
+				return nil
+			}
+
+			fmt.Printf("Policy source : %s\n", policySource)
+			fmt.Printf("Commands      : %s\n", fmtStringSliceHuman(cmds))
+			if agentID != "" {
+				fmt.Printf("Agent ID      : %s\n", agentID)
+			}
+			if serverID != 0 {
+				fmt.Printf("Server ID     : %d\n", serverID)
+			}
+			fmt.Println()
+
+			actionLabel := map[string]string{
+				"allow":            "ALLOW",
+				"deny":             "DENY",
+				"require_approval": "REQUIRE_APPROVAL (HITL)",
+			}[result.Action]
+			if actionLabel == "" {
+				actionLabel = result.Action
+			}
+			fmt.Printf("Decision      : %s\n", actionLabel)
+			if result.RuleName != "" {
+				fmt.Printf("Matched rule  : %q\n", result.RuleName)
+			} else {
+				fmt.Println("Matched rule  : (default action)")
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringArrayVar(&cmds, "cmd", nil, "Command to evaluate (repeatable)")
+	cmd.Flags().StringVar(&agentID, "agent", "", "Agent ID to test against (default: empty)")
+	cmd.Flags().Int64Var(&serverID, "server", 0, "Server ID to test against (default: 0 = any)")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output result as JSON")
+	return cmd
+}
+
+func fmtStringSliceJSON(ss []string) string {
+	out := "["
+	for i, s := range ss {
+		if i > 0 {
+			out += ","
+		}
+		out += fmt.Sprintf("%q", s)
+	}
+	return out + "]"
+}
+
+func fmtStringSliceHuman(ss []string) string {
+	out := ""
+	for i, s := range ss {
+		if i > 0 {
+			out += ", "
+		}
+		out += fmt.Sprintf("%q", s)
+	}
+	return out
 }
 
 func policyFilePath() string {

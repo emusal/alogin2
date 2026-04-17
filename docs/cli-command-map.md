@@ -308,12 +308,22 @@ alogin agent setup
 Skips DB init.
 
 ### `agent policy`
-Global HITL/RBAC policy management. Subcommands: `show`, `validate`. Skips DB init.
+Global HITL/RBAC policy management. Subcommands: `show`, `validate`, `dry-run`. Skips DB init.
 
 ```
 alogin agent policy show
 alogin agent policy validate
+alogin agent policy dry-run --cmd <cmd> [--cmd <cmd>...] [--agent <id>] [--server <id>] [--json]
 ```
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--cmd` | | Command string to evaluate (repeatable) |
+| `--agent` | | Agent ID to test against policy rules |
+| `--server` | | Server ID to test against policy rules |
+| `--json` | | Output result as JSON |
+
+Evaluates the active policy (global `~/.config/alogin/agent-policy.yaml` + built-in destructive patterns) and prints `allow`, `deny`, or `require_approval` with the matched rule name. Does **not** execute the command or trigger HITL.
 
 ### `agent audit`
 Query the MCP execution audit log stored in SQLite. Subcommands: `list`, `tail`.

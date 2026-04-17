@@ -322,6 +322,8 @@ alogin agent server-policy clear <server-id>   # revert to global
 ```bash
 alogin agent policy show      # print active global policy
 alogin agent policy validate  # syntax + pattern check
+alogin agent policy dry-run --cmd "rm -rf /"          # check decision without executing
+alogin agent policy dry-run --cmd "ls" --agent claude-dev --server 3 --json
 ```
 
 **HITL (Human-in-the-Loop) approval:**

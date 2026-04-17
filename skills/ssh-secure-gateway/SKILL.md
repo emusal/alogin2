@@ -193,6 +193,12 @@ alogin agent pending                     # list pending approvals
 alogin agent approve <token>
 alogin agent deny <token>
 
+# Policy dry-run — check if a command would be allowed before running it
+alogin agent policy dry-run --cmd "rm -rf /"
+alogin agent policy dry-run --cmd "df -h" --cmd "uptime"
+alogin agent policy dry-run --cmd "shutdown now" --agent claude-dev --server 3
+alogin agent policy dry-run --cmd "rm -rf /" --json   # machine-readable output
+
 # Per-server policy and system prompt overrides
 alogin agent server-policy set <id> --file policy.yaml
 alogin agent server-policy show <id>
@@ -252,6 +258,7 @@ All list and show commands support `--format json` for machine-readable output:
 | `ssh cluster <name> --cmd <cmd>` | array of `{host, output, exit_code, error}` |
 | `agent audit list` | array of audit entry objects |
 | `agent audit tail` | newline-delimited JSON stream |
+| `agent policy dry-run --json` | `{action, commands, agent_id, server_id, policy, rule?}` |
 | `app list` | array of app binding objects |
 | `app show <name>` | single binding object |
 

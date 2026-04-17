@@ -320,6 +320,8 @@ alogin agent server-policy clear <서버-id>   # 전역 정책으로 되돌리�
 ```bash
 alogin agent policy show      # 현재 적용 중인 정책 확인
 alogin agent policy validate  # 문법 오류 검사
+alogin agent policy dry-run --cmd "rm -rf /"          # 실행 없이 정책 판단 결과 확인
+alogin agent policy dry-run --cmd "ls" --agent claude-dev --server 3 --json
 ```
 
 **HITL (사람 승인 단계):**

@@ -525,9 +525,17 @@ _alogin() {
             sub_args)
               case $words[1] in
                 policy)
-                  local -a policy_subcmds
-                  policy_subcmds=('show:Print active policy' 'validate:Validate policy file')
-                  _describe 'subcommand' policy_subcmds ;;
+                  _arguments -C '1: :->psub' '*:: :->psub_args'
+                  case $state in
+                    psub)
+                      local -a policy_subcmds
+                      policy_subcmds=('show:Print active policy' 'validate:Validate policy file' 'dry-run:Check policy decision without executing')
+                      _describe 'subcommand' policy_subcmds ;;
+                    psub_args)
+                      case $words[1] in
+                        dry-run) _arguments '--cmd[Command to evaluate]:cmd' '--agent[Agent ID]:agent' '--server[Server ID]:server' '--json[JSON output]' ;;
+                      esac ;;
+                  esac ;;
                 audit)
                   local -a audit_subcmds
                   audit_subcmds=('list:List recent audit events' 'tail:Stream new audit events')
@@ -817,7 +825,9 @@ _alogin_completion() {
         case "$sub" in
           policy)
             if [[ $cword -eq 3 ]]; then
-              COMPREPLY=($(compgen -W "show validate" -- "$cur"))
+              COMPREPLY=($(compgen -W "show validate dry-run" -- "$cur"))
+            elif [[ $cword -ge 4 && "$sub2" == "dry-run" ]]; then
+              COMPREPLY=($(compgen -W "--cmd --agent --server --json" -- "$cur"))
             fi
             ;;
           audit)
