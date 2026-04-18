@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	gossh "golang.org/x/crypto/ssh"
@@ -68,12 +69,19 @@ func (c *Client) Close() error {
 
 // Dial connects directly (single hop) to a host.
 func Dial(cfg HopConfig) (*Client, error) {
-	sshCfg, err := makeSSHConfig(cfg)
+	var hostKeyErr error
+	sshCfg, err := makeSSHConfig(cfg, func(e error) { hostKeyErr = e })
 	if err != nil {
 		return nil, err
 	}
 	cl, err := gossh.Dial("tcp", cfg.Addr(), sshCfg)
 	if err != nil {
+		// gossh buries HostKeyCallback errors inside a generic "handshake failed"
+		// message with no structured type. Surface the original callback error so
+		// the user sees "host key mismatch" instead of "unable to authenticate".
+		if hostKeyErr != nil {
+			return nil, fmt.Errorf("ssh host key check %s: %w", cfg.Addr(), hostKeyErr)
+		}
 		return nil, fmt.Errorf("ssh dial %s: %w", cfg.Addr(), err)
 	}
 	return &Client{inner: cl}, nil
@@ -97,7 +105,7 @@ func DialVia(proxy *Client, dest HopConfig) (*Client, error) {
 		conn.Close()
 		return nil, err
 	}
-	// Inner hop: bypass local known_hosts (hostname is in the proxy's network context).
+	// Inner hop: bypass local known_hosts — hostname is in the proxy's network context.
 	sshCfg.HostKeyCallback = gossh.InsecureIgnoreHostKey()
 
 	ncc, chans, reqs, err := gossh.NewClientConn(conn, dest.Addr(), sshCfg)
@@ -115,7 +123,9 @@ func DialVia(proxy *Client, dest HopConfig) (*Client, error) {
 }
 
 // makeSSHConfig builds a gossh.ClientConfig for a hop.
-func makeSSHConfig(cfg HopConfig) (*gossh.ClientConfig, error) {
+// onHostKeyErr, if non-nil, is called when the HostKeyCallback rejects a key,
+// allowing the caller to distinguish host-key failures from auth failures.
+func makeSSHConfig(cfg HopConfig, onHostKeyErr ...func(error)) (*gossh.ClientConfig, error) {
 	timeout := cfg.Timeout
 	if timeout == 0 {
 		timeout = 30 * time.Second
@@ -124,20 +134,21 @@ func makeSSHConfig(cfg HopConfig) (*gossh.ClientConfig, error) {
 	var authMethods []gossh.AuthMethod
 	keyOnly := cfg.AuthMethod == "key"
 
-	// 1. Try SSH agent (always, unless we end up with a specific key below)
-	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
-		if conn, err := net.Dial("unix", sock); err == nil {
-			authMethods = append(authMethods, gossh.PublicKeysCallback(
-				agent.NewClient(conn).Signers))
-		}
-	}
-
-	// 2. Try explicit key file or default key locations
+	// 1. Explicit key file — when KeyPath is set, use it exclusively for public-key
+	//    auth and skip the SSH agent. Agent keys are unrelated to this server and
+	//    cause "no supported methods remain" when the agent key is rejected first.
 	if cfg.KeyPath != "" {
 		if am, err := publicKeyAuth(cfg.KeyPath); err == nil {
 			authMethods = append(authMethods, am)
 		}
 	} else {
+		// No explicit key: try SSH agent, then fall back to default key files.
+		if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
+			if conn, err := net.Dial("unix", sock); err == nil {
+				authMethods = append(authMethods, gossh.PublicKeysCallback(
+					agent.NewClient(conn).Signers))
+			}
+		}
 		for _, kp := range defaultKeyPaths() {
 			if am, err := publicKeyAuth(kp); err == nil {
 				authMethods = append(authMethods, am)
@@ -154,17 +165,30 @@ func makeSSHConfig(cfg HopConfig) (*gossh.ClientConfig, error) {
 		)
 	}
 
-	hostKeyCallback, err := hostKeyCallback()
-	if err != nil {
-		// Fall back to InsecureIgnoreHostKey in dev/migration scenarios
-		hostKeyCallback = gossh.InsecureIgnoreHostKey()
+	hkc, hostKeyAlgos := buildHostKeyCallback()
+
+	// Wrap the callback so callers can capture host-key errors separately from
+	// auth errors (gossh folds both into the same "handshake failed" message).
+	var wrappedHKC gossh.HostKeyCallback
+	if len(onHostKeyErr) > 0 && onHostKeyErr[0] != nil {
+		notify := onHostKeyErr[0]
+		wrappedHKC = func(hostname string, remote net.Addr, key gossh.PublicKey) error {
+			if e := hkc(hostname, remote, key); e != nil {
+				notify(e)
+				return e
+			}
+			return nil
+		}
+	} else {
+		wrappedHKC = hkc
 	}
 
 	return &gossh.ClientConfig{
-		User:            cfg.User,
-		Auth:            authMethods,
-		HostKeyCallback: hostKeyCallback,
-		Timeout:         timeout,
+		User:              cfg.User,
+		Auth:              authMethods,
+		HostKeyCallback:   wrappedHKC,
+		HostKeyAlgorithms: hostKeyAlgos,
+		Timeout:           timeout,
 	}, nil
 }
 
@@ -189,11 +213,16 @@ func defaultKeyPaths() []string {
 	}
 }
 
-func hostKeyCallback() (gossh.HostKeyCallback, error) {
+// buildHostKeyCallback returns a HostKeyCallback and the list of key algorithms
+// already known for hosts in known_hosts. Passing HostKeyAlgorithms to
+// gossh.ClientConfig tells the server which key type to present during
+// handshake — without this, the server may offer a key type that doesn't match
+// the known_hosts entry, causing a spurious mismatch.
+func buildHostKeyCallback() (gossh.HostKeyCallback, []string) {
 	home, _ := os.UserHomeDir()
 	khPath := home + "/.ssh/known_hosts"
 
-	// Ensure known_hosts file exists so knownhosts.New doesn't fail.
+	// Ensure known_hosts exists.
 	if _, err := os.Stat(khPath); errors.Is(err, os.ErrNotExist) {
 		if f, err := os.OpenFile(khPath, os.O_CREATE|os.O_WRONLY, 0600); err == nil {
 			f.Close()
@@ -205,7 +234,7 @@ func hostKeyCallback() (gossh.HostKeyCallback, error) {
 		return gossh.InsecureIgnoreHostKey(), nil
 	}
 
-	return func(hostname string, remote net.Addr, key gossh.PublicKey) error {
+	cb := func(hostname string, remote net.Addr, key gossh.PublicKey) error {
 		err := checker(hostname, remote, key)
 		if err == nil {
 			return nil
@@ -222,12 +251,8 @@ func hostKeyCallback() (gossh.HostKeyCallback, error) {
 				hostname, keyErr.Want[0].Key.Type(), hostname)
 		}
 
-		// Unknown host: auto-accept and add to known_hosts (mirrors ssh StrictHostKeyChecking=no).
-		fp := gossh.FingerprintSHA256(key)
+		// Unknown host: auto-accept and append to known_hosts.
 		fmt.Fprintf(os.Stderr, "Warning: Permanently added '%s' (%s) to the list of known hosts.\n", hostname, key.Type())
-		_ = fp
-
-		// Append the key to known_hosts.
 		line := knownhosts.Line([]string{knownhosts.Normalize(hostname)}, key)
 		f, err := os.OpenFile(khPath, os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {
@@ -236,9 +261,48 @@ func hostKeyCallback() (gossh.HostKeyCallback, error) {
 		}
 		defer f.Close()
 		fmt.Fprintln(f, line)
-		fmt.Fprintf(os.Stderr, "Warning: Permanently added '%s' (%s) to the list of known hosts.\n", hostname, key.Type())
 		return nil
-	}, nil
+	}
+
+	return cb, knownHostsAlgorithms(khPath)
+}
+
+// knownHostsAlgorithms reads known_hosts and returns the set of key algorithm
+// types present across all entries. Passing these to ClientConfig.HostKeyAlgorithms
+// tells the server which key type to use during handshake, preventing a mismatch
+// when the server offers a different key type than what is stored locally.
+func knownHostsAlgorithms(khPath string) []string {
+	data, err := os.ReadFile(khPath)
+	if err != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var algos []string
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			return nil
+		}
+		// knownhosts line: [markers] hosts keytype key [comment]
+		// Skip @cert-authority / @revoked markers by stripping them.
+		if strings.HasPrefix(line, "@") {
+			parts := strings.Fields(line)
+			if len(parts) < 4 {
+				continue
+			}
+			line = strings.Join(parts[1:], " ")
+		}
+		parts := strings.Fields(line)
+		if len(parts) < 3 {
+			continue
+		}
+		algo := parts[1]
+		if !seen[algo] {
+			seen[algo] = true
+			algos = append(algos, algo)
+		}
+	}
+	return algos
 }
 
 func passwordKeyboardInteractive(password string) gossh.KeyboardInteractiveChallenge {
