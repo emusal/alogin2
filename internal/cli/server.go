@@ -41,31 +41,15 @@ Examples:
   alogin server add --host db-01 --user admin --auth-method key --identity-file ~/.ssh/id_ed25519`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
-			r := bufio.NewReader(os.Stdin)
 
 			if proto == "" {
-				proto = prompt(r, "Protocol [ssh]: ")
-				if proto == "" {
-					proto = "ssh"
-				}
+				proto = "ssh"
 			}
 			if host == "" {
-				host = prompt(r, "Host: ")
-			}
-			if user == "" {
-				user = prompt(r, "User: ")
+				return fmt.Errorf("--host is required")
 			}
 			if authMethod == "" {
-				authMethod = prompt(r, "Auth method [password/key] (default: password): ")
-				if authMethod == "" {
-					authMethod = "password"
-				}
-			}
-			if authMethod == "password" && password == "" {
-				password = promptSecret("Password (leave empty to use SSH key): ")
-			}
-			if authMethod == "key" && identityFile == "" {
-				identityFile = prompt(r, "Identity file (leave empty to use default key): ")
+				authMethod = "password"
 			}
 
 			srv := &model.Server{
