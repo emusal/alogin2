@@ -34,6 +34,7 @@ func newAgentAuditListCmd() *cobra.Command {
 		flagSince  string
 		flagLimit  int
 		flagFormat string
+		flagFull   bool
 	)
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -61,6 +62,11 @@ func newAgentAuditListCmd() *cobra.Command {
 				return err
 			}
 
+			// Reverse to chronological order (oldest first, newest last).
+			for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
+				entries[i], entries[j] = entries[j], entries[i]
+			}
+
 			if flagFormat == "json" {
 				enc := json.NewEncoder(os.Stdout)
 				enc.SetIndent("", "  ")
@@ -69,6 +75,25 @@ func newAgentAuditListCmd() *cobra.Command {
 
 			if len(entries) == 0 {
 				fmt.Println("No audit entries found.")
+				return nil
+			}
+
+			if flagFull {
+				for _, e := range entries {
+					target := e.ServerHost
+					if e.ClusterName != "" {
+						target = "[cluster] " + e.ClusterName
+					}
+					fmt.Printf("=== %s  %s  %s ===\n",
+						e.CreatedAt.Format("01-02 15:04:05"), e.Event, target)
+					if e.Intent != "" {
+						fmt.Printf("intent: %s\n", e.Intent)
+					}
+					for i, c := range e.Commands {
+						fmt.Printf("cmd[%d]: %s\n", i, c)
+					}
+					fmt.Println()
+				}
 				return nil
 			}
 
@@ -106,6 +131,7 @@ func newAgentAuditListCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagSince, "since", "", "Show entries since (e.g. 1h, 24h, or RFC3339 timestamp)")
 	cmd.Flags().IntVar(&flagLimit, "limit", 50, "Maximum number of entries to return")
 	cmd.Flags().StringVar(&flagFormat, "format", "table", "output format: table|json")
+	cmd.Flags().BoolVar(&flagFull, "full", false, "Print full command text (no truncation)")
 	return cmd
 }
 

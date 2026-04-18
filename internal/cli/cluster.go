@@ -95,6 +95,7 @@ Examples:
 	cmd.Flags().StringVar(&format, "format", "table", "output format when using --cmd: table|json")
 	cmd.AddCommand(newClusterAddCmd())
 	cmd.AddCommand(newClusterListCmd())
+	cmd.AddCommand(newClusterDeleteCmd())
 	return cmd
 }
 
@@ -200,6 +201,67 @@ func newClusterListCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&format, "format", "table", "output format: table|json")
 	return cmd
+}
+
+func newClusterDeleteCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:     "delete <cluster> [host...]",
+		Aliases: []string{"rm", "del"},
+		Short:   "Delete a cluster or remove members from it",
+		Long: `Delete a cluster or remove specific members from it.
+
+  alogin ssh cluster delete k8s           — delete the entire cluster
+  alogin ssh cluster delete k8s node-01  — remove node-01 from the cluster
+  alogin ssh cluster delete k8s n1 n2    — remove multiple members`,
+		Args: cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+			clusterName := args[0]
+
+			cl, err := database.Clusters.GetByName(ctx, clusterName)
+			if err != nil || cl == nil {
+				return fmt.Errorf("cluster %q not found", clusterName)
+			}
+
+			// Single arg: delete the whole cluster.
+			if len(args) == 1 {
+				if err := database.Clusters.Delete(ctx, cl.ID); err != nil {
+					return fmt.Errorf("delete cluster: %w", err)
+				}
+				fmt.Printf("Deleted cluster %q.\n", clusterName)
+				return nil
+			}
+
+			// Multiple args: remove named hosts from the cluster.
+			removeSet := map[int64]bool{}
+			for _, host := range args[1:] {
+				srv, err := database.Servers.GetByHost(ctx, host, "")
+				if err != nil || srv == nil {
+					return fmt.Errorf("server %q not found in registry", host)
+				}
+				removeSet[srv.ID] = true
+			}
+
+			var remaining []model.ClusterMember
+			for _, m := range cl.Members {
+				if !removeSet[m.ServerID] {
+					remaining = append(remaining, m)
+				}
+			}
+
+			if len(remaining) == len(cl.Members) {
+				return fmt.Errorf("none of the specified hosts are members of cluster %q", clusterName)
+			}
+
+			if _, err := database.Clusters.Update(ctx, cl.ID, cl.Name, remaining); err != nil {
+				return fmt.Errorf("update cluster: %w", err)
+			}
+
+			removed := len(cl.Members) - len(remaining)
+			fmt.Printf("Removed %d member(s) from cluster %q (%d remaining).\n", removed, clusterName, len(remaining))
+			return nil
+		},
+	}
 }
 
 func newClusterAddCmd() *cobra.Command {
