@@ -614,6 +614,7 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 		mcpgo.WithDescription("Get a structured health snapshot of a server: CPU load, memory usage, disk space, top processes, and agent memory notes from previous sessions. Call this before starting work on a server — the memories field contains operational knowledge recorded by past agents."),
 		mcpgo.WithString("server_id", mcpgo.Description("Server ID"), mcpgo.Required()),
 		mcpgo.WithNumber("timeout_sec", mcpgo.Description("Execution timeout in seconds (default 30)")),
+		mcpgo.WithString("sort_by", mcpgo.Description("Sort top_processes by 'cpu' (default) or 'mem'")),
 		mcpgo.WithString("agent_id", mcpgo.Description("Optional: identifier for the calling agent")),
 		mcpgo.WithString("intent", mcpgo.Description("Optional: human-readable description of what the agent intends to do (logged to audit trail)")),
 	), func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
@@ -625,6 +626,10 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 		timeoutSec, _ := args["timeout_sec"].(float64)
 		agentID, _ := args["agent_id"].(string)
 		intent, _ := args["intent"].(string)
+		sortBy, _ := args["sort_by"].(string)
+		if sortBy != "mem" {
+			sortBy = "cpu"
+		}
 
 		srv, _ := d.DB.Servers.GetByID(ctx, id)
 		host := ""
@@ -632,11 +637,15 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 			host = srv.Host
 		}
 
+		psSort := "--sort=-%cpu"
+		if sortBy == "mem" {
+			psSort = "--sort=-%mem"
+		}
 		commands := []string{
 			"cat /proc/loadavg 2>/dev/null || uptime",
 			"free -b 2>/dev/null || vm_stat",
 			"df -P / 2>/dev/null || df /",
-			"{ ps aux --sort=-%cpu 2>/dev/null || ps aux; } | head -6",
+			fmt.Sprintf("{ ps aux %s 2>/dev/null || ps aux; } | head -6", psSort),
 		}
 
 		inspectEv := auditEvent{
@@ -690,13 +699,16 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 
 	// --- log_analyzer ---
 	srv.AddTool(mcpgo.NewTool("log_analyzer",
-		mcpgo.WithDescription("Stream logs and return only the relevant error patterns to save token context."),
+		mcpgo.WithDescription("Stream logs and return only the relevant error patterns to save token context. Supports time-range filtering (since/until) and context lines around each match."),
 		mcpgo.WithString("server_id", mcpgo.Description("Server ID"), mcpgo.Required()),
 		mcpgo.WithString("target", mcpgo.Description("Log file path (e.g., /var/log/syslog) or journalctl unit (e.g., ssh)"), mcpgo.Required()),
 		mcpgo.WithBoolean("is_journal", mcpgo.Description("If true, target is treated as a systemd journalctl unit. Default false (file path).")),
-		mcpgo.WithNumber("lines", mcpgo.Description("Number of lines to inspect (default 1000)")),
+		mcpgo.WithNumber("lines", mcpgo.Description("Number of lines to inspect (default 1000). Ignored when since/until are set with is_journal=true.")),
 		mcpgo.WithString("pattern", mcpgo.Description("Regex pattern for filtering (default: 'error|warn|fail|fatal|exception')")),
 		mcpgo.WithNumber("max_results", mcpgo.Description("Maximum matching lines to return (default 50)")),
+		mcpgo.WithNumber("context_lines", mcpgo.Description("Number of lines to show before and after each match (default 0)")),
+		mcpgo.WithString("since", mcpgo.Description("Return entries on or after this time. journalctl format: '1 hour ago', '2024-01-01 10:00:00'. File mode: used as grep anchor pattern for first line.")),
+		mcpgo.WithString("until", mcpgo.Description("Return entries before this time. journalctl format only (e.g. '10 minutes ago', '2024-01-01 11:00:00').")),
 		mcpgo.WithString("agent_id", mcpgo.Description("Optional: identifier for the calling agent")),
 		mcpgo.WithString("intent", mcpgo.Description("Optional: human-readable description of what the agent intends to do (logged to audit trail)")),
 	), func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
@@ -705,39 +717,37 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 		if err != nil {
 			return toolError(err.Error()), nil
 		}
-		
-		targetV, ok := args["target"]
-		var target string
-		if ok {
-			target, _ = targetV.(string)
-		}
+
+		target, _ := args["target"].(string)
 		if target == "" {
 			return toolError("target is required"), nil
 		}
-		
+
 		isJournal, _ := args["is_journal"].(bool)
-		
-		linesNum, ok := args["lines"].(float64)
-		if !ok || linesNum <= 0 {
+
+		linesNum, _ := args["lines"].(float64)
+		if linesNum <= 0 {
 			linesNum = 1000
 		}
 		lines := int(linesNum)
-		
-		patternV, ok := args["pattern"]
-		var pattern string
-		if ok {
-			pattern, _ = patternV.(string)
-		}
+
+		pattern, _ := args["pattern"].(string)
 		if pattern == "" {
 			pattern = "error|warn|fail|fatal|exception"
 		}
-		
-		maxResultsNum, ok := args["max_results"].(float64)
-		if !ok || maxResultsNum <= 0 {
+
+		maxResultsNum, _ := args["max_results"].(float64)
+		if maxResultsNum <= 0 {
 			maxResultsNum = 50
 		}
 		maxResults := int(maxResultsNum)
-		
+
+		contextLinesNum, _ := args["context_lines"].(float64)
+		contextLines := int(contextLinesNum)
+
+		since, _ := args["since"].(string)
+		until, _ := args["until"].(string)
+
 		agentID, _ := args["agent_id"].(string)
 		intent, _ := args["intent"].(string)
 
@@ -747,13 +757,33 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 			host = srvNode.Host
 		}
 
+		grepCtx := "-E"
+		if contextLines > 0 {
+			grepCtx = fmt.Sprintf("-C %d -E", contextLines)
+		}
+
 		var cmdStr string
 		if isJournal {
-			cmdStr = fmt.Sprintf("journalctl -u %s -n %d --no-pager | grep -iE '%s' | tail -n %d",
-				target, lines, pattern, maxResults)
+			timeFlags := ""
+			if since != "" {
+				timeFlags += fmt.Sprintf(" --since=%q", since)
+			}
+			if until != "" {
+				timeFlags += fmt.Sprintf(" --until=%q", until)
+			}
+			if timeFlags == "" {
+				timeFlags = fmt.Sprintf(" -n %d", lines)
+			}
+			cmdStr = fmt.Sprintf("journalctl -u %s%s --no-pager | grep -i %s '%s' | tail -n %d",
+				target, timeFlags, grepCtx, pattern, maxResults)
 		} else {
-			cmdStr = fmt.Sprintf("tail -n %d %s | grep -iE '%s' | tail -n %d",
-				lines, target, pattern, maxResults)
+			base := fmt.Sprintf("tail -n %d %s", lines, target)
+			if since != "" {
+				// anchor to first matching line by since pattern, then read forward
+				base = fmt.Sprintf("awk 'p||/%s/{p=1;print}' %s", since, target)
+			}
+			cmdStr = fmt.Sprintf("%s | grep -i %s '%s' | tail -n %d",
+				base, grepCtx, pattern, maxResults)
 		}
 
 		logEv := auditEvent{
@@ -773,11 +803,11 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 			Commands:   []string{cmdStr},
 			TimeoutSec: 30,
 		})
-		
+
 		if err != nil {
 			return toolJSON(map[string]any{"server_id": id, "target": target, "error": err.Error()})
 		}
-		
+
 		var matches []string
 		if len(results) > 0 && results[0].Output != "" {
 			linesOut := strings.Split(strings.TrimSpace(results[0].Output), "\n")
@@ -787,16 +817,23 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 				}
 			}
 		}
-
-		if len(matches) == 0 {
+		if matches == nil {
 			matches = make([]string, 0)
 		}
 
-		return toolJSON(map[string]any{
-			"server_id": id,
-			"target":    target,
-			"matches":   matches,
-		})
+		out := map[string]any{
+			"server_id":   id,
+			"target":      target,
+			"match_count": len(matches),
+			"matches":     matches,
+		}
+		if since != "" {
+			out["since"] = since
+		}
+		if until != "" {
+			out["until"] = until
+		}
+		return toolJSON(out)
 	})
 
 	// --- exec_app ---
@@ -917,6 +954,75 @@ Set recursive=true to download a directory tree.`),
 			entries = []*model.AgentMemory{}
 		}
 		return toolJSON(entries)
+	})
+
+	// --- policy_dry_run ---
+	srv.AddTool(mcpgo.NewTool("policy_dry_run",
+		mcpgo.WithDescription("Evaluate the active agent policy against one or more commands without executing them. Returns the policy decision (allow/deny/require_approval) and which rule matched. Use this to understand why a command was blocked, or to test policy rules before running a command."),
+		mcpgo.WithArray("commands", mcpgo.Description("Commands to evaluate (one or more)"), mcpgo.Required()),
+		mcpgo.WithString("agent_id", mcpgo.Description("Agent ID to test against policy rules (default: empty)")),
+		mcpgo.WithString("server_id", mcpgo.Description("Server ID to test against per-server policy (optional)")),
+	), func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		args := req.GetArguments()
+		commands, err := parseStringSlice(args, "commands")
+		if err != nil || len(commands) == 0 {
+			return toolError("commands must be a non-empty array of strings"), nil
+		}
+		agentID, _ := args["agent_id"].(string)
+
+		var serverID int64
+		if v, ok := args["server_id"]; ok && v != nil {
+			switch x := v.(type) {
+			case float64:
+				serverID = int64(x)
+			case string:
+				fmt.Sscanf(x, "%d", &serverID)
+			}
+		}
+
+		// Resolve per-server policy if server_id is provided.
+		eng := d.Policy
+		if serverID != 0 {
+			srv, _ := d.DB.Servers.GetByID(ctx, serverID)
+			policyYAML := ""
+			if srv != nil {
+				policyYAML = srv.PolicyYAML
+			}
+			eng, err = policy.ResolveFor(d.Policy, policyYAML)
+			if err != nil {
+				return toolError(fmt.Sprintf("per-server policy error: %v", err)), nil
+			}
+		}
+
+		result := policy.EvalPolicy(eng, policy.CheckRequest{
+			AgentID:  agentID,
+			Commands: commands,
+			ServerID: serverID,
+		})
+
+		policySource := "built-in defaults (no policy file)"
+		if d.Policy != nil {
+			policySource = "agent-policy.yaml"
+		}
+		if serverID != 0 && eng != d.Policy {
+			policySource = fmt.Sprintf("per-server policy (server %d)", serverID)
+		}
+
+		out := map[string]any{
+			"action":        result.Action,
+			"commands":      commands,
+			"policy_source": policySource,
+		}
+		if result.RuleName != "" {
+			out["matched_rule"] = result.RuleName
+		}
+		if agentID != "" {
+			out["agent_id"] = agentID
+		}
+		if serverID != 0 {
+			out["server_id"] = serverID
+		}
+		return toolJSON(out)
 	})
 }
 
