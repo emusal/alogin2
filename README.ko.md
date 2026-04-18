@@ -116,6 +116,7 @@ alogin net gateway add dmz-chain bastion-01 dmz-relay
 
 # 서버를 추가할 때 게이트웨이를 함께 지정
 alogin server add --host 10.0.1.50 --user admin --gateway prod-bastion
+alogin server add --host core-sw-01 --user admin --device-type router   # 네트워크 장비
 
 # 이후엔 그냥 접속하면 됨 — 활성 프로파일의 게이트웨이가 자동 적용
 t web-01
@@ -242,8 +243,9 @@ AI 에이전트  ──→  alogin2 MCP  ──→  Vault(저장소)  ──→ 
 
 ```bash
 # 운영자가 미리 준비:
-alogin server add --host 10.0.0.10 --user admin   # 비밀번호는 Vault에 저장
+alogin server add --host 10.0.0.10 --user admin                          # 비밀번호는 Vault에 저장
 alogin server add --host 10.0.0.11 --user admin
+alogin server add --host fw-01 --user admin --device-type firewall        # 네트워크 장비
 alogin ssh cluster add web-cluster 10.0.0.10 10.0.0.11
 
 # AI는 이름만 가지고 동작:

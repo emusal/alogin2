@@ -109,7 +109,8 @@ _alogin_server_args() {
             '--gateway[gateway route name]:gateway:_alogin_gateways' \
             '--locale[locale (e.g. ko_KR.eucKR)]:locale:' \
             '--auth-method[authentication method]:method:(password key)' \
-            '--identity-file[path to SSH private key]:key:_files'
+            '--identity-file[path to SSH private key]:key:_files' \
+            '--device-type[device type]:type:(linux windows router switch firewall other)'
           ;;
         list) _arguments '--format[output format]:format:(table json)' ;;
         alias) _alogin_alias_args ;;
@@ -162,10 +163,12 @@ _alogin_alias_args() {
 
 _alogin_cluster_args() {
   local -a cluster_subcmds
-  cluster_subcmds=('list:List all clusters' 'add:Add a new cluster')
+  cluster_subcmds=('list:List all clusters' 'add:Add a new cluster' 'delete:Delete cluster or remove members' 'rm:Delete cluster or remove members' 'del:Delete cluster or remove members')
   _arguments -C \
     '--mode[terminal session mode]:mode:(tmux iterm terminal)' \
     '(-x --tile-x)'{-x,--tile-x}'[number of tile columns]:columns:' \
+    '(-c --cmd)'{-c,--cmd}'[command to run on each member]:command:' \
+    '--format[output format when using --cmd]:format:(table json)' \
     '1: :->cluster_first' \
     '*:: :->cluster_rest'
   case $state in
@@ -182,6 +185,11 @@ _alogin_cluster_args() {
             '(-x --tile-x)'{-x,--tile-x}'[number of tile columns]:columns:' \
             '1:cluster name:' \
             '*:server:_alogin_hosts'
+          ;;
+        delete|rm|del)
+          _arguments \
+            '1:cluster name:($(_alogin_clusters))' \
+            '*:host to remove:_alogin_hosts'
           ;;
       esac
       ;;
@@ -571,7 +579,24 @@ _alogin() {
                 audit)
                   local -a audit_subcmds
                   audit_subcmds=('list:List recent audit events' 'tail:Stream new audit events')
-                  _describe 'subcommand' audit_subcmds ;;
+                  _arguments -C '1: :->asub' '*:: :->asub_args'
+                  case $state in
+                    asub) _describe 'subcommand' audit_subcmds ;;
+                    asub_args)
+                      case $words[1] in
+                        list)
+                          _arguments \
+                            '--agent[filter by agent_id]:agent:' \
+                            '--server[filter by server ID]:server:' \
+                            '--event[filter by event type]:event:(exec_command exec_on_cluster inspect_node log_analyzer)' \
+                            '--since[show entries since]:since:' \
+                            '--limit[maximum entries]:limit:' \
+                            '--format[output format]:format:(table json)' \
+                            '--full[print full command text without truncation]' ;;
+                        tail)
+                          _arguments '--format[output format]:format:(table json)' ;;
+                      esac ;;
+                  esac ;;
                 trust)
                   _arguments \
                     '--duration[trust duration (e.g. 30m, 1h, 2h)]:duration:' \
@@ -714,7 +739,7 @@ _alogin_completion() {
           show|delete|passwd|getpwd)
             COMPREPLY=($(compgen -W "$(_alogin_hosts)" -- "$cur")) ;;
           add)
-            COMPREPLY=($(compgen -W "--proto --host --user --port --gateway --locale --auth-method --identity-file" -- "$cur")) ;;
+            COMPREPLY=($(compgen -W "--proto --host --user --port --gateway --locale --auth-method --identity-file --device-type" -- "$cur")) ;;
           list)
             COMPREPLY=($(compgen -W "--format" -- "$cur")) ;;
           alias)
@@ -769,14 +794,20 @@ _alogin_completion() {
           sftp|ftp|mount)
             COMPREPLY=($(compgen -W "$(_alogin_hosts)" -- "$cur")) ;;
           cluster)
-            local cluster_opts="--mode --tile-x -x"
+            local cluster_opts="--mode --tile-x -x --cmd -c --format"
             if [[ $cword -eq 3 ]]; then
-              COMPREPLY=($(compgen -W "list add $(_alogin_clusters) $cluster_opts" -- "$cur"))
+              COMPREPLY=($(compgen -W "list add delete rm del $(_alogin_clusters) $cluster_opts" -- "$cur"))
             elif [[ "$sub2" == "add" ]]; then
               if [[ $cword -eq 4 ]]; then
-                COMPREPLY=($(compgen -W "<cluster_name> $cluster_opts" -- "$cur"))
+                COMPREPLY=($(compgen -W "$cluster_opts" -- "$cur"))
               else
                 COMPREPLY=($(compgen -W "$(_alogin_hosts) $cluster_opts" -- "$cur"))
+              fi
+            elif [[ "$sub2" == "delete" || "$sub2" == "rm" || "$sub2" == "del" ]]; then
+              if [[ $cword -eq 4 ]]; then
+                COMPREPLY=($(compgen -W "$(_alogin_clusters)" -- "$cur"))
+              else
+                COMPREPLY=($(compgen -W "$(_alogin_hosts)" -- "$cur"))
               fi
             elif [[ "$sub2" == "list" ]]; then
               COMPREPLY=($(compgen -W "--format" -- "$cur"))
@@ -896,7 +927,8 @@ _alogin_completion() {
               COMPREPLY=($(compgen -W "list tail" -- "$cur"))
             elif [[ $cword -ge 4 ]]; then
               case "$sub2" in
-                list) COMPREPLY=($(compgen -W "--agent --server --event --since --limit --json" -- "$cur")) ;;
+                list) COMPREPLY=($(compgen -W "--agent --server --event --since --limit --format --full" -- "$cur")) ;;
+                tail) COMPREPLY=($(compgen -W "--format" -- "$cur")) ;;
               esac
             fi
             ;;

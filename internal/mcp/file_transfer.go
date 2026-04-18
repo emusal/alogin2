@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	internalssh "github.com/emusal/alogin2/internal/ssh"
 	"github.com/google/uuid"
@@ -111,9 +112,14 @@ func newRunScriptHandler(d Deps) func(context.Context, mcpgo.CallToolRequest) (*
 			return toolError(fmt.Sprintf("server %d not found", serverID)), nil
 		}
 
+		if isNetworkDevice(srv.DeviceType) {
+			return toolError(fmt.Sprintf(
+				"run_script is not supported for device_type %q; network/security devices do not provide a writable filesystem or POSIX shell",
+				srv.DeviceType,
+			)), nil
+		}
+
 		remoteTmp := fmt.Sprintf("/tmp/alogin-%s.sh", uuid.New().String())
-		// Use (exit $_rc) instead of `exit $_rc` so the persistent bash process
-		// in ManagedSession is not killed, which would cause an EOF on the pipe.
 		runCmd := fmt.Sprintf("%s %s; _rc=$?; rm -f %s; (exit $_rc)", interpreter, remoteTmp, remoteTmp)
 
 		ev := auditEvent{
@@ -156,7 +162,7 @@ func newRunScriptHandler(d Deps) func(context.Context, mcpgo.CallToolRequest) (*
 		}
 		defer managed.Close()
 
-		result, execErr := managed.Exec(ctx, runCmd, 0)
+		result, execErr := managed.Exec(ctx, runCmd, time.Duration(timeoutSec)*time.Second)
 		if execErr != nil {
 			return toolError(fmt.Sprintf("exec script: %v", execErr)), nil
 		}
@@ -269,6 +275,13 @@ func newRemoteReplaceHandler(d Deps) func(context.Context, mcpgo.CallToolRequest
 		srv, err := d.DB.Servers.GetByID(ctx, serverID)
 		if err != nil || srv == nil {
 			return toolError(fmt.Sprintf("server %d not found", serverID)), nil
+		}
+
+		if isNetworkDevice(srv.DeviceType) {
+			return toolError(fmt.Sprintf(
+				"remote_replace is not supported for device_type %q; network/security devices do not provide a writable POSIX filesystem",
+				srv.DeviceType,
+			)), nil
 		}
 
 		ev := auditEvent{

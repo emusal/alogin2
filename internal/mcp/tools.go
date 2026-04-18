@@ -637,6 +637,13 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 			host = srv.Host
 		}
 
+		if srv != nil && isNetworkDevice(srv.DeviceType) {
+			return toolError(fmt.Sprintf(
+				"inspect_node is not supported for device_type %q (router/switch/firewall do not expose Linux system metrics); use exec_command or remote_shell to run device-specific show commands instead",
+				srv.DeviceType,
+			)), nil
+		}
+
 		psSort := "--sort=-%cpu"
 		if sortBy == "mem" {
 			psSort = "--sort=-%mem"
@@ -645,7 +652,7 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 			"cat /proc/loadavg 2>/dev/null || uptime",
 			"free -b 2>/dev/null || vm_stat",
 			"df -P / 2>/dev/null || df /",
-			fmt.Sprintf("{ ps aux %s 2>/dev/null || ps aux; } | head -6", psSort),
+			fmt.Sprintf("ps aux %s 2>/dev/null || ps aux | head -6", psSort),
 		}
 
 		inspectEv := auditEvent{
@@ -755,6 +762,13 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 		host := ""
 		if srvNode != nil {
 			host = srvNode.Host
+		}
+
+		if srvNode != nil && isNetworkDevice(srvNode.DeviceType) {
+			return toolError(fmt.Sprintf(
+				"log_analyzer is not supported for device_type %q; use exec_command or remote_shell to run device-specific log commands instead",
+				srvNode.DeviceType,
+			)), nil
 		}
 
 		grepCtx := "-E"
@@ -1234,6 +1248,16 @@ func parseProcesses(out string, raw *map[string]string) []processEntry {
 }
 
 // --- helpers ---
+
+// isNetworkDevice reports whether dt is a network/security device that does not
+// support standard Linux shell commands (router, switch, firewall).
+func isNetworkDevice(dt model.DeviceType) bool {
+	switch dt {
+	case model.DeviceRouter, model.DeviceSwitch, model.DeviceFirewall:
+		return true
+	}
+	return false
+}
 
 func toolJSON(v any) (*mcpgo.CallToolResult, error) {
 	data, err := json.Marshal(v)

@@ -25,12 +25,15 @@ This skill focuses on concepts and canonical workflows.
 # 1. Install
 curl -fsSL https://raw.githubusercontent.com/emusal/alogin2/main/install.sh | sh
 
-# 2. Add a server (password auth, default)
+# 2. Add a server (password auth, default — Linux assumed)
 alogin server add --host 10.0.0.10 --user admin
 
 # 2b. Add a key-only server
 alogin server add --host bastion.example.com --user ops \
   --auth-method key --identity-file ~/.ssh/id_ed25519
+
+# 2c. Add a network/security device (router, switch, firewall)
+alogin server add --host core-sw-01 --user admin --device-type router
 
 # 3. Connect instantly
 alogin ssh connect 10.0.0.10
@@ -55,6 +58,8 @@ alogin server list --format json                             # machine-readable
 alogin server add --host prod-db --user dbadmin --note "Primary DB"
 alogin server add --host bastion --user ops \
   --auth-method key --identity-file ~/.ssh/bastion_ed25519   # key-only server
+alogin server add --host core-sw-01 --user admin \
+  --device-type router                                       # network device
 alogin server show prod-db                                   # human-readable detail
 alogin server show prod-db --format json                     # full detail as JSON
 alogin server passwd prod-db                                 # update vault password
@@ -63,6 +68,17 @@ alogin server passwd prod-db                                 # update vault pass
 alogin server alias add prod admin@prod-db
 alogin server alias list --format json
 ```
+
+`device_type` controls which MCP tools are available for the server:
+
+| value | behaviour |
+|-------|-----------|
+| `linux` (default) | full tool support: `inspect_node`, `log_analyzer`, `run_script`, `remote_replace` |
+| `windows` | full tool support (commands may differ) |
+| `router` / `switch` / `firewall` | `inspect_node`, `log_analyzer`, `run_script`, `remote_replace` are **blocked** — use `exec_command` or `remote_shell` with device-specific CLI commands instead |
+| `other` | same as linux; tools available but output parsing may fail |
+
+**Always set `--device-type` for network and security devices.** Without it the default `linux` is assumed, and tools like `inspect_node` will fail with cryptic errors on Cisco, Fortigate, Juniper, etc.
 
 `auth_method` controls how alogin authenticates:
 
@@ -302,6 +318,10 @@ alogin ssh run-script --remote web-01 --force-utf8 --timeout 300 --content "cat 
 | Input | Local file path | String (`--content`) or stdin |
 | Use case | Pre-existing scripts | Dynamically generated content, pipes |
 | MCP equivalent | — | `run_script` tool |
+
+> **Not supported on network/security devices** (`device_type`: router, switch, firewall).
+> These devices do not provide a writable filesystem or POSIX shell.
+> Use `exec_command` or `remote_shell` with device-specific CLI commands instead.
 
 ### [Net (Gateway, Profile, Tunnels & DNS)](https://github.com/emusal/alogin2#multi-hop-gateway-routing)
 

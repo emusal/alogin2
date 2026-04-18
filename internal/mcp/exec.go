@@ -81,12 +81,10 @@ func execOnServer(ctx context.Context, database *db.DB, vlt vault.Vault, req Exe
 		return nil, fmt.Errorf("server %d not found", req.ServerID)
 	}
 
-	timeout := defaultTimeout
+	timeoutSec := int(defaultTimeout.Seconds())
 	if req.TimeoutSec > 0 {
-		timeout = time.Duration(req.TimeoutSec) * time.Second
+		timeoutSec = req.TimeoutSec
 	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 
 	hops, err := buildHopChain(ctx, database, vlt, srv)
 	if err != nil {
@@ -104,23 +102,16 @@ func execOnServer(ctx context.Context, database *db.DB, vlt vault.Vault, req Exe
 	if len(req.Expect) > 0 {
 		return runPTY(client, req.Commands, req.Expect)
 	}
-	return runBatch(client, req.Commands)
+	return runBatch(client, req.Commands, timeoutSec)
 }
 
 // runBatch runs each command in its own session (non-interactive).
-func runBatch(client *internalssh.Client, commands []string) ([]CommandResult, error) {
+// Each command is wrapped with the remote `timeout` utility so the remote OS
+// enforces the deadline — no Go-side signal or interrupt dance needed.
+func runBatch(client *internalssh.Client, commands []string, timeoutSec int) ([]CommandResult, error) {
 	var results []CommandResult
 	for _, cmd := range commands {
-		out, err := runOneCommand(client.Inner(), cmd)
-		exitCode := 0
-		errStr := ""
-		if err != nil {
-			if exitErr, ok := err.(*gossh.ExitError); ok {
-				exitCode = exitErr.ExitStatus()
-			} else {
-				errStr = err.Error()
-			}
-		}
+		out, exitCode, errStr := runOneCommand(client.Inner(), cmd, timeoutSec)
 		if len(out) > maxOutputBytes {
 			out = append(out[:maxOutputBytes], []byte("\n[output truncated]")...)
 		}
@@ -134,14 +125,39 @@ func runBatch(client *internalssh.Client, commands []string) ([]CommandResult, e
 	return results, nil
 }
 
-// runOneCommand opens a fresh session and runs a single command.
-func runOneCommand(inner *gossh.Client, cmd string) ([]byte, error) {
+// runOneCommand opens a fresh session and runs a single command. Timeout is
+// enforced Go-side by closing the SSH channel on deadline, which sends SIGHUP
+// to the remote process. Returns output, exit code, and error string.
+func runOneCommand(inner *gossh.Client, cmd string, timeoutSec int) ([]byte, int, string) {
 	sess, err := inner.NewSession()
 	if err != nil {
-		return nil, err
+		return nil, -1, err.Error()
 	}
-	defer sess.Close()
-	return sess.CombinedOutput(cmd)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSec)*time.Second)
+	defer cancel()
+
+	go func() {
+		<-ctx.Done()
+		_ = sess.Close()
+	}()
+
+	out, err := sess.CombinedOutput(cmd)
+	if err != nil {
+		if ctx.Err() != nil {
+			return out, 130, ""
+		}
+		if exitErr, ok := err.(*gossh.ExitError); ok {
+			return out, exitErr.ExitStatus(), ""
+		}
+		return out, -1, err.Error()
+	}
+	return out, 0, ""
+}
+
+// shellQuote wraps s in single quotes, escaping any single quotes within.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // runPTY runs all commands as a single joined command in one PTY session.

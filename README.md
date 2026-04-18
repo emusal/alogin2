@@ -116,6 +116,7 @@ alogin net gateway add dmz-chain bastion-01 dmz-relay
 
 # Assign a gateway to a server
 alogin server add --host 10.0.1.50 --user admin --gateway prod-bastion
+alogin server add --host core-sw-01 --user admin --device-type router   # network device
 
 # Connect — active profile's gateway is applied automatically
 t web-01
@@ -244,8 +245,9 @@ The AI works with abstract **server aliases and IDs**. alogin2 resolves the full
 
 ```bash
 # Human operator pre-provisions trust:
-alogin server add --host 10.0.0.10 --user admin   # stores creds in vault
+alogin server add --host 10.0.0.10 --user admin                          # stores creds in vault
 alogin server add --host 10.0.0.11 --user admin
+alogin server add --host fw-01 --user admin --device-type firewall        # network device
 alogin ssh cluster add web-cluster 10.0.0.10 10.0.0.11
 
 # AI agent then operates via MCP — server IDs only:

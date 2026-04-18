@@ -16,7 +16,7 @@ import (
 
 
 func newServerAddCmd() *cobra.Command {
-	var proto, host, user, password, locale, gateway, authMethod, identityFile string
+	var proto, host, user, password, locale, gateway, authMethod, identityFile, deviceType string
 	var port int
 
 	cmd := &cobra.Command{
@@ -38,7 +38,10 @@ Examples:
   alogin server add --host db-01 --user admin --gateway internal-jump
 
   # Key-only server with explicit identity file
-  alogin server add --host db-01 --user admin --auth-method key --identity-file ~/.ssh/id_ed25519`,
+  alogin server add --host db-01 --user admin --auth-method key --identity-file ~/.ssh/id_ed25519
+
+  # Network device (router, switch, firewall)
+  alogin server add --host core-sw-01 --user admin --device-type router`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 
@@ -52,6 +55,14 @@ Examples:
 				authMethod = "password"
 			}
 
+			validDeviceTypes := map[string]bool{
+				"linux": true, "windows": true, "router": true,
+				"switch": true, "firewall": true, "other": true,
+			}
+			if deviceType != "" && !validDeviceTypes[deviceType] {
+				return fmt.Errorf("invalid --device-type %q: must be one of linux, windows, router, switch, firewall, other", deviceType)
+			}
+
 			srv := &model.Server{
 				Protocol:     model.Protocol(proto),
 				Host:         host,
@@ -60,6 +71,7 @@ Examples:
 				Locale:       locale,
 				AuthMethod:   authMethod,
 				IdentityFile: identityFile,
+				DeviceType:   model.DeviceType(deviceType),
 			}
 
 			if gateway != "" {
@@ -95,6 +107,7 @@ Examples:
 	cmd.Flags().StringVar(&gateway, "gateway", "", "internal gateway route name (applied after profile gateway)")
 	cmd.Flags().StringVar(&authMethod, "auth-method", "", "authentication method: password|key (default: password)")
 	cmd.Flags().StringVar(&identityFile, "identity-file", "", "path to SSH private key (used when --auth-method=key)")
+	cmd.Flags().StringVar(&deviceType, "device-type", "", "device type: linux (default), windows, router, switch, firewall, other")
 	return cmd
 }
 
