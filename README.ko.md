@@ -375,6 +375,8 @@ alogin net                 hosts, 터널, 게이트웨이, 프로파일 관리
 alogin agent               MCP 서버, 정책, 사람 승인, 실행 이력
 alogin tui                 TUI 서버 검색 화면
 alogin web                 웹 브라우저 SSH 터미널 + 관리 대시보드
+alogin migrate v1          레거시 ALOGIN v1 플랫 파일 데이터 가져오기
+alogin migrate ssh-config  ~/.ssh/config에서 서버 및 게이트웨이 가져오기
 ```
 
 목록 조회 명령에는 모두 `--format=json`을 쓸 수 있습니다.

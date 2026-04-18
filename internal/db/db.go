@@ -15,7 +15,7 @@ var schemaSQL string
 
 // CurrentSchemaVersion is the schema version this binary expects.
 // Increment when adding a new migration.
-const CurrentSchemaVersion = 15
+const CurrentSchemaVersion = 16
 
 // migrationDescriptions maps each migration version to a human-readable summary.
 var migrationDescriptions = map[int]string{
@@ -33,6 +33,7 @@ var migrationDescriptions = map[int]string{
 	13: "bg_jobs table (background SSH command execution tracking)",
 	14: "servers.auth_method, servers.identity_file columns (explicit SSH key authentication)",
 	15: "agent_memory table (free-form AI notes per server)",
+	16: "servers.ssh_options column (Ciphers, KexAlgorithms, HostkeyAlgorithms for legacy devices)",
 }
 
 // MigrationDescription returns a human-readable description for a schema version.
@@ -511,6 +512,16 @@ func applyMigrations(db *sql.DB) ([]int, error) {
 		}
 		_, _ = db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version) VALUES (15)`)
 		applied = append(applied, 15)
+	}
+
+	if version < 16 || !columnExists(db, ctx, "servers", "ssh_options") {
+		_, err := db.ExecContext(ctx,
+			`ALTER TABLE servers ADD COLUMN ssh_options TEXT`)
+		if err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			return applied, fmt.Errorf("migration v16: %w", err)
+		}
+		_, _ = db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version) VALUES (16)`)
+		applied = append(applied, 16)
 	}
 
 	return applied, nil

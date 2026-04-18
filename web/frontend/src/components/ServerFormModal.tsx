@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Server, Gateway, ServerFormData } from '../types'
+import type { Server, Gateway, ServerFormData, SSHOptions } from '../types'
 import './Modal.css'
 
 const PROTOCOLS = ['ssh', 'sftp', 'ftp', 'sshfs', 'telnet', 'rlogin', 'vagrant', 'docker']
@@ -24,7 +24,18 @@ const emptyForm = (): ServerFormData => ({
   note: '',
   auth_method: 'password',
   identity_file: '',
+  ssh_options: undefined,
 })
+
+function sshOptsToStr(opts: SSHOptions | undefined, key: keyof SSHOptions): string {
+  return (opts?.[key] as string[] | undefined)?.join(', ') ?? ''
+}
+
+function strToSshOpts(form: ServerFormData, key: keyof SSHOptions, val: string): SSHOptions {
+  const cur = form.ssh_options ?? {}
+  const list = val.split(',').map(s => s.trim()).filter(Boolean)
+  return { ...cur, [key]: list.length ? list : undefined }
+}
 
 export function ServerFormModal({ initial, gateways, onSave, onClose }: Props) {
   const isEdit = initial !== null
@@ -42,6 +53,7 @@ export function ServerFormModal({ initial, gateways, onSave, onClose }: Props) {
           note: initial.note,
           auth_method: initial.auth_method || 'password',
           identity_file: initial.identity_file || '',
+          ssh_options: initial.ssh_options,
         }
       : emptyForm()
   )
@@ -171,6 +183,36 @@ export function ServerFormModal({ initial, gateways, onSave, onClose }: Props) {
               />
             </div>
           )}
+          <div className="form-row">
+            <label>Ciphers</label>
+            <input
+              type="text"
+              value={sshOptsToStr(form.ssh_options, 'ciphers')}
+              onChange={e => set('ssh_options', strToSshOpts(form, 'ciphers', e.target.value))}
+              placeholder="comma-separated (leave empty = use defaults)"
+            />
+            <span className="form-hint">e.g. aes128-cbc,3des-cbc</span>
+          </div>
+          <div className="form-row">
+            <label>Kex Algorithms</label>
+            <input
+              type="text"
+              value={sshOptsToStr(form.ssh_options, 'kex_algorithms')}
+              onChange={e => set('ssh_options', strToSshOpts(form, 'kex_algorithms', e.target.value))}
+              placeholder="comma-separated (leave empty = use defaults)"
+            />
+            <span className="form-hint">e.g. diffie-hellman-group14-sha1</span>
+          </div>
+          <div className="form-row">
+            <label>Host Key Algs</label>
+            <input
+              type="text"
+              value={sshOptsToStr(form.ssh_options, 'host_key_algorithms')}
+              onChange={e => set('ssh_options', strToSshOpts(form, 'host_key_algorithms', e.target.value))}
+              placeholder="comma-separated (leave empty = use defaults)"
+            />
+            <span className="form-hint">e.g. ssh-rsa</span>
+          </div>
           {error && <div className="modal-error">{error}</div>}
           <div className="modal-actions">
             <button type="button" onClick={onClose}>Cancel</button>

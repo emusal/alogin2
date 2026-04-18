@@ -318,7 +318,7 @@ _alogin() {
         'tui:Interactive fuzzy host selector'
         'web:Start the web UI server'
         # ── System commands ───────────────────────────────────────────────
-        'migrate:Import legacy alogin data files'
+        'migrate:Import data (legacy v1 files or SSH config)'
         'db-migrate:Apply pending database schema migrations'
         'doctor:Check and repair database integrity'
         'completion:Generate or install shell completion scripts'
@@ -616,6 +616,34 @@ _alogin() {
                   local -a sm_subcmds
                   sm_subcmds=('add:Add a memory note' 'list:List memory notes' 'del:Delete a memory note')
                   _describe 'subcommand' sm_subcmds ;;
+              esac
+              ;;
+          esac
+          ;;
+
+        # ── migrate ───────────────────────────────────────────────────────
+        migrate)
+          local -a migrate_subcmds
+          migrate_subcmds=(
+            'v1:Import legacy ALOGIN v1 flat-file data'
+            'ssh-config:Import servers and gateways from an SSH config file'
+          )
+          _arguments -C '1: :->sub' '*:: :->sub_args'
+          case $state in
+            sub) _describe 'subcommand' migrate_subcmds ;;
+            sub_args)
+              case $words[1] in
+                v1)
+                  _arguments \
+                    '--from[path to legacy ALOGIN_ROOT directory]:directory:_files -/' \
+                    '(-v --verbose)'{-v,--verbose}'[show each imported row]'
+                  ;;
+                ssh-config)
+                  _arguments \
+                    '--file[SSH config file path]:file:_files' \
+                    '--dry-run[show planned changes without writing to database]' \
+                    '(-v --verbose)'{-v,--verbose}'[print each imported/skipped entry]'
+                  ;;
               esac
               ;;
           esac
@@ -948,6 +976,18 @@ _alogin_completion() {
               COMPREPLY=($(compgen -W "add list del" -- "$cur"))
             fi
             ;;
+        esac
+      fi
+      ;;
+
+    # ── migrate ──────────────────────────────────────────────────────────────
+    migrate)
+      if [[ $cword -eq 2 ]]; then
+        COMPREPLY=($(compgen -W "v1 ssh-config" -- "$cur"))
+      elif [[ $cword -ge 3 ]]; then
+        case "$sub" in
+          v1)         COMPREPLY=($(compgen -W "--from --verbose -v" -- "$cur")) ;;
+          ssh-config) COMPREPLY=($(compgen -W "--file --dry-run --verbose -v" -- "$cur")) ;;
         esac
       fi
       ;;

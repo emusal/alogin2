@@ -43,6 +43,29 @@ const (
 	DeviceOther    DeviceType = "other"
 )
 
+// SSHOptions holds optional low-level SSH negotiation parameters for legacy or
+// non-standard devices (e.g. old network equipment that requires specific
+// cipher suites). All fields are empty/nil by default, meaning "use the SSH
+// library's built-in defaults".
+type SSHOptions struct {
+	// Ciphers overrides the default cipher preference list.
+	// Example: ["aes128-cbc", "3des-cbc", "aes256-cbc"]
+	Ciphers []string `json:"ciphers,omitempty"`
+	// KexAlgorithms overrides the default key-exchange algorithm list.
+	// A leading "+" prefix (from ssh_config syntax) is stripped; the supplied
+	// list replaces the default entirely.
+	// Example: ["diffie-hellman-group14-sha1", "diffie-hellman-group1-sha1"]
+	KexAlgorithms []string `json:"kex_algorithms,omitempty"`
+	// HostKeyAlgorithms overrides the server host-key algorithm list.
+	// Example: ["ssh-rsa"]
+	HostKeyAlgorithms []string `json:"host_key_algorithms,omitempty"`
+}
+
+// IsZero reports whether all fields are empty (no overrides needed).
+func (o SSHOptions) IsZero() bool {
+	return len(o.Ciphers) == 0 && len(o.KexAlgorithms) == 0 && len(o.HostKeyAlgorithms) == 0
+}
+
 // Server represents one entry in the server registry (replaces a row in server_list).
 type Server struct {
 	ID       int64    `json:"id"`
@@ -56,6 +79,8 @@ type Server struct {
 	Note       string     `json:"note"`        // free-form description (LLM context)
 	AuthMethod string     `json:"auth_method"` // "password" or "key"
 	IdentityFile string   `json:"identity_file,omitempty"` // Explicit SSH private key path
+	// SSHOptions holds optional cipher/kex/hostkey overrides for legacy devices.
+	SSHOptions SSHOptions `json:"ssh_options,omitempty"`
 	// GatewayRouteID is the internal gateway route applied after the profile gateway.
 	// Full path: profile.gateway_hops → server.gateway_route_hops → server
 	// nil means connect directly from the profile gateway (or directly if no profile).

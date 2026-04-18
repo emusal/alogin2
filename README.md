@@ -1,17 +1,19 @@
 <div align="center">
-  <img src="docs/screenshots/alogin2-banner.png" >
+  <img src="docs/screenshots/alogin2-banner-v2.svg" width="640">
   <a href="https://github.com/emusal/alogin2/releases"><img src="https://img.shields.io/github/v/release/emusal/alogin2" alt="Version"></a>
   <a href="https://github.com/emusal/alogin2/blob/main/LICENSE"><img src="https://img.shields.io/github/license/emusal/alogin2" alt="License"></a>
 </div>
 
 ---
 
-**alogin 2** is a secure SSH gateway for system and network engineers managing large server fleets — and a zero-knowledge MCP bridge for AI agents that need infrastructure access without ever touching your credentials.
+**alogin 2** is context-aware infrastructure access for humans and AI agents.
+
+It combines an encrypted server registry, named gateway routing, persistent SSH sessions, cluster execution, and an MCP bridge so agents can operate on real infrastructure without handling raw credentials, private IP topology, or ad-hoc shell glue.
 
 <img src="docs/screenshots/tui-picker.gif" width="640">
 <img src="docs/screenshots/cluster-tmux.gif" width="640">
 
-Full Go rewrite of the original [alogin v1](https://github.com/emusal/alogin) (~2000s Bash + Expect). Designed for daily operator workflow and AI-driven automation on the same encrypted registry.
+Full Go rewrite of the original [alogin v1](https://github.com/emusal/alogin) (~2000s Bash + Expect). Built for daily operator workflow and agent-driven automation on the same encrypted registry.
 
 **Language**: [한국어](README.ko.md) | English
 
@@ -19,13 +21,19 @@ Full Go rewrite of the original [alogin v1](https://github.com/emusal/alogin) (~
 
 ## Why alogin2?
 
-Managing hundreds of servers creates two friction points: **human operators** waste keystrokes on repeated SSH commands, and **AI agents** shouldn't see raw credentials or private IP topology.
+Managing real infrastructure creates two different problems at once:
 
-alogin2 resolves both:
+- **Humans** waste time on repeated SSH commands, bastion chains, and per-host glue.
+- **AI agents** need execution access, but should not see raw credentials, private IPs, or internal topology.
+
+alogin2 resolves both with one control plane:
 
 | Problem | Solution |
 |---------|----------|
 | Typing full hostnames for hundreds of nodes | [Fuzzy TUI search](#fuzzy-tui-search) → connect in 3 keystrokes |
+| Access path changes depending on where you work | [Profiles + named gateway routes](#multi-hop-gateway-routing) |
+| AI agents lacking server-specific operating context | [Server prompts, memory, and health inspection via MCP](#secure-ai-integration) |
+| Multi-step remote work losing shell state | [Persistent SSH sessions with preserved cwd/env](#commands-overview) |
 | Manual ProxyJump setup for bastion chains | [Named gateway routes with automatic multi-hop](#multi-hop-gateway-routing) |
 | Running the same command across 20 nodes | [Cluster session with synchronized broadcast typing](#synchronized-broadcast-typing) |
 | Aggregating command output from a fleet | [Parallel `exec_on_cluster` via MCP](#parallel-command-execution), results returned as structured data |
@@ -33,11 +41,53 @@ alogin2 resolves both:
 | Audit trail for AI-initiated commands | [Every exec logged to JSONL + SQLite `audit_log`](#audit-trail) |
 | Runaway AI executing destructive commands | [Policy engine + HITL approval flow](#policy-engine--hitl-approval) |
 
+### What Makes It Different
+
+Most SSH tools stop at transport. `alogin2` adds the missing execution context that agents and operators need in practice:
+
+- **Server registry**: stable IDs, aliases, auth metadata, device types
+- **Profiles and gateways**: switch access paths based on your current network environment
+- **Persistent sessions**: preserve cwd and environment across steps
+- **Agent context**: expose server-specific prompts, memory notes, and health data before acting
+- **Policy and audit**: gate risky commands and keep a review trail
+
+### Five-Minute Quickstart
+
+Install, register a host, connect, then expose the same registry to your AI client:
+
+```bash
+# 1. Install
+curl -fsSL https://raw.githubusercontent.com/emusal/alogin2/main/install.sh | sh
+
+# 2. Register a server
+alogin server add --host 10.0.0.10 --user admin
+
+# 3. Connect directly
+alogin ssh connect 10.0.0.10
+
+# 4. Start a persistent session
+sid=$(alogin ssh session start 10.0.0.10)
+alogin ssh session exec "$sid" "cd /var/log"
+alogin ssh session exec "$sid" "pwd"
+
+# 5. Enable MCP for your AI client
+alogin agent setup
+```
+
+If you work from different network environments, add a named gateway and activate a profile for the access path you need:
+
+```bash
+alogin net gateway add corp-bastion bastion-01
+alogin net profile add home --gateway corp-bastion --desc "Home network"
+alogin net profile use home
+```
+
 ---
 
 ## Table of Contents
 
 - [Installation](#installation)
+- [Why alogin2?](#why-alogin2)
 - [Individual Efficiency: Eliminating Friction](#individual-efficiency-eliminating-friction)
   - [Fuzzy TUI Search](#fuzzy-tui-search)
   - [Multi-hop Gateway Routing](#multi-hop-gateway-routing)
@@ -107,18 +157,22 @@ No need to remember full hostnames across hundreds of nodes. Fuzzy match on any 
 
 ### Multi-hop Gateway Routing
 
-Define a named gateway route once, assign it to servers. alogin2 handles the full hop chain natively in Go — no `ProxyCommand` shell spawning, no `~/.ssh/config` edits:
+Define a named gateway route once, assign it to servers or activate it through a profile. Profiles are meant for switching the active access path based on the operator's current network environment, such as working from home, the office, or behind a VPN. alogin2 handles the full hop chain natively in Go — no `ProxyCommand` shell spawning, no `~/.ssh/config` edits:
 
 ```bash
-# Register jump hosts as a named route (up to 3 hops)
-alogin net gateway add prod-bastion bastion-01
+# Register jump hosts as named routes (up to 3 hops)
+alogin net gateway add corp-bastion bastion-01
 alogin net gateway add dmz-chain bastion-01 dmz-relay
 
+# Optional: activate a route based on where you're working
+alogin net profile add home --gateway corp-bastion --desc "Home network"
+alogin net profile use home
+
 # Assign a gateway to a server
-alogin server add --host 10.0.1.50 --user admin --gateway prod-bastion
+alogin server add --host 10.0.1.50 --user admin --gateway corp-bastion
 alogin server add --host core-sw-01 --user admin --device-type router   # network device
 
-# Connect — active profile's gateway is applied automatically
+# Connect — the active profile's gateway is applied automatically
 t web-01
 ```
 
@@ -195,6 +249,18 @@ alogin net tunnel stop  grafana-fwd
 
 ## Secure AI Integration
 
+`alogin2` is built so an AI agent can gather context before it acts, not just fire blind remote commands.
+
+Typical agent workflow:
+
+1. Discover targets with `list_servers` or `get_server`
+2. Read server-specific guidance with `get_server_prompt` and `get_memory`
+3. Check live health with `inspect_node`
+4. Open a stateful shell with `remote_shell` or run one-shot commands
+5. Fan out with `exec_on_cluster`, run detached work, or manage tunnels as needed
+
+This is the difference between "an LLM with SSH" and "an agent operating with server-aware context."
+
 ### MCP Server Setup
 
 alogin2 exposes a [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server over stdio. Run `alogin agent setup` to print the exact config snippet:
@@ -216,9 +282,9 @@ MCP server config (paste into Claude Desktop claude_desktop_config.json):
     }
   }
 
-Available MCP tools (12): list_servers, get_server, list_clusters, get_cluster,
-  exec_command, exec_on_cluster, inspect_node, list_tunnels, get_tunnel,
-  start_tunnel, stop_tunnel, ...
+Available MCP tools include: list_servers, get_server, get_server_prompt,
+  get_memory, inspect_node, remote_shell, exec_command, exec_on_cluster,
+  bg_exec_command, list_tunnels, start_tunnel, stop_tunnel, ...
 Audit log: ~/.config/alogin/audit.jsonl
 ```
 
@@ -264,6 +330,8 @@ alogin ssh cluster add web-cluster 10.0.0.10 10.0.0.11
 |------|-------------|
 | `list_servers` | List / search all servers in the registry |
 | `get_server` | Full details for a single server |
+| `get_server_prompt` | Read server-specific instructions, constraints, and operating guidance |
+| `get_memory` | Retrieve saved operational notes and proven workarounds |
 | `list_clusters` | List all cluster groups with member counts |
 | `get_cluster` | Cluster with full member server details |
 | `list_tunnels` | All tunnel configs with live running status |
@@ -276,6 +344,8 @@ alogin ssh cluster add web-cluster 10.0.0.10 10.0.0.11
 |------|-------------|
 | `exec_command` | Run SSH commands on a single server |
 | `exec_on_cluster` | Run SSH commands on all cluster members in parallel |
+| `remote_shell` | Start or reuse a persistent shell session with preserved cwd and environment |
+| `bg_exec_command` | Launch a long-running job and poll logs or status later |
 
 #### Tunnel lifecycle
 
@@ -377,6 +447,8 @@ alogin net              Hosts, tunnels, gateways, profiles
 alogin agent            MCP server, policy, HITL, audit
 alogin tui              Interactive fuzzy TUI picker
 alogin web              Embedded web server (browser SSH + dashboard)
+alogin migrate v1       Import legacy ALOGIN v1 flat-file data
+alogin migrate ssh-config  Import servers and gateways from ~/.ssh/config
 ```
 
 All listing commands support `--format=json` for scripting.

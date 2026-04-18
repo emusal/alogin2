@@ -336,17 +336,18 @@ func (h *Handler) getServer(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) createServer(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Protocol       string `json:"protocol"`
-		Host           string `json:"host"`
-		User           string `json:"user"`
-		Password       string `json:"password"`
-		Port           int    `json:"port"`
-		Locale         string `json:"locale"`
-		DeviceType     string `json:"device_type"`
-		Note           string `json:"note"`
-		GatewayRouteID *int64 `json:"gateway_route_id"`
-		AuthMethod     string `json:"auth_method"`
-		IdentityFile   string `json:"identity_file"`
+		Protocol       string            `json:"protocol"`
+		Host           string            `json:"host"`
+		User           string            `json:"user"`
+		Password       string            `json:"password"`
+		Port           int               `json:"port"`
+		Locale         string            `json:"locale"`
+		DeviceType     string            `json:"device_type"`
+		Note           string            `json:"note"`
+		GatewayRouteID *int64            `json:"gateway_route_id"`
+		AuthMethod     string            `json:"auth_method"`
+		IdentityFile   string            `json:"identity_file"`
+		SSHOptions     *model.SSHOptions `json:"ssh_options"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
@@ -354,6 +355,10 @@ func (h *Handler) createServer(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.AuthMethod == "" {
 		req.AuthMethod = "password"
+	}
+	var sshOpts model.SSHOptions
+	if req.SSHOptions != nil {
+		sshOpts = *req.SSHOptions
 	}
 	srv := &model.Server{
 		Protocol:       model.Protocol(req.Protocol),
@@ -366,6 +371,7 @@ func (h *Handler) createServer(w http.ResponseWriter, r *http.Request) {
 		GatewayRouteID: req.GatewayRouteID,
 		AuthMethod:     req.AuthMethod,
 		IdentityFile:   req.IdentityFile,
+		SSHOptions:     sshOpts,
 	}
 	if err := h.db.Servers.Create(r.Context(), srv, req.Password); err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
@@ -397,16 +403,17 @@ func (h *Handler) updateServer(w http.ResponseWriter, r *http.Request) {
 	}
 	// Use json.RawMessage to distinguish between field absent and explicit null.
 	var req struct {
-		Protocol       string          `json:"protocol"`
-		User           string          `json:"user"`
-		Password       string          `json:"password"`
-		Port           int             `json:"port"`
-		Locale         string          `json:"locale"`
-		DeviceType     string          `json:"device_type"`
-		Note           string          `json:"note"`
-		GatewayRouteID json.RawMessage `json:"gateway_route_id"`
-		AuthMethod     string          `json:"auth_method"`
-		IdentityFile   string          `json:"identity_file"`
+		Protocol       string            `json:"protocol"`
+		User           string            `json:"user"`
+		Password       string            `json:"password"`
+		Port           int               `json:"port"`
+		Locale         string            `json:"locale"`
+		DeviceType     string            `json:"device_type"`
+		Note           string            `json:"note"`
+		GatewayRouteID json.RawMessage   `json:"gateway_route_id"`
+		AuthMethod     string            `json:"auth_method"`
+		IdentityFile   string            `json:"identity_file"`
+		SSHOptions     *model.SSHOptions `json:"ssh_options"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
@@ -435,6 +442,10 @@ func (h *Handler) updateServer(w http.ResponseWriter, r *http.Request) {
 	if req.AuthMethod == "" {
 		identityFile = existing.IdentityFile
 	}
+	sshOpts := existing.SSHOptions
+	if req.SSHOptions != nil {
+		sshOpts = *req.SSHOptions
+	}
 	srv := &model.Server{
 		ID:             id,
 		Protocol:       model.Protocol(req.Protocol),
@@ -447,6 +458,7 @@ func (h *Handler) updateServer(w http.ResponseWriter, r *http.Request) {
 		GatewayRouteID: gwRouteID,
 		AuthMethod:     authMethod,
 		IdentityFile:   identityFile,
+		SSHOptions:     sshOpts,
 	}
 	if err := h.db.Servers.Update(r.Context(), srv, req.Password); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)

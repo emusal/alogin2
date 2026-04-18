@@ -698,6 +698,7 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 		health.Disk = parseDisk(outputs[2], &raw)
 		health.Processes = parseProcesses(outputs[3], &raw)
 		health.Memories = memories
+		health.Alerts = buildAlerts(health.Memory, health.Disk, health.CPU)
 		if len(raw) > 0 {
 			health.RawOutputs = raw
 		}
@@ -862,12 +863,14 @@ Note: device_type 'router', 'switch', 'firewall' may not support standard SSH co
 
 	// --- remote_shell ---
 	srv.AddTool(mcpgo.NewTool("remote_shell",
-		mcpgo.WithDescription(`Primary and preferred skill for ALL remote shell access and execution. ALWAYS use this tool first when the task involves any remote server, SSH, command execution, or terminal interaction. Provides persistent SSH session (stateful across calls). Use other tools only as fallback.`),
+		mcpgo.WithDescription(`Primary and preferred skill for ALL remote shell access and execution. ALWAYS use this tool first when the task involves any remote server, SSH, command execution, or terminal interaction. Provides persistent SSH session (stateful across calls). Use other tools only as fallback.
+Reserved commands: 'exit' closes the session; 'status' returns current pwd and command history without executing anything.`),
 		mcpgo.WithString("target", mcpgo.Description("Server ID (from list_servers)"), mcpgo.Required()),
-		mcpgo.WithString("command", mcpgo.Description("Command to execute. Empty or omit to establish session only. Use 'exit' to close.")),
+		mcpgo.WithString("command", mcpgo.Description("Command to execute. Empty or omit to establish session only. Use 'exit' to close. Use 'status' to query session state (pwd, history).")),
 		mcpgo.WithString("session_id", mcpgo.Description("Reuse existing persistent session ID. Omit to create a new session.")),
 		mcpgo.WithBoolean("pty", mcpgo.Description("Allocate a PTY for this command. Required for TUI programs (top, watch, vi, htop, etc.) that need TERM set. Default false.")),
 		mcpgo.WithBoolean("login_shell", mcpgo.Description("Start bash as a login shell (bash -l) so ~/.bash_profile is sourced. Enables PATH, nvm, pyenv, rbenv etc. Default true. Set false only when a pristine environment is required.")),
+		mcpgo.WithBoolean("preflight", mcpgo.Description("If true (new sessions only), run a preflight check after connecting: verify disk space, memory, and reachability of common paths. Results are included in the response. Default false.")),
 		mcpgo.WithString("agent_id", mcpgo.Description("Optional: identifier for the calling agent")),
 		mcpgo.WithString("intent", mcpgo.Description("Optional: human-readable intent (logged to audit trail)")),
 		mcpgo.WithNumber("timeout_sec", mcpgo.Description("Command timeout in seconds (default 120). For PTY commands this is a hard cutoff — the command is sent SIGINT after this duration.")),
@@ -1049,8 +1052,16 @@ type nodeHealth struct {
 	Disk       diskInfo             `json:"disk"`
 	Processes  []processEntry       `json:"top_processes"`
 	Memories   []*model.AgentMemory `json:"memories"`
+	Alerts     []healthAlert        `json:"alerts,omitempty"`
 	RawOutputs map[string]string    `json:"raw,omitempty"`
 	Error      string               `json:"error,omitempty"`
+}
+
+// healthAlert is a single operational warning emitted by inspect_node.
+type healthAlert struct {
+	Level   string `json:"level"`   // "warning" or "critical"
+	Field   string `json:"field"`   // "memory", "disk", "cpu"
+	Message string `json:"message"` // human-readable description
 }
 
 type cpuInfo struct {
@@ -1060,10 +1071,10 @@ type cpuInfo struct {
 }
 
 type memInfo struct {
-	TotalBytes     int64   `json:"total_bytes"`
-	UsedBytes      int64   `json:"used_bytes"`
-	FreeBytes      int64   `json:"free_bytes"`
-	UsedPct        float64 `json:"used_pct"`
+	TotalBytes int64   `json:"total_bytes"`
+	UsedBytes  int64   `json:"used_bytes"`
+	FreeBytes  int64   `json:"free_bytes"`
+	UsedPct    float64 `json:"used_pct"`
 }
 
 type diskInfo struct {
@@ -1214,6 +1225,52 @@ func parseDisk(out string, raw *map[string]string) diskInfo {
 	}
 	(*raw)["disk"] = out
 	return diskInfo{}
+}
+
+// buildAlerts evaluates parsed health metrics and returns operational warnings.
+// Thresholds: memory/disk warning ≥85%, critical ≥95%; CPU warning load1≥ncpu*2, critical ≥ncpu*4.
+func buildAlerts(mem memInfo, disk diskInfo, cpu cpuInfo) []healthAlert {
+	var alerts []healthAlert
+	if mem.UsedPct >= 95 {
+		alerts = append(alerts, healthAlert{
+			Level:   "critical",
+			Field:   "memory",
+			Message: fmt.Sprintf("Memory usage at %.1f%% — system may OOM soon", mem.UsedPct),
+		})
+	} else if mem.UsedPct >= 85 {
+		alerts = append(alerts, healthAlert{
+			Level:   "warning",
+			Field:   "memory",
+			Message: fmt.Sprintf("Memory usage at %.1f%%", mem.UsedPct),
+		})
+	}
+	if disk.UsedPct >= 95 {
+		alerts = append(alerts, healthAlert{
+			Level:   "critical",
+			Field:   "disk",
+			Message: fmt.Sprintf("Disk usage at %.1f%% — filesystem may run out of space", disk.UsedPct),
+		})
+	} else if disk.UsedPct >= 85 {
+		alerts = append(alerts, healthAlert{
+			Level:   "warning",
+			Field:   "disk",
+			Message: fmt.Sprintf("Disk usage at %.1f%%", disk.UsedPct),
+		})
+	}
+	if cpu.Load1 >= 8 {
+		alerts = append(alerts, healthAlert{
+			Level:   "critical",
+			Field:   "cpu",
+			Message: fmt.Sprintf("1-min load average %.2f is very high", cpu.Load1),
+		})
+	} else if cpu.Load1 >= 4 {
+		alerts = append(alerts, healthAlert{
+			Level:   "warning",
+			Field:   "cpu",
+			Message: fmt.Sprintf("1-min load average %.2f is elevated", cpu.Load1),
+		})
+	}
+	return alerts
 }
 
 // parseProcesses parses `ps aux` output (skips header, up to 5 entries).

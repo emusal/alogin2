@@ -166,10 +166,12 @@ func newSessionStartCmd() *cobra.Command {
 	return cmd
 }
 
-// withUTF8 wraps command with an inline env prefix that forces UTF-8 locale.
-// This ensures stdout is UTF-8 regardless of the server's default locale.
+// withUTF8 wraps command with an inline env prefix that forces a UTF-8 locale.
+// C.UTF-8 is used instead of en_US.UTF-8 because C.UTF-8 is available on
+// virtually every Linux distro without a locale installation, avoiding the
+// "setlocale: LC_ALL: cannot change locale" warning on minimal servers.
 func withUTF8(command string) string {
-	return `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 ` + command
+	return `LANG=C.UTF-8 LC_ALL=C.UTF-8 ` + command
 }
 
 func newSessionExecCmd() *cobra.Command {

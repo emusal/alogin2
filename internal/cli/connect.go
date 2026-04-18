@@ -245,14 +245,17 @@ func buildHopChain(ctx context.Context, srv *model.Server, user string, profileO
 					if err != nil || hopSrv == nil {
 						return nil, fmt.Errorf("gateway hop server %d not found", h.ServerID)
 					}
-					pwd, _ := vlt.Get(vaultKey(hopSrv))
+					pwd := getOrPromptPassword(ctx, hopSrv)
 					hops = append(hops, internalssh.HopConfig{
-						Host:       resolveHost(ctx, hopSrv.Host),
-						Port:       hopSrv.EffectivePort(),
-						User:       hopSrv.User,
-						Password:   pwd,
-						AuthMethod: hopSrv.AuthMethod,
-						KeyPath:    hopSrv.IdentityFile,
+						Host:              resolveHost(ctx, hopSrv.Host),
+						Port:              hopSrv.EffectivePort(),
+						User:              hopSrv.User,
+						Password:          pwd,
+						AuthMethod:        hopSrv.AuthMethod,
+						KeyPath:           hopSrv.IdentityFile,
+						Ciphers:           hopSrv.SSHOptions.Ciphers,
+						KexAlgorithms:     hopSrv.SSHOptions.KexAlgorithms,
+						HostKeyAlgorithms: hopSrv.SSHOptions.HostKeyAlgorithms,
 					})
 				}
 			}
@@ -278,27 +281,33 @@ func buildHopChain(ctx context.Context, srv *model.Server, user string, profileO
 			if err != nil || hopSrv == nil {
 				return nil, fmt.Errorf("server gateway hop %d not found", h.ServerID)
 			}
-			pwd, _ := vlt.Get(vaultKey(hopSrv))
+			pwd := getOrPromptPassword(ctx, hopSrv)
 			hops = append(hops, internalssh.HopConfig{
-				Host:       resolveHost(ctx, hopSrv.Host),
-				Port:       hopSrv.EffectivePort(),
-				User:       hopSrv.User,
-				Password:   pwd,
-				AuthMethod: hopSrv.AuthMethod,
-				KeyPath:    hopSrv.IdentityFile,
+				Host:              resolveHost(ctx, hopSrv.Host),
+				Port:              hopSrv.EffectivePort(),
+				User:              hopSrv.User,
+				Password:          pwd,
+				AuthMethod:        hopSrv.AuthMethod,
+				KeyPath:           hopSrv.IdentityFile,
+				Ciphers:           hopSrv.SSHOptions.Ciphers,
+				KexAlgorithms:     hopSrv.SSHOptions.KexAlgorithms,
+				HostKeyAlgorithms: hopSrv.SSHOptions.HostKeyAlgorithms,
 			})
 		}
 	}
 
 	// Destination hop
-	pwd, _ := vlt.Get(vaultKey(srv))
+	pwd := getOrPromptPassword(ctx, srv)
 	hops = append(hops, internalssh.HopConfig{
-		Host:       resolveHost(ctx, srv.Host),
-		Port:       srv.EffectivePort(),
-		User:       user,
-		Password:   pwd,
-		AuthMethod: srv.AuthMethod,
-		KeyPath:    srv.IdentityFile,
+		Host:              resolveHost(ctx, srv.Host),
+		Port:              srv.EffectivePort(),
+		User:              user,
+		Password:          pwd,
+		AuthMethod:        srv.AuthMethod,
+		KeyPath:           srv.IdentityFile,
+		Ciphers:           srv.SSHOptions.Ciphers,
+		KexAlgorithms:     srv.SSHOptions.KexAlgorithms,
+		HostKeyAlgorithms: srv.SSHOptions.HostKeyAlgorithms,
 	})
 
 	return hops, nil
@@ -336,14 +345,17 @@ func doConnectChain(ctx context.Context, hostArgs []string, opts *model.ConnectO
 		if user == "" {
 			user = srv.User
 		}
-		pwd, _ := vlt.Get(vaultKey(srv))
+		pwd := getOrPromptPassword(ctx, srv)
 		hops = append(hops, internalssh.HopConfig{
-			Host:       resolveHost(ctx, srv.Host),
-			Port:       srv.EffectivePort(),
-			User:       user,
-			Password:   pwd,
-			AuthMethod: srv.AuthMethod,
-			KeyPath:    srv.IdentityFile,
+			Host:              resolveHost(ctx, srv.Host),
+			Port:              srv.EffectivePort(),
+			User:              user,
+			Password:          pwd,
+			AuthMethod:        srv.AuthMethod,
+			KeyPath:           srv.IdentityFile,
+			Ciphers:           srv.SSHOptions.Ciphers,
+			KexAlgorithms:     srv.SSHOptions.KexAlgorithms,
+			HostKeyAlgorithms: srv.SSHOptions.HostKeyAlgorithms,
 		})
 	}
 
@@ -411,6 +423,28 @@ func resolveHost(ctx context.Context, hostname string) string {
 
 func vaultKey(srv *model.Server) string {
 	return srv.User + "@" + srv.Host
+}
+
+// getOrPromptPassword returns the stored vault password for srv.
+// When no password is stored and the server uses password auth (no identity file),
+// it prompts the user interactively and saves the result to the vault for future use.
+func getOrPromptPassword(ctx context.Context, srv *model.Server) string {
+	pwd, _ := vlt.Get(vaultKey(srv))
+	if pwd != "" {
+		return pwd
+	}
+	if srv.AuthMethod == "key" || srv.IdentityFile != "" {
+		return ""
+	}
+	// No vault entry and no key file — prompt the user.
+	label := fmt.Sprintf("Password for %s@%s: ", srv.User, srv.Host)
+	pwd = promptSecret(label)
+	if pwd != "" {
+		if err := vlt.Set(vaultKey(srv), pwd); err == nil {
+			_ = database.Servers.ClearPassword(ctx, srv.ID)
+		}
+	}
+	return pwd
 }
 
 func parseUserHost(arg string) (user, host string) {

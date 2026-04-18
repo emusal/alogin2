@@ -620,7 +620,10 @@ func (m Model) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // 6   = Locale → formFields[5]
 // 7   = Auth Method picker (virtual)
 // 8   = Identity File → formFields[6]  (shown only when auth_method == "key")
-const srvFormTabCount = 9
+// 9   = Ciphers → formFields[7]
+// 10  = KexAlgorithms → formFields[8]
+// 11  = HostKeyAlgorithms → formFields[9]
+const srvFormTabCount = 12
 
 var authMethods = []string{"password", "key"}
 
@@ -700,6 +703,7 @@ func (m Model) updateServerForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Virtual rows (5=Gateway, 7=AuthMethod) are not backed by formFields.
 	// Tab-index → formFields index mapping:
 	//   0-4 → 0-4, 6 → 5 (Locale), 8 → 6 (IdentityFile)
+	//   9 → 7 (Ciphers), 10 → 8 (KexAlgorithms), 11 → 9 (HostKeyAlgorithms)
 	isVirtualRow := func(idx int) bool { return idx == 5 || idx == 7 }
 	tabToFieldIdx := func(tabIdx int) int {
 		switch {
@@ -709,6 +713,12 @@ func (m Model) updateServerForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return 5 // Locale
 		case tabIdx == 8:
 			return 6 // IdentityFile
+		case tabIdx == 9:
+			return 7 // Ciphers
+		case tabIdx == 10:
+			return 8 // KexAlgorithms
+		case tabIdx == 11:
+			return 9 // HostKeyAlgorithms
 		}
 		return tabIdx
 	}
@@ -765,7 +775,7 @@ func (m Model) updateServerForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		// Skip Identity File (index 8) when auth_method != "key"
 		if next == 8 && m.srvFormAuthMethod != "key" {
-			next = 0
+			next = 9
 		}
 		m.formFocusIdx = next
 		focusCurrent()

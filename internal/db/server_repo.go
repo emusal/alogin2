@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -25,13 +26,14 @@ type serverRepo struct{ db *sql.DB }
 
 func (r *serverRepo) Create(ctx context.Context, s *model.Server, password string) error {
 	res, err := r.db.ExecContext(ctx,
-		`INSERT INTO servers (protocol, host, user, password, port, gateway_route_id, locale, device_type, note, policy_yaml, system_prompt, auth_method, identity_file)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO servers (protocol, host, user, password, port, gateway_route_id, locale, device_type, note, policy_yaml, system_prompt, auth_method, identity_file, ssh_options)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		string(s.Protocol), s.Host, s.User, password, s.Port,
 		nullInt64(s.GatewayRouteID),
 		s.Locale, deviceTypeOrDefault(s.DeviceType), s.Note,
 		nullableText(s.PolicyYAML), nullableText(s.SystemPrompt),
 		authMethodOrDefault(s.AuthMethod), s.IdentityFile,
+		marshalSSHOptions(s.SSHOptions),
 	)
 	if err != nil {
 		return fmt.Errorf("create server: %w", err)
@@ -46,7 +48,7 @@ func (r *serverRepo) Create(ctx context.Context, s *model.Server, password strin
 
 func (r *serverRepo) GetByID(ctx context.Context, id int64) (*model.Server, error) {
 	row := r.db.QueryRowContext(ctx,
-		`SELECT id, protocol, host, user, password, port, gateway_route_id, locale, device_type, note, policy_yaml, system_prompt, auth_method, identity_file, created_at, updated_at
+		`SELECT id, protocol, host, user, password, port, gateway_route_id, locale, device_type, note, policy_yaml, system_prompt, auth_method, identity_file, ssh_options, created_at, updated_at
 		 FROM servers WHERE id = ?`, id)
 	return scanServer(row)
 }
@@ -55,11 +57,11 @@ func (r *serverRepo) GetByHost(ctx context.Context, host, user string) (*model.S
 	var row *sql.Row
 	if user == "" {
 		row = r.db.QueryRowContext(ctx,
-			`SELECT id, protocol, host, user, password, port, gateway_route_id, locale, device_type, note, policy_yaml, system_prompt, auth_method, identity_file, created_at, updated_at
+			`SELECT id, protocol, host, user, password, port, gateway_route_id, locale, device_type, note, policy_yaml, system_prompt, auth_method, identity_file, ssh_options, created_at, updated_at
 			 FROM servers WHERE host = ? ORDER BY id LIMIT 1`, host)
 	} else {
 		row = r.db.QueryRowContext(ctx,
-			`SELECT id, protocol, host, user, password, port, gateway_route_id, locale, device_type, note, policy_yaml, system_prompt, auth_method, identity_file, created_at, updated_at
+			`SELECT id, protocol, host, user, password, port, gateway_route_id, locale, device_type, note, policy_yaml, system_prompt, auth_method, identity_file, ssh_options, created_at, updated_at
 			 FROM servers WHERE host = ? AND user = ?`, host, user)
 	}
 	return scanServer(row)
@@ -67,7 +69,7 @@ func (r *serverRepo) GetByHost(ctx context.Context, host, user string) (*model.S
 
 func (r *serverRepo) ListAll(ctx context.Context) ([]*model.Server, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, protocol, host, user, password, port, gateway_route_id, locale, device_type, note, policy_yaml, system_prompt, auth_method, identity_file, created_at, updated_at
+		`SELECT id, protocol, host, user, password, port, gateway_route_id, locale, device_type, note, policy_yaml, system_prompt, auth_method, identity_file, ssh_options, created_at, updated_at
 		 FROM servers ORDER BY host, user`)
 	if err != nil {
 		return nil, err
@@ -79,7 +81,7 @@ func (r *serverRepo) ListAll(ctx context.Context) ([]*model.Server, error) {
 func (r *serverRepo) Search(ctx context.Context, query string) ([]*model.Server, error) {
 	like := "%" + query + "%"
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, protocol, host, user, password, port, gateway_route_id, locale, device_type, note, policy_yaml, system_prompt, auth_method, identity_file, created_at, updated_at
+		`SELECT id, protocol, host, user, password, port, gateway_route_id, locale, device_type, note, policy_yaml, system_prompt, auth_method, identity_file, ssh_options, created_at, updated_at
 		 FROM servers WHERE host LIKE ? OR user LIKE ? OR note LIKE ? ORDER BY host`,
 		like, like, like)
 	if err != nil {
@@ -95,12 +97,13 @@ func (r *serverRepo) Update(ctx context.Context, s *model.Server, newPassword st
 		deviceTypeOrDefault(s.DeviceType), s.Note,
 		nullableText(s.PolicyYAML), nullableText(s.SystemPrompt),
 		authMethodOrDefault(s.AuthMethod), s.IdentityFile,
+		marshalSSHOptions(s.SSHOptions),
 		time.Now().UTC().Format(time.RFC3339), s.ID,
 	}
-	query := `UPDATE servers SET protocol=?, user=?, port=?, gateway_route_id=?, locale=?, device_type=?, note=?, policy_yaml=?, system_prompt=?, auth_method=?, identity_file=?, updated_at=? WHERE id=?`
+	query := `UPDATE servers SET protocol=?, user=?, port=?, gateway_route_id=?, locale=?, device_type=?, note=?, policy_yaml=?, system_prompt=?, auth_method=?, identity_file=?, ssh_options=?, updated_at=? WHERE id=?`
 	if newPassword != "" {
-		query = `UPDATE servers SET protocol=?, user=?, port=?, gateway_route_id=?, locale=?, device_type=?, note=?, policy_yaml=?, system_prompt=?, auth_method=?, identity_file=?, updated_at=?, password=? WHERE id=?`
-		args = append(args[:12], newPassword, s.ID)
+		query = `UPDATE servers SET protocol=?, user=?, port=?, gateway_route_id=?, locale=?, device_type=?, note=?, policy_yaml=?, system_prompt=?, auth_method=?, identity_file=?, ssh_options=?, updated_at=?, password=? WHERE id=?`
+		args = append(args[:13], newPassword, s.ID)
 	}
 	_, err := r.db.ExecContext(ctx, query, args...)
 	return err
@@ -128,12 +131,12 @@ func PasswordFor(ctx context.Context, db *sql.DB, serverID int64) (string, error
 func scanServer(row *sql.Row) (*model.Server, error) {
 	s := &model.Server{}
 	var gwRouteID sql.NullInt64
-	var policyYAML, systemPrompt sql.NullString
+	var policyYAML, systemPrompt, sshOptionsJSON sql.NullString
 	var createdAt, updatedAt, deviceType string
 	err := row.Scan(&s.ID, &s.Protocol, &s.Host, &s.User, new(string), &s.Port,
 		&gwRouteID, &s.Locale, &deviceType, &s.Note,
 		&policyYAML, &systemPrompt,
-		&s.AuthMethod, &s.IdentityFile,
+		&s.AuthMethod, &s.IdentityFile, &sshOptionsJSON,
 		&createdAt, &updatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -147,6 +150,7 @@ func scanServer(row *sql.Row) (*model.Server, error) {
 	s.DeviceType = model.DeviceType(deviceType)
 	s.PolicyYAML = policyYAML.String
 	s.SystemPrompt = systemPrompt.String
+	s.SSHOptions = unmarshalSSHOptions(sshOptionsJSON)
 	s.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 	s.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
 	return s, nil
@@ -157,12 +161,12 @@ func scanServers(rows *sql.Rows) ([]*model.Server, error) {
 	for rows.Next() {
 		s := &model.Server{}
 		var gwRouteID sql.NullInt64
-		var policyYAML, systemPrompt sql.NullString
+		var policyYAML, systemPrompt, sshOptionsJSON sql.NullString
 		var createdAt, updatedAt, deviceType string
 		if err := rows.Scan(&s.ID, &s.Protocol, &s.Host, &s.User, new(string), &s.Port,
 			&gwRouteID, &s.Locale, &deviceType, &s.Note,
 			&policyYAML, &systemPrompt,
-			&s.AuthMethod, &s.IdentityFile,
+			&s.AuthMethod, &s.IdentityFile, &sshOptionsJSON,
 			&createdAt, &updatedAt); err != nil {
 			return nil, err
 		}
@@ -172,11 +176,35 @@ func scanServers(rows *sql.Rows) ([]*model.Server, error) {
 		s.DeviceType = model.DeviceType(deviceType)
 		s.PolicyYAML = policyYAML.String
 		s.SystemPrompt = systemPrompt.String
+		s.SSHOptions = unmarshalSSHOptions(sshOptionsJSON)
 		s.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 		s.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
 		servers = append(servers, s)
 	}
 	return servers, rows.Err()
+}
+
+// marshalSSHOptions serialises SSHOptions to a nullable JSON string.
+// Returns sql.NullString{} (NULL) when opts is zero.
+func marshalSSHOptions(opts model.SSHOptions) sql.NullString {
+	if opts.IsZero() {
+		return sql.NullString{}
+	}
+	b, err := json.Marshal(opts)
+	if err != nil {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: string(b), Valid: true}
+}
+
+// unmarshalSSHOptions deserialises a nullable JSON column into SSHOptions.
+func unmarshalSSHOptions(ns sql.NullString) model.SSHOptions {
+	if !ns.Valid || ns.String == "" {
+		return model.SSHOptions{}
+	}
+	var opts model.SSHOptions
+	_ = json.Unmarshal([]byte(ns.String), &opts)
+	return opts
 }
 
 func nullInt64(p *int64) sql.NullInt64 {

@@ -448,6 +448,15 @@ func (m Model) renderDetail(s *model.Server) string {
 		sb.WriteString(row("Locale", s.Locale))
 	}
 	sb.WriteString(row("Gateway", gwLabel))
+	if len(s.SSHOptions.Ciphers) > 0 {
+		sb.WriteString(row("Ciphers", strings.Join(s.SSHOptions.Ciphers, ",")))
+	}
+	if len(s.SSHOptions.KexAlgorithms) > 0 {
+		sb.WriteString(row("KexAlgos", strings.Join(s.SSHOptions.KexAlgorithms, ",")))
+	}
+	if len(s.SSHOptions.HostKeyAlgorithms) > 0 {
+		sb.WriteString(row("HostKeyAlgs", strings.Join(s.SSHOptions.HostKeyAlgorithms, ",")))
+	}
 	return sb.String()
 }
 
@@ -501,9 +510,17 @@ func (m Model) renderServerForm() string {
 	}
 
 	// Identity File (index 8) — only shown when auth_method == "key"
+	ciphersIdx := 9
 	if m.srvFormAuthMethod == "key" {
 		body.WriteString(m.formRow("Identity File", m.formFields[6].View(), m.formFocusIdx == 8))
+	} else {
+		ciphersIdx = 8
 	}
+
+	// SSH legacy overrides (Ciphers/KexAlgorithms/HostKeyAlgorithms)
+	body.WriteString(m.formRow("Ciphers", m.formFields[7].View(), m.formFocusIdx == ciphersIdx))
+	body.WriteString(m.formRow("Kex Algorithms", m.formFields[8].View(), m.formFocusIdx == ciphersIdx+1))
+	body.WriteString(m.formRow("HostKey Algs", m.formFields[9].View(), m.formFocusIdx == ciphersIdx+2))
 
 	hint := "Tab next  Shift+Tab prev  Enter save  Esc cancel"
 	if m.srvFormGwPickerOpen || m.srvFormAuthPickerOpen {

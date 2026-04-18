@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS servers (
     system_prompt     TEXT,
     auth_method       TEXT    NOT NULL DEFAULT 'password',
     identity_file     TEXT    NOT NULL DEFAULT '',
+    ssh_options       TEXT,
     created_at        TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
     updated_at        TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
     UNIQUE(host, user)
@@ -260,3 +261,4 @@ INSERT OR IGNORE INTO schema_migrations(version) VALUES (12);
 INSERT OR IGNORE INTO schema_migrations(version) VALUES (13);
 INSERT OR IGNORE INTO schema_migrations(version) VALUES (14);
 INSERT OR IGNORE INTO schema_migrations(version) VALUES (15);
+INSERT OR IGNORE INTO schema_migrations(version) VALUES (16);

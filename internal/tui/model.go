@@ -434,13 +434,18 @@ func (m Model) filteredCommands() []tuiCommand {
 // ── server form ──────────────────────────────────────────────────────────────
 
 func (m *Model) initServerForm(srv *model.Server) tea.Cmd {
-	// 7 text fields: Protocol(0) Host(1) User(2) Password(3) Port(4) Locale(5) IdentityFile(6)
-	// Gateway picker: virtual Tab-index 5 (between Port and Locale)
+	// 10 text fields: Protocol(0) Host(1) User(2) Password(3) Port(4) Locale(5) IdentityFile(6)
+	//                 Ciphers(7) KexAlgorithms(8) HostKeyAlgorithms(9)
+	// Gateway picker:   virtual Tab-index 5 (between Port and Locale)
 	// Auth Method picker: virtual Tab-index 7 (between Locale and IdentityFile)
-	fields := make([]textinput.Model, 7)
+	// IdentityFile:     virtual Tab-index 8 (only when auth_method == "key")
+	// Ciphers:          virtual Tab-index 9 (or 8 when IdentityFile hidden)
+	// KexAlgorithms:    virtual Tab-index 10 (or 9)
+	// HostKeyAlgorithms: virtual Tab-index 11 (or 10)
+	fields := make([]textinput.Model, 10)
 	for i := range fields {
 		fields[i] = textinput.New()
-		fields[i].CharLimit = 256
+		fields[i].CharLimit = 512
 	}
 	fields[0].Placeholder = "ssh"
 	fields[1].Placeholder = "hostname or IP"
@@ -451,6 +456,9 @@ func (m *Model) initServerForm(srv *model.Server) tea.Cmd {
 	fields[4].CharLimit = 5
 	fields[5].Placeholder = "e.g. ko_KR.eucKR"
 	fields[6].Placeholder = "e.g. ~/.ssh/id_ed25519 (optional)"
+	fields[7].Placeholder = "comma-separated (leave empty = use defaults)"
+	fields[8].Placeholder = "comma-separated (leave empty = use defaults)"
+	fields[9].Placeholder = "comma-separated (leave empty = use defaults)"
 
 	// Gateway picker state
 	gwSearch := textinput.New()
@@ -473,6 +481,9 @@ func (m *Model) initServerForm(srv *model.Server) tea.Cmd {
 		}
 		fields[5].SetValue(srv.Locale)
 		fields[6].SetValue(srv.IdentityFile)
+		fields[7].SetValue(strings.Join(srv.SSHOptions.Ciphers, ","))
+		fields[8].SetValue(strings.Join(srv.SSHOptions.KexAlgorithms, ","))
+		fields[9].SetValue(strings.Join(srv.SSHOptions.HostKeyAlgorithms, ","))
 		if srv.AuthMethod != "" {
 			m.srvFormAuthMethod = srv.AuthMethod
 		} else {
@@ -526,6 +537,22 @@ func (m Model) submitServerForm() tea.Cmd {
 		}
 		port, _ := strconv.Atoi(portStr)
 
+		parseAlgoList := func(s string) []string {
+			var out []string
+			for _, p := range strings.Split(s, ",") {
+				p = strings.TrimSpace(p)
+				if p != "" {
+					out = append(out, p)
+				}
+			}
+			return out
+		}
+		sshOpts := model.SSHOptions{
+			Ciphers:           parseAlgoList(m.formFields[7].Value()),
+			KexAlgorithms:     parseAlgoList(m.formFields[8].Value()),
+			HostKeyAlgorithms: parseAlgoList(m.formFields[9].Value()),
+		}
+
 		srv := &model.Server{
 			Protocol:       proto,
 			Host:           host,
@@ -535,6 +562,7 @@ func (m Model) submitServerForm() tea.Cmd {
 			GatewayRouteID: m.srvFormSelectedGwID,
 			AuthMethod:     authMethod,
 			IdentityFile:   identityFile,
+			SSHOptions:     sshOpts,
 		}
 
 		var opErr error

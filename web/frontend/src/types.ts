@@ -1,3 +1,9 @@
+export interface SSHOptions {
+  ciphers?: string[]
+  kex_algorithms?: string[]
+  host_key_algorithms?: string[]
+}
+
 export interface Server {
   id: number
   protocol: string
@@ -10,6 +16,7 @@ export interface Server {
   note: string
   auth_method: string
   identity_file: string
+  ssh_options?: SSHOptions
   created_at: string
   updated_at: string
 }
@@ -26,6 +33,7 @@ export interface ServerFormData {
   note: string
   auth_method: string
   identity_file: string
+  ssh_options?: SSHOptions
 }
 
 export interface GatewayFormData {

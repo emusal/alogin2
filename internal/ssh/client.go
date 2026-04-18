@@ -50,6 +50,11 @@ type HopConfig struct {
 	KeyPath    string // path to private key; empty = use ssh-agent
 	AuthMethod string // "password" | "key"; empty = auto (try both)
 	Timeout    time.Duration
+	// Optional cipher/kex/hostkey overrides for legacy devices.
+	// nil slices mean "use library defaults".
+	Ciphers           []string
+	KexAlgorithms     []string
+	HostKeyAlgorithms []string
 }
 
 // Addr returns "host:port".
@@ -165,7 +170,7 @@ func makeSSHConfig(cfg HopConfig, onHostKeyErr ...func(error)) (*gossh.ClientCon
 		)
 	}
 
-	hkc, hostKeyAlgos := buildHostKeyCallback()
+	hkc, defaultHostKeyAlgos := buildHostKeyCallback()
 
 	// Wrap the callback so callers can capture host-key errors separately from
 	// auth errors (gossh folds both into the same "handshake failed" message).
@@ -183,13 +188,27 @@ func makeSSHConfig(cfg HopConfig, onHostKeyErr ...func(error)) (*gossh.ClientCon
 		wrappedHKC = hkc
 	}
 
-	return &gossh.ClientConfig{
+	// Per-server overrides for legacy devices (e.g. old network equipment).
+	// When set, these replace the library's built-in negotiation lists.
+	hostKeyAlgos := defaultHostKeyAlgos
+	if len(cfg.HostKeyAlgorithms) > 0 {
+		hostKeyAlgos = cfg.HostKeyAlgorithms
+	}
+
+	clientCfg := &gossh.ClientConfig{
 		User:              cfg.User,
 		Auth:              authMethods,
 		HostKeyCallback:   wrappedHKC,
 		HostKeyAlgorithms: hostKeyAlgos,
 		Timeout:           timeout,
-	}, nil
+	}
+	if len(cfg.Ciphers) > 0 {
+		clientCfg.Ciphers = cfg.Ciphers
+	}
+	if len(cfg.KexAlgorithms) > 0 {
+		clientCfg.KeyExchanges = cfg.KexAlgorithms
+	}
+	return clientCfg, nil
 }
 
 func publicKeyAuth(keyPath string) (gossh.AuthMethod, error) {
