@@ -224,10 +224,12 @@ func buildHopChain(ctx context.Context, database *db.DB, vlt vault.Vault, srv *m
 				}
 				pwd, _ := vlt.Get(hopSrv.User + "@" + hopSrv.Host)
 				hops = append(hops, internalssh.HopConfig{
-					Host:     database.Hosts.Resolve(ctx, hopSrv.Host),
-					Port:     hopSrv.EffectivePort(),
-					User:     hopSrv.User,
-					Password: pwd,
+					Host:       database.Hosts.Resolve(ctx, hopSrv.Host),
+					Port:       hopSrv.EffectivePort(),
+					User:       hopSrv.User,
+					Password:   pwd,
+					AuthMethod: hopSrv.AuthMethod,
+					KeyPath:    hopSrv.IdentityFile,
 				})
 			}
 		}
@@ -252,20 +254,24 @@ func buildHopChain(ctx context.Context, database *db.DB, vlt vault.Vault, srv *m
 			}
 			pwd, _ := vlt.Get(hopSrv.User + "@" + hopSrv.Host)
 			hops = append(hops, internalssh.HopConfig{
-				Host:     database.Hosts.Resolve(ctx, hopSrv.Host),
-				Port:     hopSrv.EffectivePort(),
-				User:     hopSrv.User,
-				Password: pwd,
+				Host:       database.Hosts.Resolve(ctx, hopSrv.Host),
+				Port:       hopSrv.EffectivePort(),
+				User:       hopSrv.User,
+				Password:   pwd,
+				AuthMethod: hopSrv.AuthMethod,
+				KeyPath:    hopSrv.IdentityFile,
 			})
 		}
 	}
 
 	pwd, _ := vlt.Get(srv.User + "@" + srv.Host)
 	hops = append(hops, internalssh.HopConfig{
-		Host:     database.Hosts.Resolve(ctx, srv.Host),
-		Port:     srv.EffectivePort(),
-		User:     srv.User,
-		Password: pwd,
+		Host:       database.Hosts.Resolve(ctx, srv.Host),
+		Port:       srv.EffectivePort(),
+		User:       srv.User,
+		Password:   pwd,
+		AuthMethod: srv.AuthMethod,
+		KeyPath:    srv.IdentityFile,
 	})
 	return hops, nil
 }

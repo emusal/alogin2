@@ -281,10 +281,12 @@ func (h *Handler) buildHops(ctx context.Context, srv *model.Server, profileOverr
 					}
 					pwd, _ := h.vlt.Get(hopSrv.User + "@" + hopSrv.Host)
 					hops = append(hops, internalssh.HopConfig{
-						Host:     h.resolveHost(ctx, hopSrv.Host),
-						Port:     hopSrv.EffectivePort(),
-						User:     hopSrv.User,
-						Password: pwd,
+						Host:       h.resolveHost(ctx, hopSrv.Host),
+						Port:       hopSrv.EffectivePort(),
+						User:       hopSrv.User,
+						Password:   pwd,
+						AuthMethod: hopSrv.AuthMethod,
+						KeyPath:    hopSrv.IdentityFile,
 					})
 				}
 			}
@@ -310,10 +312,12 @@ func (h *Handler) buildHops(ctx context.Context, srv *model.Server, profileOverr
 			}
 			pwd, _ := h.vlt.Get(hopSrv.User + "@" + hopSrv.Host)
 			hops = append(hops, internalssh.HopConfig{
-				Host:     h.resolveHost(ctx, hopSrv.Host),
-				Port:     hopSrv.EffectivePort(),
-				User:     hopSrv.User,
-				Password: pwd,
+				Host:       h.resolveHost(ctx, hopSrv.Host),
+				Port:       hopSrv.EffectivePort(),
+				User:       hopSrv.User,
+				Password:   pwd,
+				AuthMethod: hopSrv.AuthMethod,
+				KeyPath:    hopSrv.IdentityFile,
 			})
 		}
 	}
@@ -321,10 +325,12 @@ func (h *Handler) buildHops(ctx context.Context, srv *model.Server, profileOverr
 	// Destination hop
 	pwd, _ := h.vlt.Get(srv.User + "@" + srv.Host)
 	hops = append(hops, internalssh.HopConfig{
-		Host:     h.resolveHost(ctx, srv.Host),
-		Port:     srv.EffectivePort(),
-		User:     srv.User,
-		Password: pwd,
+		Host:       h.resolveHost(ctx, srv.Host),
+		Port:       srv.EffectivePort(),
+		User:       srv.User,
+		Password:   pwd,
+		AuthMethod: srv.AuthMethod,
+		KeyPath:    srv.IdentityFile,
 	})
 	return hops, nil
 }
