@@ -38,15 +38,11 @@ func openTmux(ctx context.Context, name string, hosts []HostEntry, tileX int, bi
 
 	_ = tmuxRun("select-layout", "-t", sessionName, "tiled")
 
-	// Enable synchronize-panes after a delay so all sessions finish connecting
-	// (and password injection completes) before keystrokes are broadcast.
-	// Run in a background OS process so tmux has a valid server context.
-	delay := syncDelay(len(hosts))
-	go func() {
-		_ = exec.Command("sh", "-c",
-			fmt.Sprintf("sleep %d && tmux set-window-option -t %s synchronize-panes on", delay, sessionName),
-		).Run()
-	}()
+	// Enable synchronize-panes before attaching so input is broadcast to all
+	// panes immediately without requiring a manual click.
+	// Password injection happens inside each pane's alogin process independently,
+	// so enabling sync now does not interfere with it.
+	_ = tmuxRun("set-window-option", "-t", sessionName, "synchronize-panes", "on")
 
 	// Attach to session
 	cmd := exec.CommandContext(ctx, "tmux", "attach-session", "-t", sessionName)
@@ -54,18 +50,6 @@ func openTmux(ctx context.Context, name string, hosts []HostEntry, tileX int, bi
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
-}
-
-// syncDelay returns seconds to wait before enabling synchronize-panes.
-// Give more time for larger clusters.
-func syncDelay(hostCount int) int {
-	if hostCount <= 4 {
-		return 5
-	}
-	if hostCount <= 10 {
-		return 8
-	}
-	return 12
 }
 
 func buildSSHCmd(h HostEntry) string {

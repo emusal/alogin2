@@ -9,11 +9,12 @@ import { PluginList } from './components/PluginList'
 import { AppServerList } from './components/AppServerList'
 import { ProfileList } from './components/ProfileList'
 import { Terminal } from './components/Terminal'
+import { AgentApproval } from './components/AgentApproval'
 import { PageBanner } from './components/PageBanner'
 import type { Server, Cluster, Profile } from './types'
 import './App.css'
 
-type View = 'servers' | 'gateways' | 'clusters' | 'hosts' | 'tunnels' | 'plugins' | 'app-servers' | 'profiles' | string
+type View = 'servers' | 'gateways' | 'clusters' | 'hosts' | 'tunnels' | 'plugins' | 'app-servers' | 'profiles' | 'agent' | string
 
 interface TerminalTab {
   id: string
@@ -34,6 +35,7 @@ export default function App() {
   const [clusterDashTabs, setClusterDashTabs] = useState<ClusterDashTab[]>([])
   const [servers, setServers] = useState<Server[]>([])
   const [activeProfile, setActiveProfile] = useState<Profile | null>(null)
+  const [pendingCount, setPendingCount] = useState(0)
 
   useEffect(() => {
     fetch('/api/servers')
@@ -47,6 +49,19 @@ export default function App() {
         setActiveProfile(list.find(p => p.is_active) ?? null)
       })
       .catch(() => {})
+  }, [])
+
+  // Poll pending approval count for nav badge
+  useEffect(() => {
+    const poll = () => {
+      fetch('/api/agent/pending')
+        .then(r => r.json())
+        .then(data => setPendingCount(Array.isArray(data) ? data.length : 0))
+        .catch(() => {})
+    }
+    poll()
+    const id = setInterval(poll, 5000)
+    return () => clearInterval(id)
   }, [])
 
   const connect = (server: Server, app?: string) => {
@@ -146,6 +161,15 @@ export default function App() {
           >
             App Servers
           </button>
+          <button
+            className={`nav-btn ${view === 'agent' ? 'active' : ''}`}
+            onClick={() => setView('agent')}
+          >
+            Agent
+            {pendingCount > 0 && (
+              <span className="pending-badge">{pendingCount}</span>
+            )}
+          </button>
           {clusterDashTabs.map(tab => (
             <span key={tab.id} className={`nav-tab ${view === tab.id ? 'active' : ''}`} style={{ '--tab-color': 'var(--accent2)' } as React.CSSProperties}>
               <button
@@ -202,6 +226,7 @@ export default function App() {
         {view === 'tunnels'  && <TunnelList servers={servers} />}
         {view === 'plugins'     && <PluginList />}
         {view === 'app-servers' && <AppServerList servers={servers} onConnect={connectAppServer} />}
+        {view === 'agent'       && <AgentApproval />}
         {clusterDashTabs.map(tab => (
           <div key={tab.id} style={{ display: view === tab.id ? 'flex' : 'none', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
             <ClusterDashboard

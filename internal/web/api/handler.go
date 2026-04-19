@@ -105,6 +105,14 @@ func (h *Handler) Router() http.Handler {
 	r.Delete("/app-servers/{id}", h.deleteAppServer)
 	r.Post("/app-servers/{id}/connect", h.connectAppServer)
 
+	// Agent HITL approvals
+	r.Get("/agent/pending", h.listPendingApprovals)
+	r.Post("/agent/approve/{token}", h.approveRequest)
+	r.Post("/agent/deny/{token}", h.denyRequest)
+	r.Get("/agent/trust", h.listTrustWindows)
+	r.Post("/agent/trust", h.grantTrust)
+	r.Delete("/agent/trust/{scope}", h.revokeTrust)
+
 	return r
 }
 

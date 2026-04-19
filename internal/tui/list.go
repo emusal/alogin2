@@ -598,25 +598,34 @@ func (m Model) renderConfirmDelete() string {
 		return ""
 	}
 	w := m.w()
-	accent := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
+	innerW := min(w-10, 46)
+
+	accentStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
+	serverStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
+
+	title := accentStyle.Render("Delete server?")
+	server := serverStyle.Render(m.deleteTarget.User + "@" + m.deleteTarget.Host)
+
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("196")).
-		Padding(1, 3).
-		Width(min(w-8, 50))
+		Padding(1, 2).
+		Width(innerW)
 
-	content := accent.Render("Delete server?") + "\n\n" +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("255")).
-			Render(m.deleteTarget.User+"@"+m.deleteTarget.Host) + "\n\n" +
-		m.dimStyle.Render("[y] confirm  [n / Esc] cancel")
-
+	content := title + "\n\n" + server
 	box := boxStyle.Render(content)
+
 	padLeft := (w - lipgloss.Width(box)) / 2
 	if padLeft < 0 {
 		padLeft = 0
 	}
-	body := "\n\n\n\n" + strings.Repeat(" ", padLeft) + box
-	return m.renderScreen("Confirm Delete", "server registry", body, "y confirm  n / Esc cancel")
+	pad := strings.Repeat(" ", padLeft)
+	boxLines := strings.Split(box, "\n")
+	for i, l := range boxLines {
+		boxLines[i] = pad + l
+	}
+	body := "\n\n\n\n" + strings.Join(boxLines, "\n")
+	return m.renderScreen("Confirm Delete", "server registry", body, "y  confirm    n / Esc  cancel")
 }
 
 // ── gateway list/form ─────────────────────────────────────────────────────────

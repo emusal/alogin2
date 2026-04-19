@@ -20,3 +20,7 @@
 | `internal/completion` | Shell completion script generators (zsh/bash) |
 | `web/frontend` | React + TypeScript + xterm.js (Vite build → `web/frontend/dist`) |
 | `completions` | Shell shim files (`alogin.zsh`, `alogin.bash`) providing `t`/`r`/`s`/`f`/`m`/`ct`/`cr` |
+| `vscode-extension` | TypeScript VSCode/Cursor extension (`alogin-skills`): sidebar skill panel, MCP client, HITL webview, Cursor integration |
+| `vscode-extension/src/commands` | One file per built-in skill (healthCheck, smartRollback, logTriage, driftDetector, securityScan, deploySmoke) + customSkillRunner, serverPicker |
+| `vscode-extension/src/webviews` | Rich HTML panels: HealthReportWebview, RollbackWebview (HITL), SkillBuilderWebview |
+| `vscode-extension/src/utils` | aloginMcp (JSON-RPC client), customSkills (storage + seeding), mcpRegistration (Cursor), i18n |

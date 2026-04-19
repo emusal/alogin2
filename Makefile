@@ -1,7 +1,9 @@
-BIN      := alogin
-CMD      := ./cmd/alogin
-INSTALL  := ~/.local/bin/$(BIN)
-FRONTEND := web/frontend
+BIN        := alogin
+CMD        := ./cmd/alogin
+INSTALL    := ~/.local/bin/$(BIN)
+SKILLS_SRC := skills
+SKILLS_DST := ~/.agent/skills
+FRONTEND   := web/frontend
 VERSION  := $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo "dev")
 LDFLAGS  := -ldflags "-X github.com/emusal/alogin2/internal/cli.Version=$(VERSION) -s -w"
 
@@ -26,14 +28,23 @@ build-race:                     ## Build with race detector
 # ── install ───────────────────────────────────────────────────────────────────
 
 .PHONY: install
-install: build-web              ## Install CLI with embedded Web UI to $(INSTALL)
+install: build-web install-skills  ## Install CLI with embedded Web UI to $(INSTALL) and skills to $(SKILLS_DST)
 	mkdir -p $(dir $(INSTALL))
 	cp $(BIN) $(INSTALL)
 
 .PHONY: install-no-web
-install-no-web: build           ## Install CLI without Web UI to $(INSTALL)
+install-no-web: build install-skills  ## Install CLI without Web UI to $(INSTALL) and skills to $(SKILLS_DST)
 	mkdir -p $(dir $(INSTALL))
 	cp $(BIN) $(INSTALL)
+
+.PHONY: install-skills
+install-skills:                 ## Install skills to $(SKILLS_DST)
+	@for skill in $(SKILLS_SRC)/*/; do \
+	  name=$$(basename "$$skill"); \
+	  mkdir -p $(SKILLS_DST)/$$name; \
+	  cp "$$skill/SKILL.md" $(SKILLS_DST)/$$name/SKILL.md; \
+	  echo "  installed skill: $$name → $(SKILLS_DST)/$$name/SKILL.md"; \
+	done
 
 # ── frontend ──────────────────────────────────────────────────────────────────
 
@@ -80,29 +91,33 @@ lint: vet                       ## Run vet + basic checks
 # ── cross-compile ─────────────────────────────────────────────────────────────
 
 .PHONY: dist
-dist:                           ## Cross-compile for all release targets
+dist: dist-skills               ## Cross-compile for all release targets
 	GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN)-darwin-arm64  $(CMD)
 	GOOS=darwin  GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN)-darwin-amd64  $(CMD)
 	GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN)-linux-amd64   $(CMD)
 	GOOS=linux   GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN)-linux-arm64   $(CMD)
 
 .PHONY: dist-web
-dist-web: frontend              ## Cross-compile all platforms with embedded Web UI
+dist-web: frontend dist-skills  ## Cross-compile all platforms with embedded Web UI
 	GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -tags web -o $(BIN)-web-darwin-arm64 $(CMD)
 	GOOS=darwin  GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -tags web -o $(BIN)-web-darwin-amd64 $(CMD)
 	GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -tags web -o $(BIN)-web-linux-amd64  $(CMD)
 	GOOS=linux   GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -tags web -o $(BIN)-web-linux-arm64  $(CMD)
 	tar -czf plugins.tar.gz -C testenv plugins
 
+.PHONY: dist-skills
+dist-skills:                    ## Package skills into skills.tar.gz for release
+	tar -czf skills.tar.gz -C $(SKILLS_SRC) .
+
 .PHONY: checksums
 checksums:                      ## Generate SHA256 checksums for release binaries
-	shasum -a 256 $(BIN)-* plugins.tar.gz > checksums.txt
+	shasum -a 256 $(BIN)-* plugins.tar.gz skills.tar.gz > checksums.txt
 
 # ── clean ─────────────────────────────────────────────────────────────────────
 
 .PHONY: clean
 clean:                          ## Remove built binaries
-	rm -f $(BIN) $(BIN)-darwin-arm64 $(BIN)-darwin-amd64 $(BIN)-linux-amd64 $(BIN)-linux-arm64 $(BIN)-web-darwin-arm64 $(BIN)-web-darwin-amd64 $(BIN)-web-linux-amd64 $(BIN)-web-linux-arm64 checksums.txt plugins.tar.gz
+	rm -f $(BIN) $(BIN)-darwin-arm64 $(BIN)-darwin-amd64 $(BIN)-linux-amd64 $(BIN)-linux-arm64 $(BIN)-web-darwin-arm64 $(BIN)-web-darwin-amd64 $(BIN)-web-linux-amd64 $(BIN)-web-linux-arm64 checksums.txt plugins.tar.gz skills.tar.gz
 
 .PHONY: clean-all
 clean-all: clean                ## Remove binaries + frontend build artifacts

@@ -11,15 +11,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
+
+
 // newAgentCmd returns the "agent" group command for AI/MCP tooling.
 func newAgentCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "agent",
-		Short: "AI agent tools: MCP server, setup guide, and safety policy management",
+		Short: "AI agent tools: MCP server, setup, skills, and safety policy management",
 		Long: `Tools for integrating alogin with AI agents (LLMs).
 
   alogin agent mcp            — run as an MCP server over stdio (for Claude Desktop, etc.)
-  alogin agent setup          — print the MCP config and system prompt to copy into your AI client
+  alogin agent setup [client] — register alogin MCP in AI clients (cursor/claude-desktop/vscode/all)
+  alogin agent skills         — manage agent skills (install, list)
   alogin agent policy         — manage global HITL/RBAC safety policies (show, validate)
   alogin agent audit          — query the structured MCP execution audit log
   alogin agent approve        — approve a pending HITL request
@@ -35,6 +38,7 @@ func newAgentCmd() *cobra.Command {
 	cmd.AddCommand(
 		newAgentMCPCmd(),
 		newAgentSetupCmd(),
+		newAgentSkillsCmd(),
 		newAgentPolicyCmd(),
 		newAgentAuditCmd(),
 		newAgentApproveCmd(),
@@ -109,82 +113,6 @@ Available tools:
 	}
 }
 
-// newAgentSetupCmd prints the MCP configuration and system prompt for AI clients.
-func newAgentSetupCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "setup",
-		Short: "Print MCP config and system prompt for AI clients (Claude Desktop, etc.)",
-		Annotations: map[string]string{
-			skipDBAnnotation: "true",
-		},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			binPath, _ := os.Executable()
-
-			auditPath := "~/.config/alogin/audit.jsonl"
-			if cfg != nil {
-				auditPath = filepath.Join(filepath.Dir(cfg.DBPath), "audit.jsonl")
-			}
-
-			fmt.Printf(`alogin — Security Gateway for Agentic AI
-========================================
-
-MCP server config (paste into Claude Desktop claude_desktop_config.json):
-
-  {
-    "mcpServers": {
-      "alogin": {
-        "command": %q,
-        "args": ["agent", "mcp"]
-      }
-    }
-  }
-
-Recommended system prompt snippet:
-
-  You have access to alogin, a secure SSH gateway for agentic infrastructure access.
-  Use list_servers to discover available servers before connecting.
-  Always provide an "intent" parameter when calling exec_command or exec_on_cluster
-  to describe what you are doing and why.
-  Do not run destructive commands (rm, shutdown, reboot) without explicit user confirmation.
-  Prefer read-only inspection commands before modifying system state.
-
-Available MCP tools (12):
-  list_servers, get_server       — query server registry
-  list_tunnels, get_tunnel       — tunnel configurations and status
-  start_tunnel, stop_tunnel      — tunnel lifecycle
-  list_clusters, get_cluster     — cluster groups with member details
-  exec_command                   — run SSH commands on a single server
-  exec_on_cluster                — run SSH commands on all cluster servers in parallel
-  inspect_node                   — structured health snapshot (CPU, mem, disk, processes)
-  log_analyzer                   — stream logs and filter relevant error patterns
-
-Audit log: %s
-  All exec_command, exec_on_cluster, inspect_node, and log_analyzer calls are logged here in JSONL format.
-  Fields: timestamp, event, agent_id, server/cluster info, commands, intent.
-  Query: alogin agent audit list [--agent <id>] [--server <id>] [--since 1h] [--json]
-
-Safety policy (optional): ~/.config/alogin/agent-policy.yaml
-  YAML file that controls what commands agents can run without human approval.
-  Supports: command regex rules, agent-id globs, server/cluster scoping, time windows.
-  Actions per rule: allow | deny | require_approval (HITL)
-  Guide: docs/agent-policy.md   — full syntax reference with examples
-  $ alogin agent policy show       — print active policy
-  $ alogin agent policy validate   — check for syntax errors
-
-Per-server overrides:
-  $ alogin agent server-policy set <server-id> --file policy.yaml
-  $ alogin agent server-prompt set <server-id> --text "Only run read-only commands on this host."
-
-LLM system prompt guide: docs/SYSTEM_PROMPT.md
-  Copy the recommended snippet into your AI client's system prompt for safe agentic usage.
-
-Ready-to-use config file: docs/mcp-config.json
-  Copy-paste into claude_desktop_config.json (replace "alogin" with the full binary path if needed).
-`, binPath, auditPath)
-			return nil
-		},
-	}
-}
 
 // newAgentPolicyCmd manages HITL/RBAC safety policies.
 func newAgentPolicyCmd() *cobra.Command {

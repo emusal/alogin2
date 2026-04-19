@@ -546,7 +546,8 @@ _alogin() {
           local -a agent_subcmds
           agent_subcmds=(
             'mcp:Run alogin as an MCP server over stdio'
-            'setup:Print MCP config and system prompt for AI clients'
+            'setup:Register alogin MCP in AI clients (cursor/claude-desktop/vscode/all)'
+            'skills:Manage agent skills (install, list)'
             'policy:Manage HITL/RBAC safety policies'
             'audit:Query the MCP execution audit log'
             'approve:Approve a pending HITL request'
@@ -564,6 +565,25 @@ _alogin() {
             sub) _describe 'subcommand' agent_subcmds ;;
             sub_args)
               case $words[1] in
+                setup)
+                  _arguments '1: :(cursor claude-desktop vscode all)' ;;
+                skills)
+                  _arguments -C '1: :->ssub' '*:: :->ssub_args'
+                  case $state in
+                    ssub)
+                      local -a skills_subcmds
+                      skills_subcmds=('install:Download and install skills from GitHub' 'list:List installed skills')
+                      _describe 'subcommand' skills_subcmds ;;
+                    ssub_args)
+                      case $words[1] in
+                        install)
+                          _arguments \
+                            '--dir[Install destination]:dir:_files -/' \
+                            '*: :(alogin alogin-admin alogin-cli all)' ;;
+                        list)
+                          _arguments '--dir[Skills directory]:dir:_files -/' ;;
+                      esac ;;
+                  esac ;;
                 policy)
                   _arguments -C '1: :->psub' '*:: :->psub_args'
                   case $state in
@@ -940,9 +960,31 @@ _alogin_completion() {
     # ── agent ───────────────────────────────────────────────────────────────
     agent)
       if [[ $cword -eq 2 ]]; then
-        COMPREPLY=($(compgen -W "mcp setup policy audit approve deny pending trust untrust trust-list server-policy server-prompt server-memory" -- "$cur"))
+        COMPREPLY=($(compgen -W "mcp setup skills policy audit approve deny pending trust untrust trust-list server-policy server-prompt server-memory" -- "$cur"))
       elif [[ $cword -ge 3 ]]; then
         case "$sub" in
+          setup)
+            if [[ $cword -eq 3 ]]; then
+              COMPREPLY=($(compgen -W "cursor claude-desktop vscode all" -- "$cur"))
+            fi
+            ;;
+          skills)
+            if [[ $cword -eq 3 ]]; then
+              COMPREPLY=($(compgen -W "install list" -- "$cur"))
+            elif [[ $cword -ge 4 ]]; then
+              case "$sub2" in
+                install)
+                  if [[ "$cur" == --* ]]; then
+                    COMPREPLY=($(compgen -W "--dir" -- "$cur"))
+                  else
+                    COMPREPLY=($(compgen -W "alogin alogin-admin alogin-cli all" -- "$cur"))
+                  fi
+                  ;;
+                list)
+                  COMPREPLY=($(compgen -W "--dir" -- "$cur")) ;;
+              esac
+            fi
+            ;;
           policy)
             if [[ $cword -eq 3 ]]; then
               COMPREPLY=($(compgen -W "show validate dry-run" -- "$cur"))

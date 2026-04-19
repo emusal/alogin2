@@ -163,3 +163,23 @@ export interface BroadcastSummary {
   failed: number
   failedDetails: { host: string; error: string }[]
 }
+
+// Agent HITL types
+export interface PendingApproval {
+  token: string
+  agent_id: string
+  server_id: number
+  cluster_id: number
+  host: string
+  commands: string[]
+  intent: string
+  expires_at: string
+  created_at: string
+}
+
+export interface TrustWindow {
+  scope: string
+  granted_at: string
+  expires_at: string
+  granted_by: string
+}

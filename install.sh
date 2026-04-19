@@ -79,6 +79,42 @@ INSTALLED_VERSION=$("$DEST" version 2>/dev/null | head -1)
 echo "Installed: ${INSTALLED_VERSION}"
 echo "Location : ${DEST}"
 
+# ── Install skills ────────────────────────────────────────────────────────────
+SKILLS_DIR="${ALOGIN_SKILLS_DIR:-$HOME/.agent/skills}"
+
+if [ "${ALOGIN_NO_SKILLS:-0}" != "1" ]; then
+  if [ -n "${ALOGIN_VERSION:-}" ]; then
+    SKILLS_URL="https://github.com/${REPO}/releases/download/v${VERSION}/skills.tar.gz"
+  else
+    SKILLS_URL="https://github.com/${REPO}/releases/latest/download/skills.tar.gz"
+  fi
+
+  TMP_SKILLS=$(mktemp -d)
+  trap 'rm -rf "$TMP_SKILLS"' EXIT
+
+  echo "Downloading skills ..."
+  SKILLS_OK=0
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$SKILLS_URL" -o "$TMP_SKILLS/skills.tar.gz" && SKILLS_OK=1
+  elif command -v wget >/dev/null 2>&1; then
+    wget -qO "$TMP_SKILLS/skills.tar.gz" "$SKILLS_URL" && SKILLS_OK=1
+  fi
+
+  if [ "$SKILLS_OK" = "1" ]; then
+    mkdir -p "$TMP_SKILLS/skills"
+    tar -xzf "$TMP_SKILLS/skills.tar.gz" -C "$TMP_SKILLS/skills"
+    for skill_dir in "$TMP_SKILLS/skills/"/*/; do
+      [ -d "$skill_dir" ] || continue
+      name=$(basename "$skill_dir")
+      mkdir -p "$SKILLS_DIR/$name"
+      cp "$skill_dir/SKILL.md" "$SKILLS_DIR/$name/SKILL.md"
+    done
+    echo "Skills    : ${SKILLS_DIR}"
+  else
+    echo "Warning: could not download skills (skipping)" >&2
+  fi
+fi
+
 # ── Install sample plugins ─────────────────────────────────────────────────────
 PLUGIN_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/alogin/plugins"
 

@@ -316,14 +316,30 @@ Available MCP tools (11):
 - `exec_on_cluster` — run SSH commands on all cluster servers in parallel
 - `inspect_node` — structured health snapshot (CPU, mem, disk, top processes)
 
-### `agent setup`
-Print MCP config snippet and system prompt for AI clients (Claude Desktop, etc.).
+### `agent setup [client]`
+Register alogin as an MCP server in supported AI clients. Without a client argument, runs interactively. Skips DB init.
 
 ```
-alogin agent setup
+alogin agent setup                  # interactive: detect clients, prompt to choose
+alogin agent setup cursor           # Cursor settings.json
+alogin agent setup claude-desktop   # claude_desktop_config.json (prompts restart)
+alogin agent setup vscode           # VS Code settings.json
+alogin agent setup all              # all detected clients
 ```
 
-Skips DB init.
+Merges `mcpServers` / `cursor.mcpServers` / `mcp.servers` key — does not overwrite unrelated settings.
+
+### `agent skills`
+Manage alogin agent skills. Subcommands: `install`, `list`. Skips DB init.
+
+```
+alogin agent skills install                      # fetch from GitHub latest release
+alogin agent skills install --dir ~/my-skills    # custom destination
+alogin agent skills list                         # show installed skills
+alogin agent skills list --dir ~/my-skills
+```
+
+Skills are installed as `<dir>/<skill-name>/SKILL.md`. Source: `github.com/emusal/alogin2` latest release `skills.tar.gz`.
 
 ### `agent policy`
 Global HITL/RBAC policy management. Subcommands: `show`, `validate`, `dry-run`. Skips DB init.
