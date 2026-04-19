@@ -2,7 +2,7 @@ BIN        := alogin
 CMD        := ./cmd/alogin
 INSTALL    := ~/.local/bin/$(BIN)
 SKILLS_SRC := skills
-SKILLS_DST := ~/.agent/skills
+SKILLS_DST := ~/.agents/skills
 FRONTEND   := web/frontend
 VERSION  := $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo "dev")
 LDFLAGS  := -ldflags "-X github.com/emusal/alogin2/internal/cli.Version=$(VERSION) -s -w"
