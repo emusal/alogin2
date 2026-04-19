@@ -313,7 +313,7 @@ _alogin() {
         'ssh:Connect to remote hosts (SSH, SFTP, FTP, cluster)'
         'vault:Manage stored credentials'
         'net:Manage network resources (hosts, tunnels, gateways, profiles)'
-        'agent:AI/MCP tools: MCP server, setup, policy'
+        'agent:AI/MCP tools: MCP server, setup guide, policy'
         # ── Interactive UIs ───────────────────────────────────────────────
         'tui:Interactive fuzzy host selector'
         'web:Start the web UI server'
@@ -546,7 +546,7 @@ _alogin() {
           local -a agent_subcmds
           agent_subcmds=(
             'mcp:Run alogin as an MCP server over stdio'
-            'setup:Register alogin MCP in AI clients (cursor/claude-desktop/vscode/all)'
+            'setup:Print MCP config and system prompt for AI clients'
             'skills:Manage agent skills (install, list)'
             'policy:Manage HITL/RBAC safety policies'
             'audit:Query the MCP execution audit log'
@@ -565,8 +565,7 @@ _alogin() {
             sub) _describe 'subcommand' agent_subcmds ;;
             sub_args)
               case $words[1] in
-                setup)
-                  _arguments '1: :(cursor claude-desktop vscode all)' ;;
+                setup) ;;
                 skills)
                   _arguments -C '1: :->ssub' '*:: :->ssub_args'
                   case $state in
@@ -963,11 +962,7 @@ _alogin_completion() {
         COMPREPLY=($(compgen -W "mcp setup skills policy audit approve deny pending trust untrust trust-list server-policy server-prompt server-memory" -- "$cur"))
       elif [[ $cword -ge 3 ]]; then
         case "$sub" in
-          setup)
-            if [[ $cword -eq 3 ]]; then
-              COMPREPLY=($(compgen -W "cursor claude-desktop vscode all" -- "$cur"))
-            fi
-            ;;
+          setup) ;;
           skills)
             if [[ $cword -eq 3 ]]; then
               COMPREPLY=($(compgen -W "install list" -- "$cur"))

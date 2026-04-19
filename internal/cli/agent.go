@@ -17,11 +17,11 @@ import (
 func newAgentCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "agent",
-		Short: "AI agent tools: MCP server, setup, skills, and safety policy management",
+		Short: "AI agent tools: MCP server, setup guide, skills, and safety policy management",
 		Long: `Tools for integrating alogin with AI agents (LLMs).
 
   alogin agent mcp            — run as an MCP server over stdio (for Claude Desktop, etc.)
-  alogin agent setup [client] — register alogin MCP in AI clients (cursor/claude-desktop/vscode/all)
+  alogin agent setup          — print the MCP config and system prompt to copy into your AI client
   alogin agent skills         — manage agent skills (install, list)
   alogin agent policy         — manage global HITL/RBAC safety policies (show, validate)
   alogin agent audit          — query the structured MCP execution audit log

@@ -3,14 +3,12 @@ package cli
 import (
 	"archive/tar"
 	"compress/gzip"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -18,362 +16,104 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// mcpEntry is the JSON shape written into each client's config file.
-type mcpEntry struct {
-	Command string   `json:"command"`
-	Args    []string `json:"args"`
-}
-
-// clientDef describes a supported MCP client.
-type clientDef struct {
-	Name        string
-	ConfigPath  func() string // returns expanded path; empty string = not found
-	MergeConfig func(path, binPath string) error
-}
-
-var supportedClients = []clientDef{
-	{
-		Name:        "cursor",
-		ConfigPath:  cursorConfigPath,
-		MergeConfig: mergeCursorConfig,
-	},
-	{
-		Name:        "claude-desktop",
-		ConfigPath:  claudeDesktopConfigPath,
-		MergeConfig: mergeClaudeDesktopConfig,
-	},
-	{
-		Name:        "vscode",
-		ConfigPath:  vscodeConfigPath,
-		MergeConfig: mergeVSCodeConfig,
-	},
-}
-
 // ── newAgentSetupCmd ──────────────────────────────────────────────────────────
 
+// newAgentSetupCmd prints the MCP configuration and system prompt for AI clients.
 func newAgentSetupCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "setup [client]",
-		Short: "Register alogin as an MCP server in AI clients",
-		Long: `Register alogin as an MCP server in supported AI clients.
-
-Supported clients: cursor, claude-desktop, vscode, all
-
-Without a client argument, runs interactively and prompts you to choose.
-"all" detects every installed client and registers alogin in each.
-
-Examples:
-  alogin agent setup                  # interactive: pick client(s)
-  alogin agent setup cursor           # register in Cursor only
-  alogin agent setup claude-desktop   # register in Claude Desktop
-  alogin agent setup vscode           # register in VS Code
-  alogin agent setup all              # all detected clients`,
-		Args: cobra.MaximumNArgs(1),
+	return &cobra.Command{
+		Use:   "setup",
+		Short: "Print MCP config and system prompt for AI clients (Claude Desktop, etc.)",
 		Annotations: map[string]string{
 			skipDBAnnotation: "true",
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			binPath, _ := os.Executable()
 
-			target := ""
-			if len(args) > 0 {
-				target = strings.ToLower(args[0])
+			auditPath := "~/.config/alogin/audit.jsonl"
+			if cfg != nil {
+				auditPath = filepath.Join(filepath.Dir(cfg.DBPath), "audit.jsonl")
 			}
 
-			switch target {
-			case "":
-				return setupInteractive(binPath)
-			case "all":
-				return setupAll(binPath)
-			default:
-				return setupClient(target, binPath)
-			}
+			fmt.Printf(`alogin — Security Gateway for Agentic AI
+========================================
+
+MCP server config (paste into Claude Desktop claude_desktop_config.json):
+
+  {
+    "mcpServers": {
+      "alogin": {
+        "command": %q,
+        "args": ["agent", "mcp"]
+      }
+    }
+  }
+
+Cursor (cursor.mcpServers in settings.json):
+
+  "cursor.mcpServers": {
+    "alogin": {
+      "command": %q,
+      "args": ["agent", "mcp"]
+    }
+  }
+
+VS Code (mcp.servers in settings.json):
+
+  "mcp": {
+    "servers": {
+      "alogin": {
+        "type": "stdio",
+        "command": %q,
+        "args": ["agent", "mcp"]
+      }
+    }
+  }
+
+Recommended system prompt snippet:
+
+  You have access to alogin, a secure SSH gateway for agentic infrastructure access.
+  Use list_servers to discover available servers before connecting.
+  Always provide an "intent" parameter when calling exec_command or exec_on_cluster
+  to describe what you are doing and why.
+  Do not run destructive commands (rm, shutdown, reboot) without explicit user confirmation.
+  Prefer read-only inspection commands before modifying system state.
+
+Available MCP tools (12):
+  list_servers, get_server       — query server registry
+  list_tunnels, get_tunnel       — tunnel configurations and status
+  start_tunnel, stop_tunnel      — tunnel lifecycle
+  list_clusters, get_cluster     — cluster groups with member details
+  exec_command                   — run SSH commands on a single server
+  exec_on_cluster                — run SSH commands on all cluster servers in parallel
+  inspect_node                   — structured health snapshot (CPU, mem, disk, processes)
+  log_analyzer                   — stream logs and filter relevant error patterns
+
+Audit log: %s
+  All exec_command, exec_on_cluster, inspect_node, and log_analyzer calls are logged here in JSONL format.
+  Fields: timestamp, event, agent_id, server/cluster info, commands, intent.
+  Query: alogin agent audit list [--agent <id>] [--server <id>] [--since 1h] [--json]
+
+Safety policy (optional): ~/.config/alogin/agent-policy.yaml
+  YAML file that controls what commands agents can run without human approval.
+  Supports: command regex rules, agent-id globs, server/cluster scoping, time windows.
+  Actions per rule: allow | deny | require_approval (HITL)
+  Guide: docs/agent-policy.md   — full syntax reference with examples
+  $ alogin agent policy show       — print active policy
+  $ alogin agent policy validate   — check for syntax errors
+
+Per-server overrides:
+  $ alogin agent server-policy set <server-id> --file policy.yaml
+  $ alogin agent server-prompt set <server-id> --text "Only run read-only commands on this host."
+
+LLM system prompt guide: docs/SYSTEM_PROMPT.md
+  Copy the recommended snippet into your AI client's system prompt for safe agentic usage.
+
+Ready-to-use config file: docs/mcp-config.json
+  Copy-paste into claude_desktop_config.json (replace "alogin" with the full binary path if needed).
+`, binPath, binPath, binPath, auditPath)
+			return nil
 		},
 	}
-	return cmd
-}
-
-// setupInteractive prompts the user to choose clients and whether to install skills.
-func setupInteractive(binPath string) error {
-	fmt.Println("alogin — MCP setup")
-	fmt.Println()
-
-	// Detect installed clients
-	detected := detectClients()
-	if len(detected) == 0 {
-		fmt.Println("No supported AI clients detected.")
-		fmt.Println()
-		fmt.Println("Supported clients: cursor, claude-desktop, vscode")
-		fmt.Println("Run:  alogin agent setup <client>  to configure one manually.")
-		return nil
-	}
-
-	fmt.Println("Detected clients:")
-	for i, c := range detected {
-		fmt.Printf("  [%d] %s\n", i+1, c.Name)
-	}
-	fmt.Println("  [a] all")
-	fmt.Println("  [q] quit")
-	fmt.Println()
-	fmt.Print("Select client(s) [1]: ")
-
-	var input string
-	fmt.Scanln(&input)
-	input = strings.TrimSpace(input)
-	if input == "" {
-		input = "1"
-	}
-
-	var chosen []clientDef
-	switch input {
-	case "q", "Q":
-		return nil
-	case "a", "A", "all":
-		chosen = detected
-	default:
-		var idx int
-		if _, err := fmt.Sscanf(input, "%d", &idx); err != nil || idx < 1 || idx > len(detected) {
-			return fmt.Errorf("invalid selection %q", input)
-		}
-		chosen = []clientDef{detected[idx-1]}
-	}
-
-	for _, c := range chosen {
-		if err := registerClient(c, binPath); err != nil {
-			fmt.Fprintf(os.Stderr, "  warning: %s: %v\n", c.Name, err)
-		}
-	}
-
-	fmt.Println()
-	fmt.Print("Install alogin skills to ~/.agent/skills? [Y/n]: ")
-	var skillInput string
-	fmt.Scanln(&skillInput)
-	skillInput = strings.TrimSpace(strings.ToLower(skillInput))
-	if skillInput == "" || skillInput == "y" || skillInput == "yes" {
-		defaultDir := filepath.Join(homeDir(), ".agent", "skills")
-		return installSkillsFromRelease(defaultDir)
-	}
-
-	return nil
-}
-
-// setupAll registers in every detected client without prompting.
-func setupAll(binPath string) error {
-	detected := detectClients()
-	if len(detected) == 0 {
-		fmt.Println("No supported AI clients detected.")
-		return nil
-	}
-	for _, c := range detected {
-		if err := registerClient(c, binPath); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: %s: %v\n", c.Name, err)
-		}
-	}
-	return nil
-}
-
-// setupClient registers a single named client.
-func setupClient(name, binPath string) error {
-	for _, c := range supportedClients {
-		if c.Name == name {
-			return registerClient(c, binPath)
-		}
-	}
-	names := make([]string, len(supportedClients))
-	for i, c := range supportedClients {
-		names[i] = c.Name
-	}
-	return fmt.Errorf("unknown client %q (supported: %s)", name, strings.Join(names, ", "))
-}
-
-// registerClient merges the MCP entry into one client's config file.
-func registerClient(c clientDef, binPath string) error {
-	path := c.ConfigPath()
-	if path == "" {
-		fmt.Printf("  %-18s config not found (skipping)\n", c.Name)
-		return nil
-	}
-	if err := c.MergeConfig(path, binPath); err != nil {
-		return err
-	}
-	fmt.Printf("  %-18s registered → %s\n", c.Name, path)
-	return nil
-}
-
-// detectClients returns clients whose config path can be resolved.
-func detectClients() []clientDef {
-	var out []clientDef
-	for _, c := range supportedClients {
-		if c.ConfigPath() != "" {
-			out = append(out, c)
-		}
-	}
-	return out
-}
-
-// ── Config path resolvers ─────────────────────────────────────────────────────
-
-func cursorConfigPath() string {
-	// Cursor stores settings in the same location as VS Code but under "Cursor"
-	var base string
-	switch runtime.GOOS {
-	case "darwin":
-		base = filepath.Join(homeDir(), "Library", "Application Support", "Cursor", "User")
-	case "linux":
-		base = filepath.Join(xdgConfig(), "Cursor", "User")
-	case "windows":
-		base = filepath.Join(os.Getenv("APPDATA"), "Cursor", "User")
-	}
-	if base == "" {
-		return ""
-	}
-	p := filepath.Join(base, "settings.json")
-	if fileExists(p) || dirExists(base) {
-		return p
-	}
-	return ""
-}
-
-func claudeDesktopConfigPath() string {
-	var p string
-	switch runtime.GOOS {
-	case "darwin":
-		p = filepath.Join(homeDir(), "Library", "Application Support", "Claude", "claude_desktop_config.json")
-	case "linux":
-		p = filepath.Join(xdgConfig(), "Claude", "claude_desktop_config.json")
-	case "windows":
-		p = filepath.Join(os.Getenv("APPDATA"), "Claude", "claude_desktop_config.json")
-	}
-	if p == "" {
-		return ""
-	}
-	if fileExists(p) || dirExists(filepath.Dir(p)) {
-		return p
-	}
-	return ""
-}
-
-func vscodeConfigPath() string {
-	var base string
-	switch runtime.GOOS {
-	case "darwin":
-		base = filepath.Join(homeDir(), "Library", "Application Support", "Code", "User")
-	case "linux":
-		base = filepath.Join(xdgConfig(), "Code", "User")
-	case "windows":
-		base = filepath.Join(os.Getenv("APPDATA"), "Code", "User")
-	}
-	if base == "" {
-		return ""
-	}
-	p := filepath.Join(base, "settings.json")
-	if fileExists(p) || dirExists(base) {
-		return p
-	}
-	return ""
-}
-
-// ── Config merge helpers ──────────────────────────────────────────────────────
-
-// mergeCursorConfig writes `cursor.mcpServers.alogin` into Cursor's settings.json.
-func mergeCursorConfig(path, binPath string) error {
-	obj, err := readJSONFile(path)
-	if err != nil {
-		return err
-	}
-
-	servers, _ := obj["cursor.mcpServers"].(map[string]any)
-	if servers == nil {
-		servers = map[string]any{}
-	}
-	servers["alogin"] = map[string]any{
-		"command": binPath,
-		"args":    []string{"agent", "mcp"},
-	}
-	obj["cursor.mcpServers"] = servers
-
-	return writeJSONFile(path, obj)
-}
-
-// mergeClaudeDesktopConfig writes `mcpServers.alogin` into claude_desktop_config.json.
-func mergeClaudeDesktopConfig(path, binPath string) error {
-	obj, err := readJSONFile(path)
-	if err != nil {
-		return err
-	}
-
-	servers, _ := obj["mcpServers"].(map[string]any)
-	if servers == nil {
-		servers = map[string]any{}
-	}
-	servers["alogin"] = map[string]any{
-		"command": binPath,
-		"args":    []string{"agent", "mcp"},
-	}
-	obj["mcpServers"] = servers
-
-	if err := writeJSONFile(path, obj); err != nil {
-		return err
-	}
-	fmt.Println("  Note: restart Claude Desktop for the change to take effect.")
-	return nil
-}
-
-// mergeVSCodeConfig writes `mcp.servers.alogin` into VS Code's settings.json.
-func mergeVSCodeConfig(path, binPath string) error {
-	obj, err := readJSONFile(path)
-	if err != nil {
-		return err
-	}
-
-	mcpBlock, _ := obj["mcp"].(map[string]any)
-	if mcpBlock == nil {
-		mcpBlock = map[string]any{}
-	}
-	servers, _ := mcpBlock["servers"].(map[string]any)
-	if servers == nil {
-		servers = map[string]any{}
-	}
-	servers["alogin"] = map[string]any{
-		"type":    "stdio",
-		"command": binPath,
-		"args":    []string{"agent", "mcp"},
-	}
-	mcpBlock["servers"] = servers
-	obj["mcp"] = mcpBlock
-
-	return writeJSONFile(path, obj)
-}
-
-// ── JSON file helpers ─────────────────────────────────────────────────────────
-
-func readJSONFile(path string) (map[string]any, error) {
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return map[string]any{}, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	if len(data) == 0 {
-		return map[string]any{}, nil
-	}
-	var obj map[string]any
-	if err := json.Unmarshal(data, &obj); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", path, err)
-	}
-	return obj, nil
-}
-
-func writeJSONFile(path string, obj map[string]any) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(obj, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, append(data, '\n'), 0600)
 }
 
 // ── newAgentSkillsCmd ─────────────────────────────────────────────────────────
@@ -382,7 +122,7 @@ func newAgentSkillsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "skills",
 		Short: "Manage alogin agent skills",
-		Long: `Manage alogin skills installed to ~/.agent/skills.
+		Long: `Manage alogin skills installed to ~/.agents/skills.
 
   alogin agent skills install           — download and install skills from GitHub
   alogin agent skills list              — list installed skills`,
@@ -446,7 +186,7 @@ Examples:
 			return writeSkills(selected, dir)
 		},
 	}
-	cmd.Flags().StringVar(&dir, "dir", "", "Install destination (default: ~/.agent/skills)")
+	cmd.Flags().StringVar(&dir, "dir", "", "Install destination (default: ~/.agents/skills)")
 	return cmd
 }
 
@@ -489,7 +229,7 @@ func newAgentSkillsListCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&dir, "dir", "", "Skills directory to list (default: ~/.agent/skills)")
+	cmd.Flags().StringVar(&dir, "dir", "", "Skills directory to list (default: ~/.agents/skills)")
 	return cmd
 }
 
