@@ -1,6 +1,5 @@
 # Binaries
 /alogin
-alogin-*
 *.exe
 
 # Build artifacts
