@@ -79,7 +79,7 @@ func (c *Client) ForwardRemote(ctx context.Context, spec TunnelSpec) error {
 			if err != nil {
 				return
 			}
-			localAddr := fmt.Sprintf("%s:%d", spec.LocalHost, spec.LocalPort)
+			localAddr := net.JoinHostPort(spec.LocalHost, fmt.Sprintf("%d", spec.LocalPort))
 			go func(remote net.Conn) {
 				defer remote.Close()
 				local, err := net.Dial("tcp", localAddr)
