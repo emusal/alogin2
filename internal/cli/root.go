@@ -148,7 +148,9 @@ func buildVault() vault.Vault {
 	var backends []vault.Vault
 
 	if cfg.KeychainUse {
-		backends = append(backends, vault.NewKeychain())
+		if kc := vault.NewKeychain(); kc != nil {
+			backends = append(backends, kc)
+		}
 	}
 
 	// age vault if file exists (Phase 2: prompts for passphrase)

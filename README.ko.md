@@ -83,11 +83,31 @@ brew install alogin
 
 ### 쉘 통합
 
-`t`, `r`, `ct`, `cr` 같은 단축 명령과 탭 자동완성을 쓰려면 `~/.zshrc` 또는 `~/.bashrc`에 한 줄 추가하세요:
+설치 후 `~/.bashrc` 또는 `~/.zshrc`에 아래 내용을 추가하세요:
 
 ```bash
+# 1. PATH 등록 (스크립트 설치 시 ~/.local/bin에 설치됨)
+export PATH="$HOME/.local/bin:$PATH"
+
+# 2. 탭 자동완성 파일 설치 (최초 1회만 실행 — 쉘 프로파일 안에 넣지 말 것)
+alogin completion install --shell bash   # bash
+# alogin completion install             # zsh (기본값)
+
+# 3. 자동완성 + 단축 명령 로드 (매 쉘 시작 시)
+source <(alogin completion bash)         # bash — 탭 자동완성 활성화
+source <(alogin shell-init)              # t, r, ct, cr 등 단축 명령 로드
+```
+
+**zsh** 사용 시:
+
+```zsh
+export PATH="$HOME/.local/bin:$PATH"
+alogin completion install                # 최초 1회 실행
+fpath=(~/.local/share/alogin/completions $fpath)  # ~/.zshrc에 추가
 source <(alogin shell-init)
 ```
+
+적용: `source ~/.bashrc` 또는 새 터미널을 여세요.
 
 ---
 
@@ -354,11 +374,65 @@ alogin agent audit tail                    # 실시간 스트리밍 (Ctrl+C로 �
 
 비밀번호는 SQLite에 평문으로 저장하지 않습니다. 아래 순서로 저장 위치를 선택합니다.
 
-1. **macOS Keychain** / **Linux Secret Service** (systemd/GNOME)
-2. **age 암호화 파일** (`~/.local/share/alogin/vault.age`)
+1. **OS 키체인** — macOS Keychain 또는 Linux Secret Service (`secret-tool` / GNOME Keyring 필요)
+2. **age 암호화 파일** — `~/.local/share/alogin/vault.age`, 마스터 패스프레이즈로 잠금 해제
 3. 평문 저장 (명시적으로 선택할 때만)
 
 가능하면 SSH 키 인증을 쓰는 것을 권장합니다. 키 배포가 어려운 환경에서만 비밀번호 저장을 사용하세요.
+
+### OS 키체인 (macOS / Linux 데스크탑)
+
+OS 키체인은 **기본적으로 비활성화**되어 있습니다. 설정 파일 또는 환경 변수로 활성화합니다.
+
+```toml
+# ~/.config/alogin/config.toml
+keychain_use = true
+```
+
+```sh
+# 환경 변수로 설정
+export ALOGIN_KEYCHAIN_USE=true
+```
+
+**Linux**에서는 `libsecret-tools` 패키지와 Secret Service(GNOME Keyring 또는 KWallet)가 실행 중이어야 합니다.
+
+```sh
+# Debian/Ubuntu
+sudo apt install libsecret-tools
+
+# RHEL/Fedora
+sudo dnf install libsecret
+```
+
+Vagrant, 컨테이너, CI 같은 헤드리스 서버 환경에서는 Secret Service가 없으므로 아래의 age vault를 사용하세요.
+
+### age 암호화 Vault (Linux 서버 권장)
+
+age vault는 마스터 패스프레이즈로 모든 비밀번호를 [age](https://age-encryption.org) 방식으로 암호화합니다. 데스크탑/서버 구분 없이 모든 플랫폼에서 동작합니다.
+
+**마스터 패스프레이즈 설정** (age vault 활성화에 필요):
+
+```sh
+export ALOGIN_VAULT_PASS=마스터-패스프레이즈
+```
+
+또는 쉘 프로파일(`~/.bashrc`, `~/.zshrc`)에 추가:
+
+```sh
+echo 'export ALOGIN_VAULT_PASS=마스터-패스프레이즈' >> ~/.bashrc
+```
+
+vault 파일은 첫 번째 비밀번호가 저장될 때 `~/.local/share/alogin/vault.age` 경로에 자동으로 생성됩니다.
+
+**비밀번호 저장 및 조회:**
+
+```sh
+alogin vault set user@10.0.1.3        # 비밀번호 입력 후 암호화 저장
+alogin vault get user@10.0.1.3        # 조회
+alogin vault delete user@10.0.1.3     # 삭제
+```
+
+`ALOGIN_VAULT_PASS`가 설정되어 있지 않으면 age vault는 건너뛰고 DB 평문 컬럼으로 폴백됩니다.
 
 ---
 

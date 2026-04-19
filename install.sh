@@ -153,20 +153,21 @@ if [ "${ALOGIN_NO_PLUGINS:-0}" != "1" ]; then
   fi
 fi
 
-# ── PATH check ─────────────────────────────────────────────────────────────────
-case ":${PATH}:" in
-  *":${INSTALL_DIR}:"*) ;;
-  *)
-    echo ""
-    echo "NOTE: ${INSTALL_DIR} is not in your PATH."
-    echo "Add the following to your ~/.bashrc or ~/.zshrc:"
-    echo ""
-    echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
-    echo ""
-    ;;
-esac
-
-# ── Shell completion hint ──────────────────────────────────────────────────────
-echo "To set up shell completions:"
-echo "  alogin completion install              # zsh (default)"
-echo "  alogin completion install --shell bash # bash"
+# ── Post-install setup hint ───────────────────────────────────────────────────
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo " Next: add the following to your ~/.bashrc or ~/.zshrc"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "  # 1. Make sure alogin is on your PATH"
+echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
+echo ""
+echo "  # 2. Install tab-completion (run once)"
+echo "  alogin completion install --shell bash"
+echo ""
+echo "  # 3. Load completion + shell shims on every new shell"
+echo "  source <(alogin completion bash)"
+echo "  source <(alogin shell-init)"
+echo ""
+echo "Then reload your shell:  source ~/.bashrc  (or open a new terminal)"
+echo ""

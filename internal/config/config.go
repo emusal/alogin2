@@ -44,7 +44,7 @@ func Load() (*Config, error) {
 	v.SetDefault("log_level", 0)
 	v.SetDefault("lang", "ko_KR.eucKR")
 	v.SetDefault("ssh_cmd", "ssh")
-	v.SetDefault("keychain_use", true)
+	v.SetDefault("keychain_use", false)
 
 	// Map ALOGIN_* env vars
 	v.SetEnvPrefix("ALOGIN")

@@ -133,11 +133,31 @@ Use WSL (Windows Subsystem for Linux) with the script above.
 
 ### Shell integration
 
-Add to `~/.zshrc` or `~/.bashrc` to enable shorthand aliases (`t`, `r`, `ct`, `cr`, ...) and tab completion:
+After installing, add the following to `~/.bashrc` or `~/.zshrc`:
 
 ```bash
+# 1. Make sure alogin is on your PATH (script installer uses ~/.local/bin)
+export PATH="$HOME/.local/bin:$PATH"
+
+# 2. Install tab-completion files (run once, not in shell profile)
+alogin completion install --shell bash   # bash
+# alogin completion install             # zsh (default)
+
+# 3. Load completion + shorthand aliases on every new shell
+source <(alogin completion bash)         # bash — enables tab-completion
+source <(alogin shell-init)              # loads t, r, ct, cr, ... aliases
+```
+
+For **zsh**, use:
+
+```zsh
+export PATH="$HOME/.local/bin:$PATH"
+alogin completion install                # run once
+fpath=(~/.local/share/alogin/completions $fpath)  # add to ~/.zshrc
 source <(alogin shell-init)
 ```
+
+Then reload: `source ~/.bashrc` or open a new terminal.
 
 ---
 
@@ -426,11 +446,65 @@ Each audit event captures: timestamp, agent ID, server/cluster, commands, intent
 
 Secrets are never stored in plaintext in SQLite. Priority chain:
 
-1. **macOS Keychain** / **Linux Secret Service** (systemd/GNOME)
-2. **age-encrypted file** (`~/.local/share/alogin/vault.age`)
+1. **OS Keychain** — macOS Keychain or Linux Secret Service (requires `secret-tool` / GNOME Keyring)
+2. **age-encrypted file** — `~/.local/share/alogin/vault.age`, unlocked by a master passphrase
 3. Plaintext fallback (explicit opt-in only)
 
 SSH key-based auth is always preferred. Use vault storage only for password-based targets where key distribution is impractical.
+
+### OS Keychain (macOS / Linux desktop)
+
+OS Keychain is **disabled by default**. Enable it via config file or environment variable:
+
+```toml
+# ~/.config/alogin/config.toml
+keychain_use = true
+```
+
+```sh
+# or via environment variable
+export ALOGIN_KEYCHAIN_USE=true
+```
+
+On **Linux**, this requires `libsecret-tools` and a running Secret Service (GNOME Keyring or KWallet):
+
+```sh
+# Debian/Ubuntu
+sudo apt install libsecret-tools
+
+# RHEL/Fedora
+sudo dnf install libsecret
+```
+
+Headless servers (Vagrant, containers, CI) typically have no Secret Service — use the age vault instead.
+
+### age-encrypted Vault (recommended for Linux servers)
+
+The age vault encrypts all stored passwords with a master passphrase using [age](https://age-encryption.org). It works on any platform, including headless servers.
+
+**Set the master passphrase** (required to activate the age vault):
+
+```sh
+export ALOGIN_VAULT_PASS=your-master-passphrase
+```
+
+Or add it to your shell profile (`~/.bashrc`, `~/.zshrc`):
+
+```sh
+echo 'export ALOGIN_VAULT_PASS=your-master-passphrase' >> ~/.bashrc
+```
+
+The vault file is created automatically at `~/.local/share/alogin/vault.age` when the first password is stored.
+
+**Store and retrieve passwords:**
+
+```sh
+alogin vault set user@10.0.1.3        # prompts for password, stores encrypted
+alogin vault get user@10.0.1.3        # retrieve
+alogin vault delete user@10.0.1.3     # remove
+```
+
+Without `ALOGIN_VAULT_PASS`, the age vault is skipped and alogin falls back to the plaintext DB column.
 
 ---
 
