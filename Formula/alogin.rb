@@ -1,34 +1,34 @@
 class Alogin < Formula
   desc "Modern SSH connection manager with encrypted credential vault"
   homepage "https://github.com/emusal/alogin2"
-  version "2.4.0"
+  version "2.4.1"
   license "MIT"
 
   on_macos do
     on_arm do
-      url "https://github.com/emusal/alogin2/releases/download/v2.4.0/alogin-web-darwin-arm64"
-      sha256 "4feb1cfb1263535f5f59d75a6f82430560cb7a3a6f2153d590d1458d03e1413e"
+      url "https://github.com/emusal/alogin2/releases/download/v2.4.1/alogin-web-darwin-arm64"
+      sha256 "7890d13ff02827b89a8890231a41542fd428c693594f0fd9e2f1899f78cfb691"
     end
     on_intel do
-      url "https://github.com/emusal/alogin2/releases/download/v2.4.0/alogin-web-darwin-amd64"
-      sha256 "4466b3e0c7212d8c0f43472ec37ebd89e531ecfdc8b3408a7282ec2bae616eb3"
+      url "https://github.com/emusal/alogin2/releases/download/v2.4.1/alogin-web-darwin-amd64"
+      sha256 "9ac4b50606f230f793dfc8d104185f12df8eb87642213f3272980580f1a5fd15"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/emusal/alogin2/releases/download/v2.4.0/alogin-web-linux-arm64"
-      sha256 "da62e9bac5139fc0029903d99189e4c6a5ab998b1335301f50fb2234a8cd0f42"
+      url "https://github.com/emusal/alogin2/releases/download/v2.4.1/alogin-web-linux-arm64"
+      sha256 "c859231fa2ed5b629038f69a67b0aa4cf19cdd30323a54c63f28a2332f0f41ab"
     end
     on_intel do
-      url "https://github.com/emusal/alogin2/releases/download/v2.4.0/alogin-web-linux-amd64"
-      sha256 "6c31f6d2d22266578e5651c55eaa861dfb6f0c68c52776c616bfe6142c335de0"
+      url "https://github.com/emusal/alogin2/releases/download/v2.4.1/alogin-web-linux-amd64"
+      sha256 "d667b196c534b77e773c701c7939417116ed2ad5cc0b5d36ed5602a6147de6dd"
     end
   end
 
   resource "plugins" do
-    url "https://github.com/emusal/alogin2/releases/download/v2.4.0/plugins.tar.gz"
-    sha256 "d3565231ac34fe0d50ec21e8f828500656dc5ca65592a2bcce817caa7dcc2d9c"
+    url "https://github.com/emusal/alogin2/releases/download/v2.4.1/plugins.tar.gz"
+    sha256 "37f6de9a03783b47a5d8a99cd68b12d1cb433f26462694831955a15ccda32eee"
   end
 
   def install
@@ -50,6 +50,6 @@ class Alogin < Formula
   end
 
   test do
-    assert_match "alogin v2.4.0", shell_output("#{bin}/alogin version")
+    assert_match "alogin v2.4.1", shell_output("#{bin}/alogin version")
   end
 end
