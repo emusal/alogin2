@@ -21,7 +21,6 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
-	"syscall"
 	"time"
 
 	gossh "golang.org/x/crypto/ssh"
@@ -161,7 +160,7 @@ func ShellChain(hops []HopConfig, opts ShellOptions) error {
 
 	// ── SIGWINCH forwarding ───────────────────────────────────────────────────
 	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGWINCH)
+	startWinchForwarder(sigCh)
 	defer signal.Stop(sigCh)
 	go func() {
 		for range sigCh {

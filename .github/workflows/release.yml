@@ -60,6 +60,16 @@ jobs:
             goarch: arm64
             suffix: web-linux-arm64
             web: true
+          - goos: windows
+            goarch: amd64
+            suffix: windows-amd64
+            ext: .exe
+            web: false
+          - goos: windows
+            goarch: amd64
+            suffix: web-windows-amd64
+            ext: .exe
+            web: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -80,14 +90,15 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"  # strip leading 'v' (v2.0.0 → 2.0.0)
           TAGS=""
           if [ "${{ matrix.web }}" = "true" ]; then TAGS="-tags web"; fi
+          EXT="${{ matrix.ext }}"
           go build $TAGS \
             -ldflags "-X github.com/emusal/alogin2/internal/cli.Version=${VERSION} -s -w" \
-            -o alogin-${{ matrix.suffix }} \
+            -o alogin-${{ matrix.suffix }}${EXT} \
             ./cmd/alogin
       - uses: actions/upload-artifact@v4
         with:
           name: binary-${{ matrix.suffix }}
-          path: alogin-${{ matrix.suffix }}
+          path: alogin-${{ matrix.suffix }}${{ matrix.ext }}
 
   # ── Job 2b: Package sample plugins ───────────────────────────────────────
   package-plugins:

@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"syscall"
 
 	"github.com/creack/pty"
 	gossh "golang.org/x/crypto/ssh"
@@ -86,7 +85,7 @@ func (c *Client) Shell(opts ShellOptions) error {
 
 	// Forward SIGWINCH → SSH window-change
 	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGWINCH)
+	startWinchForwarder(sigCh)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)

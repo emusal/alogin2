@@ -4,6 +4,7 @@ package cluster
 
 import (
 	"context"
+	"runtime"
 	"strings"
 )
 
@@ -38,7 +39,11 @@ type Manager struct {
 // back to plain ssh commands.
 func NewManager(mode string, tileX int, binPath string) *Manager {
 	if mode == "" {
-		mode = "tmux"
+		if runtime.GOOS == "windows" {
+			mode = "wt"
+		} else {
+			mode = "tmux"
+		}
 	}
 	return &Manager{mode: mode, tileX: tileX, binPath: binPath}
 }
@@ -50,6 +55,8 @@ func (m *Manager) Open(ctx context.Context, clusterName string, hosts []HostEntr
 		return openITerm(ctx, clusterName, hosts, m.tileX, m.binPath)
 	case "terminal":
 		return openTerminalApp(ctx, clusterName, hosts, m.tileX, m.binPath)
+	case "wt", "windows-terminal":
+		return openWindowsTerminal(ctx, clusterName, hosts, m.tileX, m.binPath)
 	default:
 		return openTmux(ctx, clusterName, hosts, m.tileX, m.binPath)
 	}

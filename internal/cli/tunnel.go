@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"syscall"
 	"text/tabwriter"
 
 	"github.com/emusal/alogin2/internal/model"
@@ -385,7 +384,7 @@ func newTunnelRunCmd() *cobra.Command {
 			}
 
 			sigChan := make(chan os.Signal, 1)
-			signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
+			signal.Notify(sigChan, shutdownSignals...)
 			<-sigChan
 			fmt.Fprintf(os.Stderr, "[tunnel] %s: shutting down\n", t.Name)
 			return nil

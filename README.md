@@ -127,9 +127,34 @@ brew tap emusal/alogin --custom-remote git@github.com:emusal/alogin2.git
 brew install alogin
 ```
 
-### Windows
+### Windows (native)
 
-Use WSL (Windows Subsystem for Linux) with the script above.
+Download the latest `.exe` from [GitHub Releases](https://github.com/emusal/alogin2/releases) and place it on your `PATH`:
+
+```powershell
+# PowerShell — download and install to %LOCALAPPDATA%\alogin
+$dest = "$env:LOCALAPPDATA\alogin"
+New-Item -ItemType Directory -Force $dest | Out-Null
+Invoke-WebRequest -Uri "https://github.com/emusal/alogin2/releases/latest/download/alogin-windows-amd64.exe" `
+  -OutFile "$dest\alogin.exe"
+# Add to PATH for current session (add to $PROFILE for persistence)
+$env:PATH += ";$dest"
+```
+
+> For the web UI with embedded frontend use `alogin-web-windows-amd64.exe` instead.
+
+**Data directories on Windows:**
+
+| Purpose | Path |
+|---------|------|
+| Database, vault, logs | `%LOCALAPPDATA%\alogin\` |
+| Config file | `%APPDATA%\alogin\config.toml` |
+
+**Shell completion (PowerShell):**
+
+```powershell
+alogin completion powershell | Out-String | Invoke-Expression
+```
 
 ### Shell integration
 
@@ -226,8 +251,9 @@ alogin ssh cluster add db-shard db-primary db-replica1 db-replica2
 
 # Open all nodes in tiled panes
 ct web-cluster          # shell alias
-alogin ssh cluster web-cluster --mode tmux    # tmux (Linux + macOS)
+alogin ssh cluster web-cluster --mode tmux    # tmux (Linux / macOS / Windows WSL)
 alogin ssh cluster web-cluster --mode iterm   # iTerm2 split panes (macOS)
+alogin ssh cluster web-cluster --mode wt      # Windows Terminal (Windows)
 ```
 
 ### Synchronized Broadcast Typing
@@ -308,7 +334,13 @@ Available MCP tools include: list_servers, get_server, get_server_prompt,
 Audit log: ~/.config/alogin/audit.jsonl
 ```
 
-Paste the JSON block into `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) and restart Claude Desktop.
+Paste the JSON block into the Claude Desktop config file for your platform and restart Claude Desktop:
+
+| Platform | Config path |
+|----------|-------------|
+| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Linux | `~/.config/Claude/claude_desktop_config.json` |
+| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
 
 ### Zero-Knowledge Security Model
 
@@ -446,27 +478,36 @@ Each audit event captures: timestamp, agent ID, server/cluster, commands, intent
 
 Secrets are never stored in plaintext in SQLite. Priority chain:
 
-1. **OS Keychain** — macOS Keychain or Linux Secret Service (requires `secret-tool` / GNOME Keyring)
-2. **age-encrypted file** — `~/.local/share/alogin/vault.age`, unlocked by a master passphrase
+1. **OS Keychain** — macOS Keychain, Linux Secret Service, or Windows Credential Locker (enabled via `keychain_use = true`)
+2. **age-encrypted file** — `~/.local/share/alogin/vault.age` (or `%LOCALAPPDATA%\alogin\vault.age` on Windows), unlocked by a master passphrase
 3. Plaintext fallback (explicit opt-in only)
 
 SSH key-based auth is always preferred. Use vault storage only for password-based targets where key distribution is impractical.
 
-### OS Keychain (macOS / Linux desktop)
+### OS Keychain (macOS / Linux / Windows)
 
 OS Keychain is **disabled by default**. Enable it via config file or environment variable:
 
 ```toml
-# ~/.config/alogin/config.toml
+# ~/.config/alogin/config.toml  (macOS / Linux)
+# %APPDATA%\alogin\config.toml  (Windows)
 keychain_use = true
 ```
 
 ```sh
 # or via environment variable
-export ALOGIN_KEYCHAIN_USE=true
+export ALOGIN_KEYCHAIN_USE=true   # macOS / Linux
+set ALOGIN_KEYCHAIN_USE=true      # Windows cmd
+$env:ALOGIN_KEYCHAIN_USE="true"   # Windows PowerShell
 ```
 
-On **Linux**, this requires `libsecret-tools` and a running Secret Service (GNOME Keyring or KWallet):
+| Platform | Backend | Requirement |
+|----------|---------|-------------|
+| macOS | Keychain (`security` CLI) | Built-in |
+| Linux | Secret Service (`secret-tool`) | `libsecret-tools` + GNOME Keyring or KWallet |
+| Windows | Credential Locker (PowerShell `PasswordVault`) | Windows 8+ (built-in) |
+
+On **Linux**, install the required package:
 
 ```sh
 # Debian/Ubuntu

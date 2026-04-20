@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/spf13/viper"
 )
@@ -97,6 +98,13 @@ func (c *Config) EnsureDirs() error {
 }
 
 func xdgDataHome() string {
+	if runtime.GOOS == "windows" {
+		if d := os.Getenv("LOCALAPPDATA"); d != "" {
+			return d
+		}
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, "AppData", "Local")
+	}
 	if d := os.Getenv("XDG_DATA_HOME"); d != "" {
 		return d
 	}
@@ -105,6 +113,13 @@ func xdgDataHome() string {
 }
 
 func xdgConfigHome() string {
+	if runtime.GOOS == "windows" {
+		if d := os.Getenv("APPDATA"); d != "" {
+			return d
+		}
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, "AppData", "Roaming")
+	}
 	if d := os.Getenv("XDG_CONFIG_HOME"); d != "" {
 		return d
 	}

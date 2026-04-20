@@ -8,11 +8,9 @@ import (
 	"io"
 	"net"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"text/tabwriter"
 	"time"
 
@@ -22,19 +20,11 @@ import (
 )
 
 // Session layout under <DataDir>/sessions/<id>/:
-//   sock  — Unix domain socket (run listens, exec connects)
+//   sock  — IPC endpoint (Unix socket on Unix, TCP addr file on Windows)
 //   meta  — JSON {"host": "..."}
-func sessionDir(id string) string        { return filepath.Join(cfg.DataDir, "sessions", id) }
-func sessionSock(id string) string       { return filepath.Join(sessionDir(id), "sock") }
-func sessionMetaFile(id string) string   { return filepath.Join(sessionDir(id), "meta") }
-
-const sessionTmuxPrefix = "alogin-session-"
-
-func sessionTmuxName(id string) string { return sessionTmuxPrefix + id }
-
-func sessionIsRunning(id string) bool {
-	return exec.Command("tmux", "has-session", "-t", sessionTmuxName(id)).Run() == nil
-}
+func sessionDir(id string) string      { return filepath.Join(cfg.DataDir, "sessions", id) }
+func sessionSock(id string) string     { return filepath.Join(sessionDir(id), "sock") }
+func sessionMetaFile(id string) string { return filepath.Join(sessionDir(id), "meta") }
 
 type sessionMeta struct {
 	Host string `json:"host"`
@@ -124,22 +114,17 @@ func newSessionStartCmd() *cobra.Command {
 				return fmt.Errorf("resolve binary: %w", err)
 			}
 
-			// Spawn detached tmux session.
-			tmuxName := sessionTmuxName(id)
-			c := exec.Command("tmux", "new-session", "-d", "-s", tmuxName,
-				binPath, "ssh", "session", "run", id, hostArg)
-			c.Stdout = os.Stderr
-			c.Stderr = os.Stderr
-			if err := c.Run(); err != nil {
+			// Spawn detached session bridge process.
+			if err := sessionSpawn(id, binPath, hostArg); err != nil {
 				_ = os.RemoveAll(dir)
-				return fmt.Errorf("start tmux session: %w", err)
+				return err
 			}
 
-			// Wait until the socket appears (run is ready to accept).
+			// Wait until the IPC endpoint is ready to accept.
 			deadline := time.Now().Add(15 * time.Second)
 			for {
 				if time.Now().After(deadline) {
-					_ = exec.Command("tmux", "kill-session", "-t", tmuxName).Run()
+					_ = sessionKill(id)
 					_ = os.RemoveAll(dir)
 					return fmt.Errorf("timed out waiting for session to become ready")
 				}
@@ -147,13 +132,8 @@ func newSessionStartCmd() *cobra.Command {
 					_ = os.RemoveAll(dir)
 					return fmt.Errorf("session process exited during startup (check SSH credentials)")
 				}
-				if _, err := os.Stat(sessionSock(id)); err == nil {
-					// Socket exists — try a quick dial to confirm it's accepting.
-					conn, err := net.DialTimeout("unix", sessionSock(id), 200*time.Millisecond)
-					if err == nil {
-						conn.Close()
-						break
-					}
+				if sessionIPCReady(id) {
+					break
 				}
 				time.Sleep(200 * time.Millisecond)
 			}
@@ -195,7 +175,7 @@ func newSessionExecCmd() *cobra.Command {
 			wallTimeout := time.Duration(timeoutSec) * time.Second
 			idleTimeout := time.Duration(idleTimeoutSec) * time.Second
 
-			conn, err := net.DialTimeout("unix", sessionSock(id), 5*time.Second)
+			conn, err := sessionDial(id, 5*time.Second)
 			if err != nil {
 				return fmt.Errorf("connect to session: %w", err)
 			}
@@ -262,7 +242,7 @@ func newSessionStopCmd() *cobra.Command {
 				_ = os.RemoveAll(sessionDir(id))
 				return fmt.Errorf("session %q is not running", id)
 			}
-			if err := exec.Command("tmux", "kill-session", "-t", sessionTmuxName(id)).Run(); err != nil {
+			if err := sessionKill(id); err != nil {
 				return fmt.Errorf("kill session: %w", err)
 			}
 			_ = os.RemoveAll(sessionDir(id))
@@ -278,20 +258,15 @@ func newSessionListCmd() *cobra.Command {
 		Short: "List active sessions",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := exec.Command("tmux", "ls", "-F", "#{session_name}").Output()
-			if err != nil {
+			ids, _ := sessionListIDs()
+			if len(ids) == 0 {
 				fmt.Println("no active sessions")
 				return nil
 			}
 
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 			fmt.Fprintln(w, "SESSION ID\tHOST")
-			found := 0
-			for _, name := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-				if !strings.HasPrefix(name, sessionTmuxPrefix) {
-					continue
-				}
-				id := strings.TrimPrefix(name, sessionTmuxPrefix)
+			for _, id := range ids {
 				host := "(unknown)"
 				if data, err := os.ReadFile(sessionMetaFile(id)); err == nil {
 					var m sessionMeta
@@ -300,11 +275,6 @@ func newSessionListCmd() *cobra.Command {
 					}
 				}
 				fmt.Fprintf(w, "%s\t%s\n", id, host)
-				found++
-			}
-			if found == 0 {
-				fmt.Println("no active sessions")
-				return nil
 			}
 			return w.Flush()
 		},
@@ -322,7 +292,7 @@ func newSessionRunCmd() *cobra.Command {
 		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, hostArg := args[0], args[1]
-			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+			ctx, cancel := signal.NotifyContext(context.Background(), shutdownSignals...)
 			defer cancel()
 
 			user, host := parseUserHost(hostArg)
@@ -350,19 +320,14 @@ func newSessionRunCmd() *cobra.Command {
 			}
 			defer managed.Close()
 
-			// Listen on Unix socket.
-			sockPath := sessionSock(id)
-			_ = os.Remove(sockPath)
-			ln, err := net.Listen("unix", sockPath)
+			ln, err := sessionListen(id)
 			if err != nil {
 				return fmt.Errorf("listen on socket: %w", err)
 			}
 			defer func() {
 				ln.Close()
-				os.Remove(sockPath)
+				sessionIPCCleanup(id)
 			}()
-			// Restrict access to current user.
-			_ = os.Chmod(sockPath, 0600)
 
 			// Close listener when context is cancelled so Accept unblocks.
 			go func() {

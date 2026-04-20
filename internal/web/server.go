@@ -108,6 +108,8 @@ func launchBrowser(url string) {
 		cmd = exec.Command("open", url)
 	case "linux":
 		cmd = exec.Command("xdg-open", url)
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "start", url)
 	default:
 		return
 	}

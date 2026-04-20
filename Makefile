@@ -92,17 +92,20 @@ lint: vet                       ## Run vet + basic checks
 
 .PHONY: dist
 dist: dist-skills               ## Cross-compile for all release targets
-	GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN)-darwin-arm64  $(CMD)
-	GOOS=darwin  GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN)-darwin-amd64  $(CMD)
-	GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN)-linux-amd64   $(CMD)
-	GOOS=linux   GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN)-linux-arm64   $(CMD)
+	GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN)-darwin-arm64       $(CMD)
+	GOOS=darwin  GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN)-darwin-amd64       $(CMD)
+	GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN)-linux-amd64        $(CMD)
+	GOOS=linux   GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN)-linux-arm64        $(CMD)
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN)-windows-amd64.exe  $(CMD)
+	GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN)-windows-arm64.exe  $(CMD)
 
 .PHONY: dist-web
 dist-web: frontend dist-skills  ## Cross-compile all platforms with embedded Web UI
-	GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -tags web -o $(BIN)-web-darwin-arm64 $(CMD)
-	GOOS=darwin  GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -tags web -o $(BIN)-web-darwin-amd64 $(CMD)
-	GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -tags web -o $(BIN)-web-linux-amd64  $(CMD)
-	GOOS=linux   GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -tags web -o $(BIN)-web-linux-arm64  $(CMD)
+	GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -tags web -o $(BIN)-web-darwin-arm64      $(CMD)
+	GOOS=darwin  GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -tags web -o $(BIN)-web-darwin-amd64      $(CMD)
+	GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -tags web -o $(BIN)-web-linux-amd64       $(CMD)
+	GOOS=linux   GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -tags web -o $(BIN)-web-linux-arm64       $(CMD)
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -tags web -o $(BIN)-web-windows-amd64.exe $(CMD)
 	tar -czf plugins.tar.gz -C testenv plugins
 
 .PHONY: dist-skills
@@ -117,7 +120,7 @@ checksums:                      ## Generate SHA256 checksums for release binarie
 
 .PHONY: clean
 clean:                          ## Remove built binaries
-	rm -f $(BIN) $(BIN)-darwin-arm64 $(BIN)-darwin-amd64 $(BIN)-linux-amd64 $(BIN)-linux-arm64 $(BIN)-web-darwin-arm64 $(BIN)-web-darwin-amd64 $(BIN)-web-linux-amd64 $(BIN)-web-linux-arm64 checksums.txt plugins.tar.gz skills.tar.gz
+	rm -f $(BIN) $(BIN)-darwin-arm64 $(BIN)-darwin-amd64 $(BIN)-linux-amd64 $(BIN)-linux-arm64 $(BIN)-windows-amd64.exe $(BIN)-windows-arm64.exe $(BIN)-web-darwin-arm64 $(BIN)-web-darwin-amd64 $(BIN)-web-linux-amd64 $(BIN)-web-linux-arm64 $(BIN)-web-windows-amd64.exe checksums.txt plugins.tar.gz skills.tar.gz
 
 .PHONY: clean-all
 clean-all: clean                ## Remove binaries + frontend build artifacts

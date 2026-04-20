@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/signal"
-	"syscall"
 	"text/tabwriter"
 	"time"
 
@@ -17,12 +15,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const jobTmuxPrefix = "alogin-job-"
-
-func jobTmuxName(jobID string) string { return jobTmuxPrefix + jobID }
-
 // newSessionBgExecCmd returns "alogin ssh session bg-exec <session-id> <cmd>".
-// Creates a job record and spawns a detached tmux session that runs
+// Creates a job record and spawns a detached background process that runs
 // "alogin ssh session job-run <job-id>" so the job outlives this process.
 func newSessionBgExecCmd() *cobra.Command {
 	var timeoutSec int
@@ -66,17 +60,11 @@ Examples:
 				return fmt.Errorf("resolve binary: %w", err)
 			}
 
-			// Spawn a detached tmux session that runs job-run.
-			// This process exits immediately; the tmux session carries the execution.
-			tmuxArgs := []string{
-				"new-session", "-d", "-s", jobTmuxName(jobID),
-				binPath, "ssh", "session", "job-run", jobID,
-				fmt.Sprintf("--timeout=%d", timeoutSec),
-			}
-			if out, err := exec.Command("tmux", tmuxArgs...).CombinedOutput(); err != nil {
+			// Spawn a detached background process that runs job-run.
+			if out, err := jobSpawn(jobID, binPath, timeoutSec); err != nil {
 				_ = database.Jobs.SetFinished(ctx, jobID, db.JobFailed, 1, time.Now())
-				_ = database.Jobs.AppendOutput(ctx, jobID, "[error: spawn tmux: "+string(out)+"]\n")
-				return fmt.Errorf("spawn tmux: %s", out)
+				_ = database.Jobs.AppendOutput(ctx, jobID, "[error: spawn job: "+out+"]\n")
+				return err
 			}
 
 			fmt.Println(jobID)
@@ -99,7 +87,7 @@ func newSessionJobRunCmd() *cobra.Command {
 		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jobID := args[0]
-			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+			ctx, cancel := signal.NotifyContext(context.Background(), shutdownSignals...)
 			defer cancel()
 
 			j, err := database.Jobs.Get(ctx, jobID)
@@ -159,8 +147,7 @@ func newSessionJobRunCmd() *cobra.Command {
 			_ = database.Jobs.AppendOutput(ctx, jobID, result.Output)
 			_ = database.Jobs.SetFinished(ctx, jobID, status, exitCode, time.Now())
 
-			// Self-cleanup: kill our own tmux session after finishing.
-			_ = exec.Command("tmux", "kill-session", "-t", jobTmuxName(jobID)).Run()
+			jobKill(jobID)
 			return nil
 		},
 	}

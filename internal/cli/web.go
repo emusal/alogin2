@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"os/signal"
-	"syscall"
 
 	"github.com/emusal/alogin2/internal/plugin"
 	"github.com/emusal/alogin2/internal/web"
@@ -27,7 +26,7 @@ The Web UI provides:
 
 Press Ctrl+C to stop the server.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+			ctx, stop := signal.NotifyContext(context.Background(), shutdownSignals...)
 			defer stop()
 
 			srv := web.NewServer(database, vlt, port, !noBrowser).
