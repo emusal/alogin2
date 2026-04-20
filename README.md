@@ -135,13 +135,11 @@ Download the latest `.exe` from [GitHub Releases](https://github.com/emusal/alog
 # PowerShell — download and install to %LOCALAPPDATA%\alogin
 $dest = "$env:LOCALAPPDATA\alogin"
 New-Item -ItemType Directory -Force $dest | Out-Null
-Invoke-WebRequest -Uri "https://github.com/emusal/alogin2/releases/latest/download/alogin-windows-amd64.exe" `
+Invoke-WebRequest -Uri "https://github.com/emusal/alogin2/releases/latest/download/alogin-web-windows-amd64.exe" `
   -OutFile "$dest\alogin.exe"
 # Add to PATH for current session (add to $PROFILE for persistence)
 $env:PATH += ";$dest"
 ```
-
-> For the web UI with embedded frontend use `alogin-web-windows-amd64.exe` instead.
 
 **Data directories on Windows:**
 
