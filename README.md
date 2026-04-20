@@ -137,8 +137,9 @@ $dest = "$env:LOCALAPPDATA\alogin"
 New-Item -ItemType Directory -Force $dest | Out-Null
 Invoke-WebRequest -Uri "https://github.com/emusal/alogin2/releases/latest/download/alogin-web-windows-amd64.exe" `
   -OutFile "$dest\alogin.exe"
-# Add to PATH for current session (add to $PROFILE for persistence)
-$env:PATH += ";$dest"
+# Add to PATH permanently (takes effect in new terminals)
+[Environment]::SetEnvironmentVariable("PATH", $env:PATH + ";$dest", "User")
+$env:PATH += ";$dest"  # also apply to current session
 ```
 
 **Data directories on Windows:**
