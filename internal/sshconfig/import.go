@@ -41,10 +41,19 @@ func Import(ctx context.Context, database *db.DB, cfg *ParsedConfig, opts Import
 	res := &ImportResult{}
 
 	// Resolve the current OS user once; used as fallback when a Host block has no User directive.
-	currentUser := os.Getenv("USER")
+	var currentUser string
+	if u, err := user.Current(); err == nil && u.Username != "" {
+		currentUser = u.Username
+		// Windows may return "DOMAIN\username"; strip domain prefix.
+		if idx := strings.LastIndex(currentUser, `\`); idx >= 0 {
+			currentUser = currentUser[idx+1:]
+		}
+	}
 	if currentUser == "" {
-		if u, err := user.Current(); err == nil {
-			currentUser = u.Username
+		if v := os.Getenv("USER"); v != "" {
+			currentUser = v
+		} else {
+			currentUser = os.Getenv("USERNAME")
 		}
 	}
 

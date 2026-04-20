@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 
@@ -337,7 +338,7 @@ func doConnectChain(ctx context.Context, hostArgs []string, opts *model.ConnectO
 		srv, err := database.Servers.GetByHost(ctx, host, user)
 		if err != nil || srv == nil {
 			if user == "" {
-				user = os.Getenv("USER")
+				user = currentUser()
 			}
 			hops = append(hops, internalssh.HopConfig{Host: resolveHost(ctx, host), Port: 22, User: user})
 			continue
@@ -382,7 +383,7 @@ func doConnectChain(ctx context.Context, hostArgs []string, opts *model.ConnectO
 
 func connectDirect(user, host string, port int, opts *model.ConnectOptions) error {
 	if user == "" {
-		user = os.Getenv("USER")
+		user = currentUser()
 	}
 	hops := []internalssh.HopConfig{{Host: host, Port: port, User: user}}
 
@@ -537,4 +538,19 @@ func parseTunnelSpecs(specs []string, defaultRemoteHost string) []internalssh.Tu
 		result = append(result, ts)
 	}
 	return result
+}
+
+// currentUser returns the OS login name, working on both Unix (USER) and Windows (USERNAME).
+func currentUser() string {
+	if u, err := user.Current(); err == nil && u.Username != "" {
+		// On Windows this may return "DOMAIN\username"; strip the domain prefix.
+		if idx := strings.LastIndex(u.Username, `\`); idx >= 0 {
+			return u.Username[idx+1:]
+		}
+		return u.Username
+	}
+	if v := os.Getenv("USER"); v != "" {
+		return v
+	}
+	return os.Getenv("USERNAME")
 }
