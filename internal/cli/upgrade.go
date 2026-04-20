@@ -85,8 +85,11 @@ func runUpgrade(yes bool) error {
 
 	goos := runtime.GOOS
 	goarch := runtime.GOARCH
-	// Map arm64 → arm64, amd64 → amd64 (already correct for our release naming)
-	downloadURL := fmt.Sprintf(githubDownloadURL, latest, goos, goarch)
+	ext := ""
+	if goos == "windows" {
+		ext = ".exe"
+	}
+	downloadURL := fmt.Sprintf(githubDownloadURL+ext, latest, goos, goarch)
 
 	fmt.Printf("Downloading %s...\n", downloadURL)
 	if err := downloadAndReplace(downloadURL, binPath); err != nil {
