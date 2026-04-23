@@ -118,14 +118,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Create skills tarball
-        run: |
-          mkdir -p _skills_stage
-          for f in .claude/commands/*.md; do
-            name=$(basename "$f" .md)
-            mkdir -p "_skills_stage/$name"
-            cp "$f" "_skills_stage/$name/SKILL.md"
-          done
-          tar -czf skills.tar.gz -C _skills_stage .
+        run: tar -czf skills.tar.gz -C skills .
       - uses: actions/upload-artifact@v4
         with:
           name: skills-tarball
