@@ -119,19 +119,19 @@ checksums:                      ## Generate SHA256 checksums for release binarie
 # ── release ───────────────────────────────────────────────────────────────────
 
 .PHONY: release
-release:                        ## Tag and push a release: make release VERSION=2.5.3
-ifndef VERSION
-	$(error VERSION is required — usage: make release VERSION=2.5.3)
+release:                        ## Tag and push a release: make release TAG=2.5.3
+ifndef TAG
+	$(error TAG is required — usage: make release TAG=2.5.3)
 endif
-	@if git ls-remote --tags origin | grep -q "refs/tags/v$(VERSION)$$"; then \
-	  echo "Error: tag v$(VERSION) already exists on remote"; exit 1; \
+	@if git ls-remote --tags origin | grep -q "refs/tags/v$(TAG)$$"; then \
+	  echo "Error: tag v$(TAG) already exists on remote"; exit 1; \
 	fi
 	@if [ -n "$$(git status --porcelain)" ]; then \
 	  echo "Error: working tree is dirty — commit or stash changes first"; exit 1; \
 	fi
-	git tag v$(VERSION)
-	git push origin v$(VERSION)
-	@echo "Tagged and pushed v$(VERSION) — watch CI at https://github.com/emusal/alogin2/actions"
+	git tag v$(TAG)
+	git push origin v$(TAG)
+	@echo "Tagged and pushed v$(TAG) — watch CI at https://github.com/emusal/alogin2/actions"
 
 # ── clean ─────────────────────────────────────────────────────────────────────
 
