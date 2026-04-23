@@ -155,7 +155,7 @@ Examples:
 		Annotations: map[string]string{skipDBAnnotation: "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if dir == "" {
-				dir = filepath.Join(homeDir(), ".agent", "skills")
+				dir = filepath.Join(homeDir(), ".agents", "skills")
 			}
 			// Fetch archive into memory first so we can show the skill list.
 			skills, err := fetchSkillsArchive()
@@ -198,7 +198,7 @@ func newAgentSkillsListCmd() *cobra.Command {
 		Annotations: map[string]string{skipDBAnnotation: "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if dir == "" {
-				dir = filepath.Join(homeDir(), ".agent", "skills")
+				dir = filepath.Join(homeDir(), ".agents", "skills")
 			}
 			entries, err := os.ReadDir(dir)
 			if os.IsNotExist(err) {
