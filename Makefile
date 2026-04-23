@@ -116,6 +116,23 @@ dist-skills:                    ## Package skills into skills.tar.gz for release
 checksums:                      ## Generate SHA256 checksums for release binaries
 	shasum -a 256 $(BIN)-* plugins.tar.gz skills.tar.gz > checksums.txt
 
+# ── release ───────────────────────────────────────────────────────────────────
+
+.PHONY: release
+release:                        ## Tag and push a release: make release VERSION=2.5.3
+ifndef VERSION
+	$(error VERSION is required — usage: make release VERSION=2.5.3)
+endif
+	@if git ls-remote --tags origin | grep -q "refs/tags/v$(VERSION)$$"; then \
+	  echo "Error: tag v$(VERSION) already exists on remote"; exit 1; \
+	fi
+	@if [ -n "$$(git status --porcelain)" ]; then \
+	  echo "Error: working tree is dirty — commit or stash changes first"; exit 1; \
+	fi
+	git tag v$(VERSION)
+	git push origin v$(VERSION)
+	@echo "Tagged and pushed v$(VERSION) — watch CI at https://github.com/emusal/alogin2/actions"
+
 # ── clean ─────────────────────────────────────────────────────────────────────
 
 .PHONY: clean
