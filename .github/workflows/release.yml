@@ -112,9 +112,28 @@ jobs:
           name: plugins-tarball
           path: plugins.tar.gz
 
+  # ── Job 2c: Package agent skills ─────────────────────────────────────────
+  package-skills:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create skills tarball
+        run: |
+          mkdir -p _skills_stage
+          for f in .claude/commands/*.md; do
+            name=$(basename "$f" .md)
+            mkdir -p "_skills_stage/$name"
+            cp "$f" "_skills_stage/$name/SKILL.md"
+          done
+          tar -czf skills.tar.gz -C _skills_stage .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: skills-tarball
+          path: skills.tar.gz
+
   # ── Job 3: Create GitHub Release ──────────────────────────────────────────
   release:
-    needs: [build, package-plugins]
+    needs: [build, package-plugins, package-skills]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -126,13 +145,17 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: plugins-tarball
+      - uses: actions/download-artifact@v4
+        with:
+          name: skills-tarball
       - name: Generate checksums
-        run: shasum -a 256 alogin-* plugins.tar.gz > checksums.txt
+        run: shasum -a 256 alogin-* plugins.tar.gz skills.tar.gz > checksums.txt
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             alogin-*
             plugins.tar.gz
+            skills.tar.gz
             checksums.txt
           generate_release_notes: true
 
