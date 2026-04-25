@@ -112,7 +112,24 @@ alogin net profile use home
 
 ## Installation
 
-### Script install (Linux / macOS)
+### macOS
+
+**Homebrew (recommended)**
+
+```bash
+brew tap emusal/alogin --custom-remote git@github.com:emusal/alogin2.git
+brew install alogin
+```
+
+**Installer package (.pkg)**
+
+Download `alogin-<version>-darwin-arm64.pkg` (Apple Silicon) or `alogin-<version>-darwin-amd64.pkg` (Intel) from [GitHub Releases](https://github.com/emusal/alogin2/releases) and double-click, or install via CLI:
+
+```bash
+sudo installer -pkg alogin-<version>-darwin-arm64.pkg -target /
+```
+
+**Script install**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/emusal/alogin2/main/install.sh | sh
@@ -120,26 +137,44 @@ curl -fsSL https://raw.githubusercontent.com/emusal/alogin2/main/install.sh | sh
 
 > `ALOGIN_NO_WEB=1` installs a smaller CLI-only binary without the embedded web interface.
 
-### Homebrew (macOS)
+### Linux
+
+**apt (Debian / Ubuntu)**
 
 ```bash
-brew tap emusal/alogin --custom-remote git@github.com:emusal/alogin2.git
-brew install alogin
+# Add repository
+curl -fsSL https://emusal.github.io/alogin2/alogin.gpg \
+  | sudo gpg --dearmor -o /usr/share/keyrings/alogin-archive-keyring.gpg
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/alogin-archive-keyring.gpg] \
+  https://emusal.github.io/alogin2 stable main" \
+  | sudo tee /etc/apt/sources.list.d/alogin.list
+sudo apt update && sudo apt install alogin
 ```
 
-### Windows (native)
+**Direct .deb install**
 
-Download the latest `.exe` from [GitHub Releases](https://github.com/emusal/alogin2/releases) and place it on your `PATH`:
+Download `alogin_<version>_amd64.deb` from [GitHub Releases](https://github.com/emusal/alogin2/releases):
+
+```bash
+sudo dpkg -i alogin_<version>_amd64.deb
+```
+
+**Script install**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/emusal/alogin2/main/install.sh | sh
+```
+
+### Windows
+
+**MSI installer (recommended)**
+
+Download `alogin-<version>-windows-amd64.msi` from [GitHub Releases](https://github.com/emusal/alogin2/releases) and double-click to run the installer wizard. `alogin` is automatically added to `PATH`.
+
+Silent install:
 
 ```powershell
-# PowerShell — download and install to %LOCALAPPDATA%\alogin
-$dest = "$env:LOCALAPPDATA\alogin"
-New-Item -ItemType Directory -Force $dest | Out-Null
-Invoke-WebRequest -Uri "https://github.com/emusal/alogin2/releases/latest/download/alogin-web-windows-amd64.exe" `
-  -OutFile "$dest\alogin.exe"
-# Add to PATH permanently (takes effect in new terminals)
-[Environment]::SetEnvironmentVariable("PATH", $env:PATH + ";$dest", "User")
-$env:PATH += ";$dest"  # also apply to current session
+msiexec /i alogin-<version>-windows-amd64.msi /quiet /norestart
 ```
 
 **Data directories on Windows:**

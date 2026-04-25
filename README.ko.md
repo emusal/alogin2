@@ -62,7 +62,24 @@ alogin2는 그 두 가지를 한 번에 해결합니다.
 
 ## 설치
 
-### 스크립트 설치 (Linux / macOS)
+### macOS
+
+**Homebrew (권장)**
+
+```bash
+brew tap emusal/alogin --custom-remote git@github.com:emusal/alogin2.git
+brew install alogin
+```
+
+**.pkg 인스톨러**
+
+[GitHub Releases](https://github.com/emusal/alogin2/releases)에서 `alogin-<버전>-darwin-arm64.pkg` (Apple Silicon) 또는 `alogin-<버전>-darwin-amd64.pkg` (Intel)을 다운로드 후 더블클릭하거나, CLI로 설치:
+
+```bash
+sudo installer -pkg alogin-<버전>-darwin-arm64.pkg -target /
+```
+
+**스크립트 설치**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/emusal/alogin2/main/install.sh | sh
@@ -70,16 +87,45 @@ curl -fsSL https://raw.githubusercontent.com/emusal/alogin2/main/install.sh | sh
 
 > `ALOGIN_NO_WEB=1` 환경변수를 설정하면 웹 UI 없이 더 가벼운 CLI 전용 바이너리를 설치합니다.
 
-### Homebrew (macOS)
+### Linux
+
+**apt (Debian / Ubuntu)**
 
 ```bash
-brew tap emusal/alogin --custom-remote git@github.com:emusal/alogin2.git
-brew install alogin
+# 저장소 추가
+curl -fsSL https://emusal.github.io/alogin2/alogin.gpg \
+  | sudo gpg --dearmor -o /usr/share/keyrings/alogin-archive-keyring.gpg
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/alogin-archive-keyring.gpg] \
+  https://emusal.github.io/alogin2 stable main" \
+  | sudo tee /etc/apt/sources.list.d/alogin.list
+sudo apt update && sudo apt install alogin
+```
+
+**.deb 직접 설치**
+
+[GitHub Releases](https://github.com/emusal/alogin2/releases)에서 `alogin_<버전>_amd64.deb` 다운로드 후:
+
+```bash
+sudo dpkg -i alogin_<버전>_amd64.deb
+```
+
+**스크립트 설치**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/emusal/alogin2/main/install.sh | sh
 ```
 
 ### Windows
 
-네이티브 바이너리는 지원하지 않습니다. WSL(Windows Subsystem for Linux)에서 위의 스크립트로 설치하세요.
+**MSI 인스톨러 (권장)**
+
+[GitHub Releases](https://github.com/emusal/alogin2/releases)에서 `alogin-<버전>-windows-amd64.msi`를 다운로드 후 더블클릭으로 설치 마법사를 실행합니다. `alogin`이 자동으로 `PATH`에 등록됩니다.
+
+자동(silent) 설치:
+
+```powershell
+msiexec /i alogin-<버전>-windows-amd64.msi /quiet /norestart
+```
 
 ### 쉘 통합
 
