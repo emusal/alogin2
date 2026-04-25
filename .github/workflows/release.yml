@@ -164,18 +164,20 @@ jobs:
           name: binary-web-windows-amd64
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
-          cache: true
-      - name: Install go-msi and WiX Toolset
-        run: |
-          choco install wixtoolset -y --no-progress
-          go install github.com/mh-cbon/go-msi@latest
+          go-version: '1.22'   # pin to avoid golang.org/x/text >= go1.25 issue in go-msi deps
+          cache: false
+      - name: Install WiX Toolset
         shell: powershell
+        run: choco install wixtoolset -y --no-progress --force
+      - name: Install go-msi (pinned commit, Go 1.22 compatible)
+        shell: powershell
+        run: go install github.com/mh-cbon/go-msi@9625c3dd3939
       - name: Build MSI
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           cp alogin-web-windows-amd64.exe alogin.exe
+          export PATH="$PATH:$(go env GOPATH)/bin"
           go-msi make --msi "alogin-${VERSION}-windows-amd64.msi" --version "${VERSION}" --src wix.json
       - uses: actions/upload-artifact@v4
         with:
