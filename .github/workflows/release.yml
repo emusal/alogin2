@@ -162,23 +162,47 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: binary-web-windows-amd64
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'   # pin to avoid golang.org/x/text >= go1.25 issue in go-msi deps
-          cache: false
       - name: Install WiX Toolset
         shell: powershell
-        run: choco install wixtoolset -y --no-progress --force
-      - name: Install go-msi (pinned commit, Go 1.22 compatible)
-        shell: powershell
-        run: go install github.com/mh-cbon/go-msi@9625c3dd3939
-      - name: Build MSI
+        run: |
+          choco install wixtoolset -y --no-progress
+          echo "C:\Program Files (x86)\WiX Toolset v3.14\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Build MSI with WiX directly
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           cp alogin-web-windows-amd64.exe alogin.exe
-          export PATH="$PATH:$(go env GOPATH)/bin"
-          go-msi make --msi "alogin-${VERSION}-windows-amd64.msi" --version "${VERSION}" --src wix.json
+
+          # Generate WiX source from wix.wxs template
+          cat > alogin.wxs << WXSEOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+            <Product Id="*" Name="alogin" Language="1033" Version="${VERSION}"
+                     Manufacturer="emusal" UpgradeCode="34cd6e7c-1720-435a-a1aa-fdb0ecc95ade">
+              <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
+              <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
+              <MediaTemplate EmbedCab="yes" />
+              <Feature Id="ProductFeature" Title="alogin" Level="1">
+                <ComponentGroupRef Id="ProductComponents" />
+              </Feature>
+              <Directory Id="TARGETDIR" Name="SourceDir">
+                <Directory Id="ProgramFiles64Folder">
+                  <Directory Id="INSTALLDIR" Name="alogin" />
+                </Directory>
+              </Directory>
+              <ComponentGroup Id="ProductComponents" Directory="INSTALLDIR">
+                <Component Id="MainExecutable" Guid="8a7b3c2d-4e5f-6789-abcd-ef0123456789">
+                  <File Id="AloginExe" Source="alogin.exe" KeyPath="yes" />
+                  <Environment Id="PATH" Name="PATH" Value="[INSTALLDIR]" Permanent="no"
+                               Part="last" Action="set" System="yes" />
+                </Component>
+              </ComponentGroup>
+            </Product>
+          </Wix>
+          WXSEOF
+
+          candle.exe -arch x64 alogin.wxs -o alogin.wixobj
+          light.exe alogin.wixobj -o "alogin-${VERSION}-windows-amd64.msi"
       - uses: actions/upload-artifact@v4
         with:
           name: msi-windows
@@ -188,6 +212,8 @@ jobs:
   build-deb:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -217,17 +243,18 @@ jobs:
           name: deb-linux
           path: "*.deb"
       - name: Update apt repository (gh-pages)
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
 
-          # gh-pages 브랜치 체크아웃
-          git fetch origin gh-pages || git checkout --orphan gh-pages
-          git worktree add apt-repo origin/gh-pages 2>/dev/null || \
+          # gh-pages 브랜치를 worktree로 체크아웃 (없으면 고아 브랜치 생성)
+          if git fetch origin gh-pages; then
+            git worktree add apt-repo origin/gh-pages
+          else
             git worktree add --orphan -b gh-pages apt-repo
+          fi
 
           sudo apt-get install -y reprepro
 
