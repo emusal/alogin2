@@ -1,0 +1,25 @@
+Codename: stable
+Date: Sat, 25 Apr 2026 01:04:38 UTC
+Architectures: amd64 arm64
+Components: main
+MD5Sum:
+ 42d6029bcec41e37c8e74a1060b67258 487 main/binary-amd64/Packages
+ d131896dbfc56734915fa8f1bfc8efc6 361 main/binary-amd64/Packages.gz
+ 063287201b2354699acfe229a752201d 36 main/binary-amd64/Release
+ bb2e3a9f897a82cf7b90f540e8f66508 487 main/binary-arm64/Packages
+ 1ee41a40737922a689f2ab66ad363647 362 main/binary-arm64/Packages.gz
+ e89c28b1abf5bb6bbd1e9a3ebe9fe004 36 main/binary-arm64/Release
+SHA1:
+ db0d42f012b24275edcfa69e8e3c0662324560e4 487 main/binary-amd64/Packages
+ 372de1dfa8b9e3d6634a3392ea6eae2732015e64 361 main/binary-amd64/Packages.gz
+ f9082edea14092794f38390390e06abf8a922f7d 36 main/binary-amd64/Release
+ d2765a181bad325fd8c203b4a9e026674e94ffcd 487 main/binary-arm64/Packages
+ 71c65a09154c2658aae8ac9c490cb9f6a0564302 362 main/binary-arm64/Packages.gz
+ 26519fde445e683e74519b33601c3901c8a45e3b 36 main/binary-arm64/Release
+SHA256:
+ ff95d463c64d2a7b31520f9d076314f5f0aa4955c5d81e91ce706c5215d432d4 487 main/binary-amd64/Packages
+ 0ef21e713519d7ad866ec9011e722537e0c191b3a3346ec573c0461897a93c90 361 main/binary-amd64/Packages.gz
+ f4aafa353a338baedf9e98523c13d7ffeda979ec3cf745f9fad977dd770595c8 36 main/binary-amd64/Release
+ b881cd47af9fc4986dcefde7e744fe49195102ca514d732ab67187bca4bf1d6f 487 main/binary-arm64/Packages
+ 54bb502533627804ef83ea5aa353d9aba591f9f228f96a9f8808ad81cd3828c2 362 main/binary-arm64/Packages.gz
+ 1d2a5a16922021225a06cc93f71f6e6008afdf7049fe22e22d7e98be73c59edf 36 main/binary-arm64/Release

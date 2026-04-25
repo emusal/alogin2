@@ -1,0 +1,15 @@
+Package: alogin
+Version: 2.5.4
+Architecture: amd64
+Maintainer: emusal <emusal@gmail.com>
+Installed-Size: 17252
+Homepage: https://github.com/emusal/alogin2
+Priority: optional
+Section: 
+Filename: pool/main/a/alogin/alogin_2.5.4_amd64.deb
+Size: 6921930
+SHA256: 1b7990052eb31e80001b04eba56918fcc6e4dabd84e957a8a8a0b210a29e0a26
+SHA1: 1e8a70998b6195f9e07ecdaa8b0f1f1caa5e9547
+MD5sum: 107cbc82d932d078355070a257a53c19
+Description: Modern SSH connection manager with encrypted credential vault
+
