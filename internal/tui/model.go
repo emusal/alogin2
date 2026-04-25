@@ -58,14 +58,14 @@ const (
 type StartAt int
 
 const (
-	StartAtWelcome StartAt = iota // show welcome/home screen (default)
-	StartAtList                   // jump directly to server list
-	StartAtGateway                // jump to gateway management
-	StartAtCluster                // jump to cluster management
-	StartAtHosts                  // jump to local hosts management
-	StartAtTunnel                 // jump to tunnel management
-	StartAtAppServer              // jump to app-server management
-	StartAtProfile                // jump to profile management
+	StartAtWelcome   StartAt = iota // show welcome/home screen (default)
+	StartAtList                     // jump directly to server list
+	StartAtGateway                  // jump to gateway management
+	StartAtCluster                  // jump to cluster management
+	StartAtHosts                    // jump to local hosts management
+	StartAtTunnel                   // jump to tunnel management
+	StartAtAppServer                // jump to app-server management
+	StartAtProfile                  // jump to profile management
 )
 
 type formMode int
@@ -252,21 +252,21 @@ type Model struct {
 
 	// Dirty-check snapshots: values captured when a form is opened.
 	// Used to detect whether anything changed before showing the ESC dialog.
-	snapFormFields     []string // server form field values
-	snapSrvGwID        *int64   // server form gateway ID
-	snapSrvSrvGwID     *int64   // server form server-as-gateway ID
-	snapSrvAuthMethod  string   // server form auth method
-	snapGwName         string   // gateway form name
-	snapGwHops         []int64  // gateway form hop list
-	snapClName         string   // cluster form name
-	snapClMembers      []memberEntry
-	snapHostFields     []string
-	snapTnFields       []string
-	snapTnServerID     int64
-	snapAsFields       []string
-	snapAsServerID     int64
-	snapPfFields       []string
-	snapPfGatewayID    *int64
+	snapFormFields    []string // server form field values
+	snapSrvGwID       *int64   // server form gateway ID
+	snapSrvSrvGwID    *int64   // server form server-as-gateway ID
+	snapSrvAuthMethod string   // server form auth method
+	snapGwName        string   // gateway form name
+	snapGwHops        []int64  // gateway form hop list
+	snapClName        string   // cluster form name
+	snapClMembers     []memberEntry
+	snapHostFields    []string
+	snapTnFields      []string
+	snapTnServerID    int64
+	snapAsFields      []string
+	snapAsServerID    int64
+	snapPfFields      []string
+	snapPfGatewayID   *int64
 
 	// Status/error message
 	statusMsg string

@@ -73,22 +73,22 @@ type Server struct {
 	Host     string   `json:"host"`
 	User     string   `json:"user"`
 	// Password is never stored here at runtime; it is fetched from Vault on demand.
-	Port       int        `json:"port"`        // 0 = use protocol default
-	Locale     string     `json:"locale"`      // e.g. "ko_KR.eucKR"; "-" or "" = system default
-	DeviceType DeviceType `json:"device_type"` // linux|windows|router|switch|firewall|other
-	Note       string     `json:"note"`        // free-form description (LLM context)
-	AuthMethod string     `json:"auth_method"` // "password" or "key"
-	IdentityFile string   `json:"identity_file,omitempty"` // Explicit SSH private key path
+	Port         int        `json:"port"`                    // 0 = use protocol default
+	Locale       string     `json:"locale"`                  // e.g. "ko_KR.eucKR"; "-" or "" = system default
+	DeviceType   DeviceType `json:"device_type"`             // linux|windows|router|switch|firewall|other
+	Note         string     `json:"note"`                    // free-form description (LLM context)
+	AuthMethod   string     `json:"auth_method"`             // "password" or "key"
+	IdentityFile string     `json:"identity_file,omitempty"` // Explicit SSH private key path
 	// SSHOptions holds optional cipher/kex/hostkey overrides for legacy devices.
 	SSHOptions SSHOptions `json:"ssh_options,omitempty"`
 	// GatewayRouteID is the internal gateway route applied after the profile gateway.
 	// Full path: profile.gateway_hops → server.gateway_route_hops → server
 	// nil means connect directly from the profile gateway (or directly if no profile).
-	GatewayRouteID *int64 `json:"gateway_route_id,omitempty"`
-	PolicyYAML   string `json:"policy_yaml,omitempty"`   // inline YAML policy; "" = use global
-	SystemPrompt string `json:"system_prompt,omitempty"` // per-server LLM system prompt; "" = use global
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	GatewayRouteID *int64    `json:"gateway_route_id,omitempty"`
+	PolicyYAML     string    `json:"policy_yaml,omitempty"`   // inline YAML policy; "" = use global
+	SystemPrompt   string    `json:"system_prompt,omitempty"` // per-server LLM system prompt; "" = use global
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // EffectivePort returns the actual TCP port to connect to.

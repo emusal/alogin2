@@ -193,8 +193,8 @@ Examples:
 func newAgentSkillsListCmd() *cobra.Command {
 	var dir string
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List installed alogin skills",
+		Use:         "list",
+		Short:       "List installed alogin skills",
 		Annotations: map[string]string{skipDBAnnotation: "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if dir == "" {

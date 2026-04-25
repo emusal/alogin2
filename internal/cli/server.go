@@ -14,7 +14,6 @@ import (
 	"golang.org/x/term"
 )
 
-
 func newServerAddCmd() *cobra.Command {
 	var proto, host, user, password, locale, gateway, authMethod, identityFile, deviceType string
 	var port int
@@ -142,8 +141,8 @@ func newServerListCmd() *cobra.Command {
 					out = append(out, serverJSON{
 						ID: s.ID, Protocol: string(s.Protocol),
 						Host: s.Host, User: s.User, Port: s.Port,
-						Locale:         s.Locale,
-						DeviceType:     string(s.DeviceType), Note: s.Note,
+						Locale:     s.Locale,
+						DeviceType: string(s.DeviceType), Note: s.Note,
 						GatewayRouteID: s.GatewayRouteID,
 						AuthMethod:     s.AuthMethod,
 						IdentityFile:   s.IdentityFile,
@@ -211,8 +210,8 @@ func newServerShowCmd() *cobra.Command {
 					"id": srv.ID, "protocol": string(srv.Protocol),
 					"host": srv.Host, "user": srv.User,
 					"port": srv.Port, "effective_port": srv.EffectivePort(),
-					"locale": srv.Locale,
-					"device_type":      string(srv.DeviceType), "note": srv.Note,
+					"locale":      srv.Locale,
+					"device_type": string(srv.DeviceType), "note": srv.Note,
 					"gateway_route_id": srv.GatewayRouteID,
 					"has_password":     hasPassword,
 					"auth_method":      srv.AuthMethod,

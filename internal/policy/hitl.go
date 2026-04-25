@@ -153,7 +153,7 @@ func ListPending(configDir string) ([]*PendingRequest, error) {
 // TrustWindow records a temporary grant that auto-approves HITL requests
 // matching the given scope until ExpiresAt.
 type TrustWindow struct {
-	Scope     string    `json:"scope"`      // "global", "agent:<id>", "server:<id>"
+	Scope     string    `json:"scope"` // "global", "agent:<id>", "server:<id>"
 	GrantedAt time.Time `json:"granted_at"`
 	ExpiresAt time.Time `json:"expires_at"`
 	GrantedBy string    `json:"granted_by,omitempty"`

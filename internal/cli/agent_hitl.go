@@ -40,9 +40,9 @@ func hitlConfigDir() (string, error) {
 
 func newAgentApproveCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "approve <token>",
-		Short: "Approve a pending HITL request",
-		Args:  cobra.ExactArgs(1),
+		Use:         "approve <token>",
+		Short:       "Approve a pending HITL request",
+		Args:        cobra.ExactArgs(1),
 		Annotations: map[string]string{skipDBAnnotation: "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			token := args[0]
@@ -61,9 +61,9 @@ func newAgentApproveCmd() *cobra.Command {
 
 func newAgentDenyCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "deny <token>",
-		Short: "Deny a pending HITL request",
-		Args:  cobra.ExactArgs(1),
+		Use:         "deny <token>",
+		Short:       "Deny a pending HITL request",
+		Args:        cobra.ExactArgs(1),
 		Annotations: map[string]string{skipDBAnnotation: "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			token := args[0]
@@ -83,8 +83,8 @@ func newAgentDenyCmd() *cobra.Command {
 func newAgentPendingCmd() *cobra.Command {
 	var flagJSON bool
 	cmd := &cobra.Command{
-		Use:   "pending",
-		Short: "List pending HITL approval requests",
+		Use:         "pending",
+		Short:       "List pending HITL approval requests",
 		Annotations: map[string]string{skipDBAnnotation: "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			configDir, err := hitlConfigDir()
@@ -185,8 +185,8 @@ func newAgentUntrustCmd() *cobra.Command {
 		serverID int64
 	)
 	cmd := &cobra.Command{
-		Use:   "untrust",
-		Short: "Revoke an active trust window",
+		Use:         "untrust",
+		Short:       "Revoke an active trust window",
 		Annotations: map[string]string{skipDBAnnotation: "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			configDir, err := hitlConfigDir()
@@ -209,8 +209,8 @@ func newAgentUntrustCmd() *cobra.Command {
 func newAgentTrustListCmd() *cobra.Command {
 	var flagJSON bool
 	cmd := &cobra.Command{
-		Use:   "trust-list",
-		Short: "List active trust windows",
+		Use:         "trust-list",
+		Short:       "List active trust windows",
 		Annotations: map[string]string{skipDBAnnotation: "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			configDir, err := hitlConfigDir()

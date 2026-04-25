@@ -189,8 +189,8 @@ func (r *profileRepo) SetActive(ctx context.Context, id int64) error {
 // scanProfile scans a single *sql.Row into a Profile.
 func scanProfile(row *sql.Row) (*model.Profile, error) {
 	var (
-		p       model.Profile
-		routeID sql.NullInt64
+		p                    model.Profile
+		routeID              sql.NullInt64
 		createdAt, updatedAt string
 	)
 	err := row.Scan(&p.ID, &p.Name, &p.Description, &p.IsActive, &routeID, &createdAt, &updatedAt)
@@ -209,8 +209,8 @@ func scanProfile(row *sql.Row) (*model.Profile, error) {
 // scanProfileRow scans a *sql.Rows row into a Profile.
 func scanProfileRow(rows *sql.Rows) (*model.Profile, error) {
 	var (
-		p       model.Profile
-		routeID sql.NullInt64
+		p                    model.Profile
+		routeID              sql.NullInt64
 		createdAt, updatedAt string
 	)
 	err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.IsActive, &routeID, &createdAt, &updatedAt)

@@ -309,7 +309,7 @@ func (m Model) renderMainList() string {
 	inputBar := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, false, true, false).
 		BorderForeground(lipgloss.Color("238")).
-		Width(w - 2).
+		Width(w-2).
 		Padding(0, 1).
 		Render(inputContent)
 
@@ -362,9 +362,9 @@ func (m Model) renderMainList() string {
 			colW[2], string(s.Protocol),
 			portStr)
 		if i == m.cursor {
-			listSb.WriteString(m.selectedStyle.Width(w).Render("> " + line) + "\n")
+			listSb.WriteString(m.selectedStyle.Width(w).Render("> "+line) + "\n")
 		} else {
-			listSb.WriteString(m.normalStyle.Render("  " + line) + "\n")
+			listSb.WriteString(m.normalStyle.Render("  "+line) + "\n")
 		}
 	}
 	// Pagination indicator
@@ -405,9 +405,9 @@ func (m Model) renderCommandPalette() string {
 	for i, c := range cmds {
 		line := fmt.Sprintf("%-14s  %s", c.trigger, c.desc)
 		if i == m.cmdCursor {
-			sb.WriteString(m.selectedStyle.Render("> " + line) + "\n")
+			sb.WriteString(m.selectedStyle.Render("> "+line) + "\n")
 		} else {
-			sb.WriteString(m.normalStyle.Render("  " + line) + "\n")
+			sb.WriteString(m.normalStyle.Render("  "+line) + "\n")
 		}
 	}
 	return sb.String()
@@ -924,7 +924,7 @@ func (m Model) renderTunnelList() string {
 	colHeader := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("240")).Background(lipgloss.Color("234")).
 		Width(w).Render(fmt.Sprintf("  %-16s  %-14s  %-2s  %s",
-			"NAME", "SERVER", "DIR", "FORWARD"))
+		"NAME", "SERVER", "DIR", "FORWARD"))
 
 	total := len(m.tunnels)
 	viewStart, viewEnd := m.viewWindow(m.tunnelCursor, total, listH)

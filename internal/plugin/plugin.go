@@ -90,9 +90,9 @@ type RuntimeEnvironments struct {
 
 // RuntimeSpec describes how the application is launched on the remote host.
 type RuntimeSpec struct {
-	Strategies   []string            `yaml:"strategies"`    // priority order, e.g. ["docker", "native"]
+	Strategies   []string            `yaml:"strategies"` // priority order, e.g. ["docker", "native"]
 	Environments RuntimeEnvironments `yaml:"environments"`
-	CmdFlag      string              `yaml:"cmd_flag"`      // flag used to pass --cmd value, e.g. "-e" or "--eval" (default: "-e")
+	CmdFlag      string              `yaml:"cmd_flag"` // flag used to pass --cmd value, e.g. "-e" or "--eval" (default: "-e")
 }
 
 // Plugin is the fully parsed and validated plugin definition.

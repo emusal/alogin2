@@ -11,8 +11,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-
-
 // newAgentCmd returns the "agent" group command for AI/MCP tooling.
 func newAgentCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -113,7 +111,6 @@ Available tools:
 	}
 }
 
-
 // newAgentPolicyCmd manages HITL/RBAC safety policies.
 func newAgentPolicyCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -132,8 +129,8 @@ func newAgentPolicyCmd() *cobra.Command {
 
 func newAgentPolicyShowCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "show",
-		Short: "Print the active agent-policy.yaml",
+		Use:         "show",
+		Short:       "Print the active agent-policy.yaml",
 		Annotations: map[string]string{skipDBAnnotation: "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := policyFilePath()
@@ -155,8 +152,8 @@ func newAgentPolicyShowCmd() *cobra.Command {
 
 func newAgentPolicyValidateCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "validate",
-		Short: "Validate agent-policy.yaml for syntax and pattern errors",
+		Use:         "validate",
+		Short:       "Validate agent-policy.yaml for syntax and pattern errors",
 		Annotations: map[string]string{skipDBAnnotation: "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := policyFilePath()

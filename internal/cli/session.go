@@ -20,8 +20,9 @@ import (
 )
 
 // Session layout under <DataDir>/sessions/<id>/:
-//   sock  — IPC endpoint (Unix socket on Unix, TCP addr file on Windows)
-//   meta  — JSON {"host": "..."}
+//
+//	sock  — IPC endpoint (Unix socket on Unix, TCP addr file on Windows)
+//	meta  — JSON {"host": "..."}
 func sessionDir(id string) string      { return filepath.Join(cfg.DataDir, "sessions", id) }
 func sessionSock(id string) string     { return filepath.Join(sessionDir(id), "sock") }
 func sessionMetaFile(id string) string { return filepath.Join(sessionDir(id), "meta") }
@@ -350,9 +351,10 @@ func newSessionRunCmd() *cobra.Command {
 }
 
 // Wire protocol:
-//   exec → run : optional "__ALOGIN_TIMEOUT_<sec>\n" header, then "<command>\n"
-//   run  → exec : <output lines...> then "__ALOGIN_EXIT_<N>\n"
-//   run  → exec : error lines are prefixed with "__ALOGIN_ERR_"
+//
+//	exec → run : optional "__ALOGIN_TIMEOUT_<sec>\n" header, then "<command>\n"
+//	run  → exec : <output lines...> then "__ALOGIN_EXIT_<N>\n"
+//	run  → exec : error lines are prefixed with "__ALOGIN_ERR_"
 const sessionErrPrefix = "__ALOGIN_ERR_"
 const sessionTimeoutPrefix = "__ALOGIN_TIMEOUT_"
 

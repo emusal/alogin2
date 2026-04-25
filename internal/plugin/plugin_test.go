@@ -384,7 +384,7 @@ func TestDetectStrategy_DockerCompose_AbsPath(t *testing.T) {
 	runner := &mockRunner{
 		runOutputs: map[string]string{
 			// docker not in PATH — resolveDockerBinary falls back to absolute path
-			"test -x /usr/local/bin/docker": "",
+			"test -x /usr/local/bin/docker":                                     "",
 			"/usr/local/bin/docker compose -f /opt/myapp/docker-compose.yml ps": "db running(1)\n",
 		},
 	}

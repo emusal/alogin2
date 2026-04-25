@@ -120,9 +120,9 @@ func newBgExecCommandHandler(d Deps) func(context.Context, mcpgo.CallToolRequest
 		go runBgJob(d, jobID, serverID, command, time.Duration(timeoutSec)*time.Second)
 
 		return toolJSON(map[string]any{
-			"job_id":     jobID,
-			"status":     "pending",
-			"server_id":  serverID,
+			"job_id":      jobID,
+			"status":      "pending",
+			"server_id":   serverID,
 			"server_host": srv.Host,
 		})
 	}

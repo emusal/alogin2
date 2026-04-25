@@ -24,8 +24,8 @@ import (
 type Deps struct {
 	DB        *db.DB
 	Vault     vault.Vault
-	BinPath   string    // path to the alogin binary (for tunnel start)
-	AuditLog  io.Writer // nil = disabled; typically an *os.File opened in append mode
+	BinPath   string         // path to the alogin binary (for tunnel start)
+	AuditLog  io.Writer      // nil = disabled; typically an *os.File opened in append mode
 	Policy    *policy.Engine // nil = allow-all with built-in destructive-command check only
 	ConfigDir string         // base config dir for HITL file paths
 }
@@ -380,10 +380,10 @@ func RegisterTools(srv *server.MCPServer, d Deps) {
 		}
 		type memberDetail struct {
 			model.ClusterMember
-			Host       string            `json:"host"`
-			Protocol   model.Protocol    `json:"protocol"`
-			DeviceType model.DeviceType  `json:"device_type"`
-			Note       string            `json:"note"`
+			Host       string           `json:"host"`
+			Protocol   model.Protocol   `json:"protocol"`
+			DeviceType model.DeviceType `json:"device_type"`
+			Note       string           `json:"note"`
 		}
 		var members []memberDetail
 		for _, m := range c.Members {

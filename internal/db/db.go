@@ -19,13 +19,13 @@ const CurrentSchemaVersion = 16
 
 // migrationDescriptions maps each migration version to a human-readable summary.
 var migrationDescriptions = map[int]string{
-	2: "servers.gateway_server_id column (direct gateway reference)",
-	3: "cluster_members rebuild (allow duplicate server in cluster)",
-	4: "local_hosts table (custom hostname → IP mapping)",
-	5: "tunnels table (persistent SSH port-forward tunnels)",
-	6: "servers.device_type, servers.note columns (device classification, notes for AI context)",
-	7: "audit_log table for structured MCP exec records",
-	8: "servers.policy_yaml, servers.system_prompt columns (per-server policy and LLM prompt override)",
+	2:  "servers.gateway_server_id column (direct gateway reference)",
+	3:  "cluster_members rebuild (allow duplicate server in cluster)",
+	4:  "local_hosts table (custom hostname → IP mapping)",
+	5:  "tunnels table (persistent SSH port-forward tunnels)",
+	6:  "servers.device_type, servers.note columns (device classification, notes for AI context)",
+	7:  "audit_log table for structured MCP exec records",
+	8:  "servers.policy_yaml, servers.system_prompt columns (per-server policy and LLM prompt override)",
 	9:  "audit_log.plugin_name, plugin_vars, plugin_strategy columns (plugin execution audit)",
 	10: "app_servers table (named server+plugin bindings)",
 	11: "profiles table (network context profiles replacing per-server gateway_id and auto_gw)",
@@ -44,13 +44,13 @@ func MigrationDescription(version int) string {
 
 // DB wraps the SQLite connection and all repositories.
 type DB struct {
-	sql      *sql.DB
-	Servers  ServerRepo
-	Gateways GatewayRepo
-	Aliases  AliasRepo
-	Clusters ClusterRepo
-	Themes   ThemeRepo
-	Hosts    HostRepo
+	sql         *sql.DB
+	Servers     ServerRepo
+	Gateways    GatewayRepo
+	Aliases     AliasRepo
+	Clusters    ClusterRepo
+	Themes      ThemeRepo
+	Hosts       HostRepo
 	Tunnels     TunnelRepo
 	AppServers  AppServerRepo
 	AuditLog    AuditRepo

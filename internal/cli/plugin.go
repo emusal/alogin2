@@ -25,7 +25,7 @@ func newPluginListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "list",
 		Aliases: []string{"ls"},
-		Short: "List installed application plugins",
+		Short:   "List installed application plugins",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := plugin.PluginDir(cfg.ConfigDir)
 			if _, err := os.Stat(dir); os.IsNotExist(err) {

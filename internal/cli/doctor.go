@@ -167,12 +167,12 @@ func (d *doctor) checkLegacyGatewayColumns() error {
 
 	// Count rows with non-NULL values
 	type legacyRow struct {
-		id       int64
-		gwID     sql.NullInt64
-		gwSrvID  sql.NullInt64
-		gwRtID   sql.NullInt64
-		host     string
-		user     string
+		id      int64
+		gwID    sql.NullInt64
+		gwSrvID sql.NullInt64
+		gwRtID  sql.NullInt64
+		host    string
+		user    string
 	}
 
 	if hasGWID {
@@ -270,9 +270,9 @@ func (d *doctor) migrateGatewayID(rawDB *sql.DB) (migrated, skipped int, err err
 	defer rows.Close()
 
 	type row struct {
-		id      int64
-		gwID    int64
-		gwRtID  sql.NullInt64
+		id     int64
+		gwID   int64
+		gwRtID sql.NullInt64
 	}
 	var targets []row
 	for rows.Next() {
@@ -314,10 +314,10 @@ func (d *doctor) migrateGatewayServerID(rawDB *sql.DB) (migrated int, err error)
 	defer rows.Close()
 
 	type target struct {
-		srvID, gwSrvID      int64
-		srvHost, srvUser    string
-		gwHost, gwUser      string
-		existingRouteID     sql.NullInt64
+		srvID, gwSrvID   int64
+		srvHost, srvUser string
+		gwHost, gwUser   string
+		existingRouteID  sql.NullInt64
 	}
 	var targets []target
 	for rows.Next() {
@@ -409,9 +409,9 @@ func (d *doctor) printGatewaySrvIDRows(rawDB *sql.DB, count int, showHints bool)
 	defer rows.Close()
 
 	type entry struct {
-		sID            int64
-		sHost, sUser   string
-		gHost, gUser   string
+		sID          int64
+		sHost, sUser string
+		gHost, gUser string
 	}
 	var entries []entry
 	for rows.Next() {
@@ -458,7 +458,10 @@ func (d *doctor) checkGatewayRouteRefs() error {
 		name string
 	}
 	for rows.Next() {
-		var r struct{ id int64; name string }
+		var r struct {
+			id   int64
+			name string
+		}
 		_ = rows.Scan(&r.id, &r.name)
 		routes = append(routes, r)
 	}
@@ -487,7 +490,10 @@ func (d *doctor) checkGatewayHopServers() error {
 		routeName                string
 	}
 	for rows.Next() {
-		var b struct{ hopID, routeID, serverID int64; routeName string }
+		var b struct {
+			hopID, routeID, serverID int64
+			routeName                string
+		}
 		_ = rows.Scan(&b.hopID, &b.routeID, &b.serverID, &b.routeName)
 		bad = append(bad, b)
 	}
@@ -524,11 +530,14 @@ func (d *doctor) checkServerGatewayRoutes() error {
 	defer rows.Close()
 
 	var bad []struct {
-		id, routeID  int64
-		host, user   string
+		id, routeID int64
+		host, user  string
 	}
 	for rows.Next() {
-		var b struct{ id, routeID int64; host, user string }
+		var b struct {
+			id, routeID int64
+			host, user  string
+		}
 		_ = rows.Scan(&b.id, &b.host, &b.user, &b.routeID)
 		bad = append(bad, b)
 	}
@@ -570,7 +579,10 @@ func (d *doctor) checkClusterMembers() error {
 		clusterName                   string
 	}
 	for rows.Next() {
-		var b struct{ memberID, clusterID, serverID int64; clusterName string }
+		var b struct {
+			memberID, clusterID, serverID int64
+			clusterName                   string
+		}
 		_ = rows.Scan(&b.memberID, &b.clusterID, &b.serverID, &b.clusterName)
 		bad = append(bad, b)
 	}
@@ -610,7 +622,10 @@ func (d *doctor) checkTunnelRefs() error {
 		name         string
 	}
 	for rows.Next() {
-		var b struct{ id, serverID int64; name string }
+		var b struct {
+			id, serverID int64
+			name         string
+		}
 		_ = rows.Scan(&b.id, &b.name, &b.serverID)
 		bad = append(bad, b)
 	}
@@ -650,7 +665,10 @@ func (d *doctor) checkAppServerRefs() error {
 		name         string
 	}
 	for rows.Next() {
-		var b struct{ id, serverID int64; name string }
+		var b struct {
+			id, serverID int64
+			name         string
+		}
 		_ = rows.Scan(&b.id, &b.name, &b.serverID)
 		bad = append(bad, b)
 	}
@@ -687,9 +705,9 @@ func (d *doctor) checkVaultOrphans() error {
 	defer rows.Close()
 
 	type srvRow struct {
-		id           int64
-		host, user   string
-		password     string
+		id         int64
+		host, user string
+		password   string
 	}
 	var plaintext []srvRow
 	for rows.Next() {

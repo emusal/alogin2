@@ -33,7 +33,7 @@ for commands targeting that server.
 }
 
 func newAgentServerPolicySetCmd() *cobra.Command {
-	var flagFile  string
+	var flagFile string
 	var flagStdin bool
 	cmd := &cobra.Command{
 		Use:   "set <server-id>",
@@ -158,8 +158,8 @@ MCP responses so the LLM receives server-specific instructions.
 }
 
 func newAgentServerPromptSetCmd() *cobra.Command {
-	var flagText  string
-	var flagFile  string
+	var flagText string
+	var flagFile string
 	var flagStdin bool
 	cmd := &cobra.Command{
 		Use:   "set <server-id>",

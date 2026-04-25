@@ -9,8 +9,8 @@ import (
 
 	"github.com/emusal/alogin2/internal/model"
 	internalssh "github.com/emusal/alogin2/internal/ssh"
-	"github.com/emusal/alogin2/internal/tunnel"
 	"github.com/emusal/alogin2/internal/tui"
+	"github.com/emusal/alogin2/internal/tunnel"
 	"github.com/spf13/cobra"
 )
 
@@ -79,8 +79,8 @@ func newTunnelListCmd() *cobra.Command {
 					}
 					out = append(out, tunnelJSON{
 						ID: t.ID, Name: t.Name, Server: srvHost,
-						Direction:  string(t.Direction),
-						LocalHost:  t.LocalHost, LocalPort: t.LocalPort,
+						Direction: string(t.Direction),
+						LocalHost: t.LocalHost, LocalPort: t.LocalPort,
 						RemoteHost: t.RemoteHost, RemotePort: t.RemotePort,
 						Running: tunnel.IsRunning(t.Name),
 					})
