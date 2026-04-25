@@ -196,7 +196,8 @@ jobs:
           merge-multiple: true
       - name: Install nfpm
         run: |
-          curl -sSfL https://github.com/goreleaser/nfpm/releases/latest/download/nfpm_linux_amd64.tar.gz \
+          NFPM_VERSION=$(curl -sSf https://api.github.com/repos/goreleaser/nfpm/releases/latest | grep '"tag_name"' | sed 's/.*"v\([^"]*\)".*/\1/')
+          curl -sSfL "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz" \
             | tar xz nfpm
           sudo mv nfpm /usr/local/bin/nfpm
       - name: Build .deb (amd64 + arm64)
