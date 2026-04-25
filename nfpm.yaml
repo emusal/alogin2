@@ -1,0 +1,12 @@
+name: alogin
+arch: "${ARCH}"
+version: "${VERSION}"
+maintainer: emusal <emusal@gmail.com>
+description: Modern SSH connection manager with encrypted credential vault
+homepage: https://github.com/emusal/alogin2
+license: MIT
+contents:
+  - src: ./alogin-linux-current
+    dst: /usr/local/bin/alogin
+    file_info:
+      mode: 0755

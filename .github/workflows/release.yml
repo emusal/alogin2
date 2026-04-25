@@ -124,9 +124,132 @@ jobs:
           name: skills-tarball
           path: skills.tar.gz
 
+  # ── Job 2d: Build macOS .pkg installers ──────────────────────────────────
+  build-pkg:
+    needs: build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: binary-web-darwin-*
+          merge-multiple: true
+      - name: Build .pkg (arm64 + amd64)
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          for ARCH in arm64 amd64; do
+            mkdir -p pkg-root/usr/local/bin
+            cp alogin-web-darwin-${ARCH} pkg-root/usr/local/bin/alogin
+            chmod +x pkg-root/usr/local/bin/alogin
+            pkgbuild \
+              --root pkg-root \
+              --identifier com.emusal.alogin \
+              --version "${VERSION}" \
+              --install-location / \
+              alogin-${VERSION}-darwin-${ARCH}.pkg
+            rm -rf pkg-root
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-macos
+          path: "*.pkg"
+
+  # ── Job 2e: Build Windows MSI installers ─────────────────────────────────
+  build-msi:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: binary-web-windows-amd64
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install go-msi and WiX Toolset
+        run: |
+          choco install wixtoolset -y --no-progress
+          go install github.com/mh-cbon/go-msi@latest
+        shell: powershell
+      - name: Build MSI
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          cp alogin-web-windows-amd64.exe alogin.exe
+          go-msi make --msi "alogin-${VERSION}-windows-amd64.msi" --version "${VERSION}" --src wix.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: msi-windows
+          path: "*.msi"
+
+  # ── Job 2f: Build Linux .deb packages ────────────────────────────────────
+  build-deb:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: binary-web-linux-*
+          merge-multiple: true
+      - name: Install nfpm
+        run: |
+          curl -sSfL https://github.com/goreleaser/nfpm/releases/latest/download/nfpm_linux_amd64.tar.gz \
+            | tar xz nfpm
+          sudo mv nfpm /usr/local/bin/nfpm
+      - name: Build .deb (amd64 + arm64)
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          for ARCH in amd64 arm64; do
+            cp alogin-web-linux-${ARCH} alogin-linux-current
+            chmod +x alogin-linux-current
+            ARCH=${ARCH} VERSION=${VERSION} nfpm package \
+              --config nfpm.yaml \
+              --packager deb \
+              --target alogin_${VERSION}_${ARCH}.deb
+            rm -f alogin-linux-current
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb-linux
+          path: "*.deb"
+      - name: Update apt repository (gh-pages)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # gh-pages 브랜치 체크아웃
+          git fetch origin gh-pages || git checkout --orphan gh-pages
+          git worktree add apt-repo origin/gh-pages 2>/dev/null || \
+            git worktree add --orphan -b gh-pages apt-repo
+
+          sudo apt-get install -y reprepro
+
+          # reprepro 설정 (최초 실행 시 구조 생성)
+          mkdir -p apt-repo/conf
+          cat > apt-repo/conf/distributions << EOF
+          Codename: stable
+          Components: main
+          Architectures: amd64 arm64
+          EOF
+
+          # .deb 패키지 추가
+          for DEB in *.deb; do
+            reprepro -b apt-repo includedeb stable "${DEB}"
+          done
+
+          # gh-pages 브랜치에 push
+          cd apt-repo
+          git add -A
+          git commit -m "apt: update repository to v${VERSION}" || echo "No changes"
+          git push origin HEAD:gh-pages
+
   # ── Job 3: Create GitHub Release ──────────────────────────────────────────
   release:
-    needs: [build, package-plugins, package-skills]
+    needs: [build, package-plugins, package-skills, build-pkg, build-msi, build-deb]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -141,12 +264,22 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: skills-tarball
+      - uses: actions/download-artifact@v4
+        with:
+          name: pkg-macos
+      - uses: actions/download-artifact@v4
+        with:
+          name: msi-windows
+      - uses: actions/download-artifact@v4
+        with:
+          name: deb-linux
       - name: Generate checksums
-        run: shasum -a 256 alogin-* plugins.tar.gz skills.tar.gz > checksums.txt
+        run: shasum -a 256 alogin-* alogin_* plugins.tar.gz skills.tar.gz > checksums.txt
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             alogin-*
+            alogin_*
             plugins.tar.gz
             skills.tar.gz
             checksums.txt

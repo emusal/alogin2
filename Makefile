@@ -114,7 +114,40 @@ dist-skills:                    ## Package skills into skills.tar.gz for release
 
 .PHONY: checksums
 checksums:                      ## Generate SHA256 checksums for release binaries
-	shasum -a 256 $(BIN)-* plugins.tar.gz skills.tar.gz > checksums.txt
+	shasum -a 256 $(BIN)-* alogin_* plugins.tar.gz skills.tar.gz > checksums.txt
+
+# ── installers ────────────────────────────────────────────────────────────────
+
+.PHONY: pkg
+pkg:                            ## Build macOS .pkg installer for current arch (requires macOS + dist-web first)
+	$(eval ARCH := $(shell uname -m | sed 's/x86_64/amd64/'))
+	mkdir -p pkg-root/usr/local/bin
+	cp $(BIN)-web-darwin-$(ARCH) pkg-root/usr/local/bin/alogin
+	chmod +x pkg-root/usr/local/bin/alogin
+	pkgbuild \
+		--root pkg-root \
+		--identifier com.emusal.alogin \
+		--version "$(VERSION)" \
+		--install-location / \
+		alogin-$(VERSION)-darwin-$(ARCH).pkg
+	rm -rf pkg-root
+	@echo "Built: alogin-$(VERSION)-darwin-$(ARCH).pkg"
+
+.PHONY: deb
+deb:                            ## Build Linux .deb package for amd64 (requires nfpm + dist-web first)
+	@command -v nfpm >/dev/null 2>&1 || (echo "nfpm not found. Install: https://nfpm.goreleaser.com/install/" && exit 1)
+	cp $(BIN)-web-linux-amd64 alogin-linux-current
+	ARCH=amd64 VERSION=$(VERSION) nfpm package --config nfpm.yaml --packager deb --target alogin_$(VERSION)_amd64.deb
+	rm -f alogin-linux-current
+	@echo "Built: alogin_$(VERSION)_amd64.deb"
+
+.PHONY: msi
+msi:                            ## Build Windows MSI installer for amd64 (requires go-msi + WiX, run on Windows)
+	@command -v go-msi >/dev/null 2>&1 || (echo "go-msi not found. Install: go install github.com/mh-cbon/go-msi@latest" && exit 1)
+	cp $(BIN)-web-windows-amd64.exe alogin.exe
+	go-msi make --msi alogin-$(VERSION)-windows-amd64.msi --version $(VERSION) --src wix.json
+	rm -f alogin.exe
+	@echo "Built: alogin-$(VERSION)-windows-amd64.msi"
 
 # ── release ───────────────────────────────────────────────────────────────────
 
@@ -136,8 +169,10 @@ endif
 # ── clean ─────────────────────────────────────────────────────────────────────
 
 .PHONY: clean
-clean:                          ## Remove built binaries
+clean:                          ## Remove built binaries and installer packages
 	rm -f $(BIN) $(BIN)-darwin-arm64 $(BIN)-darwin-amd64 $(BIN)-linux-amd64 $(BIN)-linux-arm64 $(BIN)-windows-amd64.exe $(BIN)-windows-arm64.exe $(BIN)-web-darwin-arm64 $(BIN)-web-darwin-amd64 $(BIN)-web-linux-amd64 $(BIN)-web-linux-arm64 $(BIN)-web-windows-amd64.exe checksums.txt plugins.tar.gz skills.tar.gz
+	rm -f alogin-linux-current alogin.exe alogin-*.pkg alogin-*.msi alogin_*.deb
+	rm -rf pkg-root
 
 .PHONY: clean-all
 clean-all: clean                ## Remove binaries + frontend build artifacts

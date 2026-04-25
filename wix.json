@@ -1,0 +1,44 @@
+{
+  "product": "alogin",
+  "company": "emusal",
+  "version": "{{.Version}}",
+  "license": "LICENSE",
+  "upgradeCode": "34cd6e7c-1720-435a-a1aa-fdb0ecc95ade",
+  "executable": "alogin.exe",
+  "choco": {
+    "description": "Modern SSH connection manager with encrypted credential vault",
+    "homepage": "https://github.com/emusal/alogin2",
+    "license": "MIT",
+    "project_url": "https://github.com/emusal/alogin2"
+  },
+  "env": {
+    "PATH": {
+      "Action": "set",
+      "Part": "last",
+      "Value": "[INSTALLDIR]"
+    }
+  },
+  "files": {
+    "guid": "8a7b3c2d-4e5f-6789-abcd-ef0123456789"
+  },
+  "directories": [
+    {
+      "name": "alogin",
+      "id": "INSTALLDIR",
+      "items": [
+        {
+          "id": "ApplicationFile",
+          "name": "alogin.exe"
+        }
+      ]
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "alogin",
+      "description": "alogin SSH manager",
+      "target": "[INSTALLDIR]alogin.exe",
+      "wDir": "INSTALLDIR"
+    }
+  ]
+}
